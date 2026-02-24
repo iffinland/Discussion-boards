@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import Layout from "./components/layout/Layout";
-import Home from "./pages/Home";
-import ThreadPage from "./pages/ThreadPage";
+const Layout = lazy(() => import("./components/layout/Layout"));
+const Home = lazy(() => import("./pages/Home"));
+const ThreadPage = lazy(() => import("./pages/ThreadPage"));
 
 type ThemeMode = "light-cyan" | "soft-cyan";
 const THEME_STORAGE_KEY = "forum-theme-mode";
@@ -32,13 +32,15 @@ const App = () => {
 
   return (
     <HashRouter>
-      <Layout themeMode={themeMode} onToggleTheme={handleToggleTheme}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/thread/:id" element={<ThreadPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
+      <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading app...</div>}>
+        <Layout themeMode={themeMode} onToggleTheme={handleToggleTheme}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/thread/:id" element={<ThreadPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </Suspense>
     </HashRouter>
   );
 };

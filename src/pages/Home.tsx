@@ -2,12 +2,20 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import TopicAccordion from "../components/forum/TopicAccordion";
+import HomeSkeleton from "../features/forum/components/HomeSkeleton";
 import { useForumData } from "../hooks/useForumData";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { currentUser, users, topics, subTopics, createTopic, createSubTopic } =
-    useForumData();
+  const {
+    currentUser,
+    users,
+    topics,
+    subTopics,
+    createTopic,
+    createSubTopic,
+    isAuthReady,
+  } = useForumData();
 
   const [openTopicId, setOpenTopicId] = useState<string | null>(null);
 
@@ -105,6 +113,10 @@ const Home = () => {
   };
 
   const isAdmin = currentUser.role === "Admin";
+
+  if (!isAuthReady) {
+    return <HomeSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

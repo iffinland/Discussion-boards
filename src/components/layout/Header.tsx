@@ -128,7 +128,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                 ? isAuthenticated
                   ? "Qortal Connected"
                   : "Qortal Not Authenticated"
-                : "Mock Mode"}
+                : "Qortal"}
             </p>
           </div>
         </div>

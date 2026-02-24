@@ -8,24 +8,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth } from "qapp-core";
 
-import {
-  MOCK_POSTS,
-  MOCK_SUBTOPICS,
-  MOCK_TOPICS,
-  MOCK_USERS,
-} from "../data/mockData";
+import { useForumCommands } from "../features/forum/hooks/useForumCommands";
+import { useForumDataQuery } from "../features/forum/hooks/useForumDataQuery";
+import type { ForumMutationResult } from "../features/forum/types";
+import { threadPostCache } from "../services/forum/threadPostCache";
 import { forumQdnService } from "../services/qdn/forumQdnService";
-import { isQortalRequestAvailable } from "../services/qortal/qortalClient";
 import type { Post, SubTopic, Topic, User } from "../types";
 
-type CreateResult = {
-  ok: boolean;
-  error?: string;
-};
-
-type ForumAuthMode = "qortal" | "mock";
+type ForumAuthMode = "qortal";
 
 type ForumContextValue = {
   users: User[];
@@ -42,495 +33,123 @@ type ForumContextValue = {
   createTopic: (input: {
     title: string;
     description: string;
-  }) => Promise<CreateResult>;
+  }) => Promise<ForumMutationResult>;
   createSubTopic: (input: {
     topicId: string;
     title: string;
     description: string;
-  }) => Promise<CreateResult>;
-  createPost: (input: { subTopicId: string; content: string }) => Promise<CreateResult>;
+  }) => Promise<ForumMutationResult>;
+  createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
   updatePost: (input: {
     postId: string;
     content: string;
-  }) => Promise<CreateResult>;
-  deletePost: (postId: string) => Promise<CreateResult>;
+  }) => Promise<ForumMutationResult>;
+  deletePost: (postId: string) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
+  isThreadPostsLoading: boolean;
+  loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
 };
 
 const ForumContext = createContext<ForumContextValue | null>(null);
-let hasTriggeredAutoAuthThisSession = false;
 
-const GUEST_USER: User = {
-  id: "qortal-guest",
-  username: "qortal-guest",
-  displayName: "Not Authenticated",
-  role: "Member",
-  avatarColor: "bg-slate-400",
-  joinedAt: new Date(0).toISOString(),
-};
-
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 40);
-
-const buildId = (prefix: string, value: string) =>
-  `${prefix}-${slugify(value) || "item"}-${Date.now()}`;
-
-const getDefaultUserId = (users: User[]) =>
-  users.find((user) => user.role === "Member")?.id ?? users[0]?.id ?? "";
-
-const resolveRoleForName = (name?: string): User["role"] => {
-  const rawAdmins = import.meta.env.VITE_FORUM_ADMIN_NAMES ?? "";
-  const adminNames = rawAdmins
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (!name) {
-    return "Member";
-  }
-
-  return adminNames.includes(name.toLowerCase()) ? "Admin" : "Member";
-};
-
-const mergeUsersFromForumData = (
-  baseUsers: User[],
-  topics: Topic[],
-  subTopics: SubTopic[],
-  posts: Post[]
-) => {
-  const nextUsers = [...baseUsers];
-  const seen = new Set(nextUsers.map((user) => user.id));
-
-  const authorIds = new Set<string>();
-  topics.forEach((topic) => authorIds.add(topic.createdByUserId));
-  subTopics.forEach((subTopic) => authorIds.add(subTopic.authorUserId));
-  posts.forEach((post) => authorIds.add(post.authorUserId));
-
-  authorIds.forEach((id) => {
-    if (!id || seen.has(id)) {
-      return;
+const mergePostsByLatestCreatedAt = (currentPosts: Post[], nextPosts: Post[]) => {
+  const merged = new Map(currentPosts.map((post) => [post.id, post]));
+  nextPosts.forEach((post) => {
+    const existing = merged.get(post.id);
+    if (!existing || post.createdAt >= existing.createdAt) {
+      merged.set(post.id, post);
     }
-
-    nextUsers.push({
-      id,
-      username: id,
-      displayName: id,
-      role: resolveRoleForName(id),
-      avatarColor: "bg-cyan-500",
-      joinedAt: new Date().toISOString(),
-    });
-    seen.add(id);
   });
-
-  return nextUsers;
+  return [...merged.values()];
 };
 
 export const ForumProvider = ({ children }: { children: ReactNode }) => {
-  const auth = useAuth();
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [topics, setTopics] = useState<Topic[]>(MOCK_TOPICS);
-  const [subTopics, setSubTopics] = useState<SubTopic[]>(MOCK_SUBTOPICS);
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
-
-  const [currentUserId, setCurrentUserId] = useState<string>(
-    getDefaultUserId(MOCK_USERS)
-  );
-  const [authMode, setAuthMode] = useState<ForumAuthMode>("mock");
-  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
-  const loadedIdentityRef = useRef<string | null>(null);
-
-  const currentUser = useMemo(() => {
-    return users.find((user) => user.id === currentUserId) ?? users[0];
-  }, [currentUserId, users]);
-
-  useEffect(() => {
-    let active = true;
-    const isQortal = isQortalRequestAvailable();
-
-    if (!isQortal) {
-      hasTriggeredAutoAuthThisSession = false;
-      loadedIdentityRef.current = null;
-      setAuthMode("mock");
-      setUsers(MOCK_USERS);
-      setTopics(MOCK_TOPICS);
-      setSubTopics(MOCK_SUBTOPICS);
-      setPosts(MOCK_POSTS);
-      setCurrentUserId(getDefaultUserId(MOCK_USERS));
-      setIsAuthReady(true);
-      return () => {
-        active = false;
-      };
-    }
-
-    setAuthMode("qortal");
-    const identity =
-      auth.primaryName?.trim() || auth.name?.trim() || auth.address?.trim() || "";
-
-    if (auth.isLoadingUser) {
-      setIsAuthReady(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    if (!identity) {
-      if (!hasTriggeredAutoAuthThisSession) {
-        hasTriggeredAutoAuthThisSession = true;
-        setUsers([GUEST_USER]);
-        setTopics([]);
-        setSubTopics([]);
-        setPosts([]);
-        setCurrentUserId(GUEST_USER.id);
-        setIsAuthReady(false);
-        void auth.authenticateUser().catch(() => undefined);
-        return () => {
-          active = false;
-        };
-      }
-
-      loadedIdentityRef.current = null;
-      setUsers([GUEST_USER]);
-      setTopics([]);
-      setSubTopics([]);
-      setPosts([]);
-      setCurrentUserId(GUEST_USER.id);
-      setIsAuthReady(true);
-      return () => {
-        active = false;
-      };
-    }
-
-    if (loadedIdentityRef.current === identity) {
-      setIsAuthReady(true);
-      return () => {
-        active = false;
-      };
-    }
-
-    const bootstrapQdnData = async () => {
-      try {
-        setIsAuthReady(false);
-
-        const qortalUser: User = {
-          id: identity,
-          username: identity,
-          displayName: identity,
-          role: resolveRoleForName(identity),
-          avatarColor: "bg-cyan-600",
-          joinedAt: new Date().toISOString(),
-        };
-
-        const remoteData = await forumQdnService.loadForumData();
-
-        if (!active) {
-          return;
-        }
-
-        const mergedUsers = mergeUsersFromForumData(
-          [qortalUser],
-          remoteData.topics,
-          remoteData.subTopics,
-          remoteData.posts
-        );
-
-        setUsers(mergedUsers);
-        setTopics(remoteData.topics);
-        setSubTopics(remoteData.subTopics);
-        setPosts(remoteData.posts);
-        setCurrentUserId(qortalUser.id);
-        loadedIdentityRef.current = identity;
-      } catch {
-        if (!active) {
-          return;
-        }
-
-        setUsers([GUEST_USER]);
-        setTopics([]);
-        setSubTopics([]);
-        setPosts([]);
-        setCurrentUserId(GUEST_USER.id);
-        loadedIdentityRef.current = null;
-      } finally {
-        if (active) {
-          setIsAuthReady(true);
-        }
-      }
-    };
-
-    void bootstrapQdnData();
-
-    return () => {
-      active = false;
-    };
-  }, [auth.address, auth.isLoadingUser, auth.name, auth.primaryName]);
-
-  const authenticate = useCallback(async () => {
-    await auth.authenticateUser();
-  }, [auth.authenticateUser]);
-
-  const isAuthenticated =
-    authMode === "qortal" ? currentUser.id !== GUEST_USER.id : true;
+  const {
+    users,
+    setUsers,
+    topics,
+    setTopics,
+    subTopics,
+    setSubTopics,
+    posts,
+    setPosts,
+    currentUser,
+    isAuthReady,
+    authMode,
+    isAuthenticated,
+    authenticate,
+  } = useForumDataQuery();
+  const {
+    createTopic,
+    createSubTopic,
+    createPost,
+    updatePost,
+    deletePost,
+    likePost,
+  } = useForumCommands({
+    currentUser,
+    isAuthenticated,
+    topics,
+    subTopics,
+    posts,
+    setUsers,
+    setTopics,
+    setSubTopics,
+    setPosts,
+  });
+  const loadedThreadsRef = useRef<Set<string>>(new Set());
+  const isBackgroundSyncingRef = useRef(false);
+  const [isThreadPostsLoading, setIsThreadPostsLoading] = useState(false);
 
   const setCurrentUser = useCallback(
-    (userId: string) => {
-      if (authMode === "qortal") {
-        return;
-      }
-
-      if (users.some((user) => user.id === userId)) {
-        setCurrentUserId(userId);
-      }
+    (_userId: string) => {
+      return;
     },
-    [authMode, users]
+    []
   );
 
-  const createTopic = useCallback(
-    async (input: { title: string; description: string }): Promise<CreateResult> => {
-      const title = input.title.trim();
-      const description = input.description.trim();
-
-      if (!title || !description) {
-        return { ok: false, error: "Title and description are required." };
+  const loadThreadPosts = useCallback(
+    async (subTopicId: string): Promise<ForumMutationResult> => {
+      const normalizedId = subTopicId.trim();
+      if (!normalizedId) {
+        return { ok: false, error: "Sub-topic id is required." };
       }
 
-      if (authMode === "qortal" && !isAuthenticated) {
-        return { ok: false, error: "Authenticate with Qortal first." };
+      if (loadedThreadsRef.current.has(normalizedId)) {
+        return { ok: true };
       }
 
-      if (currentUser.role !== "Admin") {
-        return { ok: false, error: "Only admins can create main topics." };
+      const cached = threadPostCache.read(normalizedId);
+      if (cached?.posts.length) {
+        setPosts((current) => mergePostsByLatestCreatedAt(current, cached.posts));
+        if (!cached.isStale) {
+          loadedThreadsRef.current.add(normalizedId);
+          return { ok: true };
+        }
       }
 
-      const duplicate = topics.some(
-        (topic) => topic.title.toLowerCase() === title.toLowerCase()
-      );
-      if (duplicate) {
-        return { ok: false, error: "A topic with this title already exists." };
-      }
-
-      const createdAt = new Date().toISOString();
-      const newTopic: Topic = {
-        id: buildId("topic", title),
-        title,
-        description,
-        createdByUserId: currentUser.id,
-        createdAt,
-      };
-
+      setIsThreadPostsLoading(true);
       try {
-        await forumQdnService.publishTopic(newTopic, currentUser.username);
-        setTopics((current) => [newTopic, ...current]);
-        setUsers((current) => mergeUsersFromForumData(current, [newTopic], [], []));
+        const loadedPosts = await forumQdnService.loadPostsBySubTopic(normalizedId);
+        setPosts((current) => mergePostsByLatestCreatedAt(current, loadedPosts));
+        threadPostCache.write(normalizedId, loadedPosts);
+        loadedThreadsRef.current.add(normalizedId);
         return { ok: true };
       } catch (error) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to publish topic.",
-        };
-      }
-    },
-    [authMode, currentUser.id, currentUser.role, currentUser.username, isAuthenticated, topics]
-  );
-
-  const createSubTopic = useCallback(
-    async (input: {
-      topicId: string;
-      title: string;
-      description: string;
-    }): Promise<CreateResult> => {
-      const title = input.title.trim();
-      const description = input.description.trim();
-
-      if (!title || !description) {
-        return { ok: false, error: "Title and description are required." };
-      }
-
-      if (authMode === "qortal" && !isAuthenticated) {
-        return { ok: false, error: "Authenticate with Qortal first." };
-      }
-
-      if (!topics.some((topic) => topic.id === input.topicId)) {
-        return { ok: false, error: "Main topic not found." };
-      }
-
-      const duplicate = subTopics.some(
-        (subTopic) =>
-          subTopic.topicId === input.topicId &&
-          subTopic.title.toLowerCase() === title.toLowerCase()
-      );
-      if (duplicate) {
-        return {
-          ok: false,
-          error: "This sub-topic title already exists under selected main topic.",
-        };
-      }
-
-      const createdAt = new Date().toISOString();
-      const newSubTopic: SubTopic = {
-        id: buildId("subtopic", title),
-        topicId: input.topicId,
-        title,
-        description,
-        authorUserId: currentUser.id,
-        createdAt,
-        lastPostAt: createdAt,
-      };
-
-      try {
-        await forumQdnService.publishSubTopic(newSubTopic, currentUser.username);
-        setSubTopics((current) => [newSubTopic, ...current]);
-        setUsers((current) => mergeUsersFromForumData(current, [], [newSubTopic], []));
-        return { ok: true };
-      } catch (error) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to publish sub-topic.",
-        };
-      }
-    },
-    [authMode, currentUser.id, currentUser.username, isAuthenticated, topics, subTopics]
-  );
-
-  const createPost = useCallback(
-    async (input: { subTopicId: string; content: string }): Promise<CreateResult> => {
-      const content = input.content.trim();
-
-      if (!content) {
-        return { ok: false, error: "Post content is required." };
-      }
-
-      if (authMode === "qortal" && !isAuthenticated) {
-        return { ok: false, error: "Authenticate with Qortal first." };
-      }
-
-      if (!subTopics.some((subTopic) => subTopic.id === input.subTopicId)) {
-        return { ok: false, error: "Sub-topic not found." };
-      }
-
-      const createdAt = new Date().toISOString();
-      const newPost: Post = {
-        id: buildId("post", `${currentUser.username}-${createdAt}`),
-        subTopicId: input.subTopicId,
-        authorUserId: currentUser.id,
-        content,
-        createdAt,
-        likes: 0,
-      };
-
-      try {
-        await forumQdnService.publishPost(newPost, currentUser.username);
-        setPosts((current) => [...current, newPost]);
-        setSubTopics((current) =>
-          current.map((subTopic) =>
-            subTopic.id === input.subTopicId
-              ? { ...subTopic, lastPostAt: createdAt }
-              : subTopic
-          )
-        );
-        setUsers((current) => mergeUsersFromForumData(current, [], [], [newPost]));
-        return { ok: true };
-      } catch (error) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to publish post.",
-        };
-      }
-    },
-    [authMode, currentUser.id, currentUser.username, isAuthenticated, subTopics]
-  );
-
-  const updatePost = useCallback(
-    async (input: { postId: string; content: string }): Promise<CreateResult> => {
-      const content = input.content.trim();
-      if (!content) {
-        return { ok: false, error: "Post content is required." };
-      }
-
-      if (authMode === "qortal" && !isAuthenticated) {
-        return { ok: false, error: "Authenticate with Qortal first." };
-      }
-
-      const target = posts.find((post) => post.id === input.postId);
-      if (!target) {
-        return { ok: false, error: "Post not found." };
-      }
-
-      if (target.authorUserId !== currentUser.id) {
-        return { ok: false, error: "Only owner can edit this post." };
-      }
-
-      const updatedPost: Post = { ...target, content };
-
-      try {
-        await forumQdnService.publishPost(updatedPost, currentUser.username);
-        setPosts((current) =>
-          current.map((post) => (post.id === input.postId ? updatedPost : post))
-        );
-        return { ok: true };
-      } catch (error) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to update post.",
-        };
-      }
-    },
-    [authMode, currentUser.id, currentUser.username, isAuthenticated, posts]
-  );
-
-  const deletePost = useCallback(
-    async (postId: string): Promise<CreateResult> => {
-      const target = posts.find((post) => post.id === postId);
-      if (!target) {
-        return { ok: false, error: "Post not found." };
-      }
-
-      if (authMode === "qortal" && !isAuthenticated) {
-        return { ok: false, error: "Authenticate with Qortal first." };
-      }
-
-      if (target.authorUserId !== currentUser.id) {
-        return { ok: false, error: "Only owner can delete this post." };
-      }
-
-      try {
-        await forumQdnService.deletePost(target, currentUser.username);
-        setPosts((current) => current.filter((post) => post.id !== postId));
-        return { ok: true };
-      } catch (error) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to delete post.",
-        };
-      }
-    },
-    [authMode, currentUser.id, currentUser.username, isAuthenticated, posts]
-  );
-
-  const likePost = useCallback(
-    (postId: string) => {
-      if (authMode === "qortal" && !isAuthenticated) {
-        return;
-      }
-
-      setPosts((current) => {
-        const next = current.map((post) =>
-          post.id === postId ? { ...post, likes: post.likes + 1 } : post
-        );
-
-        const target = next.find((post) => post.id === postId);
-        if (target) {
-          void forumQdnService.publishPost(target, currentUser.username);
+        if (cached?.posts.length) {
+          loadedThreadsRef.current.add(normalizedId);
+          return { ok: true };
         }
 
-        return next;
-      });
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to load thread posts.",
+        };
+      } finally {
+        setIsThreadPostsLoading(false);
+      }
     },
-    [authMode, currentUser.username, isAuthenticated]
+    [setPosts]
   );
 
   const value = useMemo<ForumContextValue>(
@@ -544,7 +163,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthenticated,
       isAuthReady,
       authenticate,
-      canSwitchUser: authMode !== "qortal",
+      canSwitchUser: false,
       setCurrentUser,
       createTopic,
       createSubTopic,
@@ -552,6 +171,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       updatePost,
       deletePost,
       likePost,
+      isThreadPostsLoading,
+      loadThreadPosts,
     }),
     [
       users,
@@ -570,8 +191,78 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       updatePost,
       deletePost,
       likePost,
+      isThreadPostsLoading,
+      loadThreadPosts,
     ]
   );
+
+  useEffect(() => {
+    if (!isAuthReady || !isAuthenticated || subTopics.length === 0) {
+      return;
+    }
+
+    const runBackgroundSync = async () => {
+      if (isBackgroundSyncingRef.current) {
+        return;
+      }
+
+      isBackgroundSyncingRef.current = true;
+      try {
+        const recentFromCache = threadPostCache.listRecentSubTopicIds(2);
+        const recentActiveSubTopics = [...subTopics]
+          .sort(
+            (a, b) =>
+              new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
+          )
+          .slice(0, 2)
+          .map((subTopic) => subTopic.id);
+
+        const targets = Array.from(
+          new Set([...recentFromCache, ...recentActiveSubTopics])
+        );
+
+        for (const subTopicId of targets) {
+          try {
+            const postsForThread = await forumQdnService.loadPostsBySubTopic(subTopicId);
+            threadPostCache.write(subTopicId, postsForThread);
+          } catch {
+            // Ignore background sync errors.
+          }
+        }
+      } finally {
+        isBackgroundSyncingRef.current = false;
+      }
+    };
+
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    if (typeof maybeWindow.requestIdleCallback === "function") {
+      const requestIdle = maybeWindow.requestIdleCallback;
+      const idleId = requestIdle(() => {
+        void runBackgroundSync();
+      }, { timeout: 2000 });
+
+      return () => {
+        if (typeof maybeWindow.cancelIdleCallback === "function") {
+          maybeWindow.cancelIdleCallback(idleId);
+        }
+      };
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void runBackgroundSync();
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isAuthReady, isAuthenticated, subTopics]);
 
   return <ForumContext.Provider value={value}>{children}</ForumContext.Provider>;
 };

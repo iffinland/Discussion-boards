@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import type { Post, User } from "../../types";
-import PostActionBar from "./PostActionBar";
+import type { Post, User } from "../../../types";
+import PostActionsModal from "./PostActionsModal";
 
-type PostCardProps = {
+type ThreadPostCardProps = {
   post: Post;
   author: User | undefined;
   isOwner: boolean;
@@ -33,7 +33,7 @@ const getInitials = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-const PostCard = ({
+const ThreadPostCard = ({
   post,
   author,
   isOwner,
@@ -44,11 +44,12 @@ const PostCard = ({
   onSendTip,
   onEdit,
   onDelete,
-}: PostCardProps) => {
+}: ThreadPostCardProps) => {
   const displayName = author?.displayName ?? "Unknown User";
   const avatarColor = author?.avatarColor ?? "bg-cyan-500";
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(post.content);
+  const [isActionsModalOpen, setIsActionsModalOpen] = useState(false);
 
   const handleStartEdit = () => {
     setDraftContent(post.content);
@@ -85,6 +86,13 @@ const PostCard = ({
             <p className="text-ui-muted text-xs">{formatDateTime(post.createdAt)}</p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsActionsModalOpen(true)}
+          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-300 hover:bg-cyan-50"
+        >
+          Actions
+        </button>
       </header>
 
       {isEditing ? (
@@ -117,10 +125,17 @@ const PostCard = ({
         </p>
       )}
 
-      <PostActionBar
+      <div className="mt-4 flex items-center gap-4 text-xs text-slate-600">
+        <span>Likes: {post.likes}</span>
+        <span>Tips: {tipCount}</span>
+      </div>
+
+      <PostActionsModal
+        isOpen={isActionsModalOpen}
+        isOwner={isOwner}
         likes={post.likes}
         tipCount={tipCount}
-        isOwner={isOwner}
+        onClose={() => setIsActionsModalOpen(false)}
         onLike={() => onLike(post.id)}
         onReply={() => onReply(post)}
         onShare={() => onShare(post.id)}
@@ -132,4 +147,4 @@ const PostCard = ({
   );
 };
 
-export default PostCard;
+export default ThreadPostCard;

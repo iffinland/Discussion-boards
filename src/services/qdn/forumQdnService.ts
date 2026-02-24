@@ -1,9 +1,13 @@
 import type { Post, SubTopic, Topic } from "../../types";
+import { toPartitionKey } from "../forum/forumId";
+import { ensureQdnResourceReady } from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getUserAccount } from "../qortal/walletService";
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
-const FORUM_IDENTIFIER_PREFIX = "qforum-2026-";
+const FORUM_NAMESPACE =
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qforum-2026";
+const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-v2-`;
 const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
 const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}subtopic-`;
 const POST_PREFIX = `${FORUM_IDENTIFIER_PREFIX}post-`;
@@ -82,7 +86,14 @@ const sleep = async (durationMs: number) => {
 
 const toTopicIdentifier = (topicId: string) => `${TOPIC_PREFIX}${topicId}`;
 const toSubTopicIdentifier = (subTopicId: string) => `${SUBTOPIC_PREFIX}${subTopicId}`;
-const toPostIdentifier = (postId: string) => `${POST_PREFIX}${postId}`;
+const toPostSearchPrefix = (subTopicId: string) => {
+  const partition = toPartitionKey(subTopicId, 8);
+  return `${POST_PREFIX}${partition}-${subTopicId}-`;
+};
+const toPostIdentifier = (post: Post) => {
+  const partition = toPartitionKey(post.subTopicId, 8);
+  return `${POST_PREFIX}${partition}-${post.subTopicId}-${post.id}`;
+};
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
   if (providedName?.trim()) {
@@ -144,6 +155,12 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
 };
 
 const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
+  try {
+    await ensureQdnResourceReady(FORUM_SERVICE, name, identifier);
+  } catch {
+    // Continue with direct fetch when readiness polling fails.
+  }
+
   const raw = await requestQortal<unknown>({
     action: "FETCH_QDN_RESOURCE",
     service: FORUM_SERVICE,
@@ -152,6 +169,66 @@ const fetchResource = async (name: string, identifier: string): Promise<unknown>
   });
 
   return parseJsonLike(raw);
+};
+
+const mapLatestPayloads = <TPayload extends { updatedAt: number }, TKey>(
+  payloads: Array<TPayload | null>,
+  keyOf: (payload: TPayload) => TKey
+) => {
+  const nextMap = new Map<TKey, TPayload>();
+
+  payloads.filter(Boolean).forEach((payload) => {
+    if (!payload) return;
+    const key = keyOf(payload);
+    const current = nextMap.get(key);
+    if (!current || payload.updatedAt > current.updatedAt) {
+      nextMap.set(key, payload);
+    }
+  });
+
+  return nextMap;
+};
+
+const fetchTopicPayloads = async () => {
+  const topicResults = await searchByPrefix(TOPIC_PREFIX);
+  return Promise.all(
+    topicResults.map(async (item) => {
+      try {
+        const raw = await fetchResource(item.name, item.identifier);
+        return parseTopicPayload(raw);
+      } catch {
+        return null;
+      }
+    })
+  );
+};
+
+const fetchSubTopicPayloads = async () => {
+  const subTopicResults = await searchByPrefix(SUBTOPIC_PREFIX);
+  return Promise.all(
+    subTopicResults.map(async (item) => {
+      try {
+        const raw = await fetchResource(item.name, item.identifier);
+        return parseSubTopicPayload(raw);
+      } catch {
+        return null;
+      }
+    })
+  );
+};
+
+const fetchPostPayloadsByPrefix = async (prefix: string) => {
+  const postResults = await searchByPrefix(prefix);
+  return Promise.all(
+    postResults.map(async (item) => {
+      try {
+        const raw = await fetchResource(item.name, item.identifier);
+        return parsePostPayload(raw);
+      } catch {
+        return null;
+      }
+    })
+  );
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
@@ -269,72 +346,17 @@ const publishPayload = async (
 };
 
 export const forumQdnService = {
-  async loadForumData() {
-    const [topicResults, subTopicResults, postResults] = await Promise.all([
-      searchByPrefix(TOPIC_PREFIX),
-      searchByPrefix(SUBTOPIC_PREFIX),
-      searchByPrefix(POST_PREFIX),
+  async loadForumStructure() {
+    const [topicPayloads, subTopicPayloads] = await Promise.all([
+      fetchTopicPayloads(),
+      fetchSubTopicPayloads(),
     ]);
 
-    const topicPayloads = await Promise.all(
-      topicResults.map(async (item) => {
-        try {
-          const raw = await fetchResource(item.name, item.identifier);
-          return parseTopicPayload(raw);
-        } catch {
-          return null;
-        }
-      })
+    const topicMap = mapLatestPayloads(topicPayloads, (payload) => payload.topic.id);
+    const subTopicMap = mapLatestPayloads(
+      subTopicPayloads,
+      (payload) => payload.subTopic.id
     );
-
-    const subTopicPayloads = await Promise.all(
-      subTopicResults.map(async (item) => {
-        try {
-          const raw = await fetchResource(item.name, item.identifier);
-          return parseSubTopicPayload(raw);
-        } catch {
-          return null;
-        }
-      })
-    );
-
-    const postPayloads = await Promise.all(
-      postResults.map(async (item) => {
-        try {
-          const raw = await fetchResource(item.name, item.identifier);
-          return parsePostPayload(raw);
-        } catch {
-          return null;
-        }
-      })
-    );
-
-    const topicMap = new Map<string, TopicPayload>();
-    topicPayloads.filter(Boolean).forEach((payload) => {
-      if (!payload) return;
-      const current = topicMap.get(payload.topic.id);
-      if (!current || payload.updatedAt > current.updatedAt) {
-        topicMap.set(payload.topic.id, payload);
-      }
-    });
-
-    const subTopicMap = new Map<string, SubTopicPayload>();
-    subTopicPayloads.filter(Boolean).forEach((payload) => {
-      if (!payload) return;
-      const current = subTopicMap.get(payload.subTopic.id);
-      if (!current || payload.updatedAt > current.updatedAt) {
-        subTopicMap.set(payload.subTopic.id, payload);
-      }
-    });
-
-    const postMap = new Map<string, PostPayload>();
-    postPayloads.filter(Boolean).forEach((payload) => {
-      if (!payload) return;
-      const current = postMap.get(payload.post.id);
-      if (!current || payload.updatedAt > current.updatedAt) {
-        postMap.set(payload.post.id, payload);
-      }
-    });
 
     const topics = [...topicMap.values()]
       .filter((payload) => payload.status !== "deleted")
@@ -345,12 +367,25 @@ export const forumQdnService = {
       .map((payload) => payload.subTopic)
       .filter((subTopic) => topics.some((topic) => topic.id === subTopic.topicId));
 
+    return { topics, subTopics };
+  },
+
+  async loadPostsBySubTopic(subTopicId: string) {
+    const nextPrefix = toPostSearchPrefix(subTopicId);
+    let postPayloads = await fetchPostPayloadsByPrefix(nextPrefix);
+
+    // Backward compatibility with older identifiers without subTopicId segment.
+    if (postPayloads.length === 0) {
+      postPayloads = await fetchPostPayloadsByPrefix(POST_PREFIX);
+    }
+
+    const postMap = mapLatestPayloads(postPayloads, (payload) => payload.post.id);
     const posts = [...postMap.values()]
       .filter((payload) => payload.status !== "deleted")
       .map((payload) => payload.post)
-      .filter((post) => subTopics.some((subTopic) => subTopic.id === post.subTopicId));
+      .filter((post) => post.subTopicId === subTopicId);
 
-    return { topics, subTopics, posts };
+    return posts;
   },
 
   async publishTopic(topic: Topic, ownerName?: string) {
@@ -401,7 +436,7 @@ export const forumQdnService = {
 
   async publishPost(post: Post, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
-    const identifier = toPostIdentifier(post.id);
+    const identifier = toPostIdentifier(post);
     const payload: PostPayload = {
       version: 1,
       type: "post",
@@ -424,7 +459,7 @@ export const forumQdnService = {
 
   async deletePost(post: Post, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
-    const identifier = toPostIdentifier(post.id);
+    const identifier = toPostIdentifier(post);
     const payload: PostPayload = {
       version: 1,
       type: "post",

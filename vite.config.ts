@@ -20,4 +20,15 @@ export default defineConfig({
   optimizeDeps: {
     include: ['@mui/material', '@mui/styled-engine', '@mui/system'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          mui: ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
+          qortal: ['qapp-core'],
+        },
+      },
+    },
+  },
 });

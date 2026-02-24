@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import PostCard from "../components/forum/PostCard";
-import RichTextEditor from "../components/forum/RichTextEditor";
+import ThreadComposer from "../features/forum/components/ThreadComposer";
+import ThreadSkeleton from "../features/forum/components/ThreadSkeleton";
+import ThreadPostCard from "../features/forum/components/ThreadPostCard";
+import { useThreadActions } from "../features/forum/hooks/useThreadActions";
+import { useThreadDataQuery } from "../features/forum/hooks/useThreadDataQuery";
 import { useForumData } from "../hooks/useForumData";
-import type { Post } from "../types";
+
+const THREAD_BATCH_SIZE = 12;
 
 const ThreadPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,88 +21,102 @@ const ThreadPage = () => {
     updatePost,
     deletePost,
     likePost,
+    isThreadPostsLoading,
+    loadThreadPosts,
+    isAuthReady,
   } = useForumData();
+  const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const [replyText, setReplyText] = useState("");
-  const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { subTopic, threadPosts, userMap, resolveAuthorDisplayName } =
+    useThreadDataQuery({
+      threadId: id,
+      users,
+      subTopics,
+      posts,
+    });
 
-  const subTopic = subTopics.find((item) => item.id === id);
+  const {
+    replyText,
+    setReplyText,
+    feedback,
+    tipsByPostId,
+    handleSubmitReply,
+    handleReplyToPost,
+    handleEditPost,
+    handleDeletePost,
+    handleSharePost,
+    handleSendTip,
+  } = useThreadActions({
+    threadId: id,
+    createPost,
+    updatePost,
+    deletePost,
+    resolveAuthorDisplayName,
+  });
 
-  const threadPosts = useMemo(() => {
-    return posts
-      .filter((post) => post.subTopicId === id)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [id, posts]);
+  const visiblePosts = useMemo(
+    () => threadPosts.slice(0, visibleCount),
+    [threadPosts, visibleCount]
+  );
 
-  const userMap = useMemo(() => {
-    return new Map(users.map((user) => [user.id, user]));
-  }, [users]);
+  const canLoadMore = visibleCount < threadPosts.length;
 
-  const handleSubmitReply = async () => {
+  useEffect(() => {
     if (!id) {
       return;
     }
 
-    const result = await createPost({
-      subTopicId: id,
-      content: replyText,
+    let active = true;
+    void loadThreadPosts(id).then((result) => {
+      if (!active) {
+        return;
+      }
+      setThreadLoadError(result.ok ? null : result.error ?? "Unable to load thread posts.");
     });
 
-    if (!result.ok) {
-      setFeedback(result.error ?? "Unable to publish post.");
+    return () => {
+      active = false;
+    };
+  }, [id, loadThreadPosts]);
+
+  useEffect(() => {
+    setVisibleCount(THREAD_BATCH_SIZE);
+  }, [id, threadPosts.length]);
+
+  useEffect(() => {
+    if (!canLoadMore || !loadMoreRef.current) {
       return;
     }
 
-    setReplyText("");
-    setFeedback("Reply published.");
-  };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) {
+          return;
+        }
 
-  const handleReplyToPost = (post: Post) => {
-    const authorName = userMap.get(post.authorUserId)?.displayName ?? "Member";
-    setReplyText(`@${authorName} `);
-  };
+        setVisibleCount((current) =>
+          Math.min(current + THREAD_BATCH_SIZE, threadPosts.length)
+        );
+      },
+      {
+        root: null,
+        rootMargin: "280px 0px",
+        threshold: 0.1,
+      }
+    );
 
-  const handleEditPost = async (postId: string, content: string) => {
-    const result = await updatePost({ postId, content });
-    if (!result.ok) {
-      setFeedback(result.error ?? "Unable to update post.");
-      return;
-    }
+    observer.observe(loadMoreRef.current);
+    return () => {
+      observer.disconnect();
+    };
+  }, [canLoadMore, threadPosts.length]);
 
-    setFeedback("Post updated.");
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    const result = await deletePost(postId);
-    if (!result.ok) {
-      setFeedback(result.error ?? "Unable to delete post.");
-      return;
-    }
-
-    setFeedback("Post deleted.");
-  };
-
-  const handleSharePost = async (postId: string) => {
-    if (!id || typeof window === "undefined" || !navigator.clipboard) {
-      return;
-    }
-
-    const shareUrl = `${window.location.origin}${window.location.pathname}#/thread/${id}?post=${postId}`;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setFeedback("Post link copied.");
-    } catch {
-      setFeedback("Unable to copy post link.");
-    }
-  };
-
-  const handleSendTip = (postId: string) => {
-    setTipsByPostId((current) => ({
-      ...current,
-      [postId]: (current[postId] ?? 0) + 1,
-    }));
-  };
+  if (!isAuthReady) {
+    return <ThreadSkeleton />;
+  }
 
   if (!subTopic) {
     return (
@@ -120,10 +138,14 @@ const ThreadPage = () => {
       </section>
 
       {feedback ? <p className="text-ui-muted text-xs">{feedback}</p> : null}
+      {threadLoadError ? <p className="text-ui-muted text-xs">{threadLoadError}</p> : null}
+      {isThreadPostsLoading ? (
+        <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
+      ) : null}
 
       <section className="space-y-3">
-        {threadPosts.map((post) => (
-          <PostCard
+        {visiblePosts.map((post) => (
+          <ThreadPostCard
             key={post.id}
             post={post}
             author={userMap.get(post.authorUserId)}
@@ -137,17 +159,16 @@ const ThreadPage = () => {
             onDelete={handleDeletePost}
           />
         ))}
+        {canLoadMore ? (
+          <div ref={loadMoreRef} className="h-6 w-full" aria-hidden="true" />
+        ) : null}
       </section>
 
-      <section>
-        <h3 className="text-brand-primary mb-2 text-base font-semibold">Add Reply</h3>
-        <RichTextEditor
-          value={replyText}
-          onChange={setReplyText}
-          onSubmit={handleSubmitReply}
-          placeholder="Share your thoughts with the community..."
-        />
-      </section>
+      <ThreadComposer
+        replyText={replyText}
+        onReplyTextChange={setReplyText}
+        onSubmit={handleSubmitReply}
+      />
 
       <Link to="/" className="forum-link inline-block text-sm font-medium">
         Back to topics
