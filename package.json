@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "backup:workspace": "bash scripts/backup-workspace.sh",
     "build": "tsc -b && vite build",
     "dev": "vite",
     "format:check": "prettier --check .",
@@ -11,7 +12,8 @@
     "initialize": "node scripts/initialize.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "restore:workspace": "bash scripts/restore-workspace.sh"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
