@@ -12,9 +12,9 @@ const StatsBar = () => {
             {topics.length}
           </strong>
         </span>
-        <span className="forum-pill-accent rounded-md px-2 py-1">
+        <span className="forum-pill-primary rounded-md px-2 py-1">
           Total Sub-Topics:{" "}
-          <strong className="text-brand-accent-strong font-semibold">
+          <strong className="text-brand-primary-strong font-semibold">
             {subTopics.length}
           </strong>
         </span>

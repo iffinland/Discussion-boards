@@ -1,23 +1,34 @@
 import type { Post, SubTopic, Topic } from "../../types";
-import { toPartitionKey } from "../forum/forumId";
+import { generateForumEntityId, toPartitionKey } from "../forum/forumId";
 import { ensureQdnResourceReady } from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getUserAccount } from "../qortal/walletService";
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
+const FORUM_IMAGE_SERVICE = import.meta.env.VITE_QORTAL_QDN_IMAGE_SERVICE ?? "IMAGE";
 const FORUM_NAMESPACE =
   import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qforum-2026";
 const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-v2-`;
 const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
 const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}subtopic-`;
 const POST_PREFIX = `${FORUM_IDENTIFIER_PREFIX}post-`;
+const IMAGE_PREFIX = `${FORUM_IDENTIFIER_PREFIX}image-`;
 const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
+const IMAGE_PUBLISH_TIMEOUT_MS = 5 * 60 * 1000;
+const imageUrlCache = new Map<string, string>();
 
 interface SearchQdnResourceResult {
   name: string;
   identifier: string;
 }
+
+export type ForumPostImageReference = {
+  service: string;
+  name: string;
+  identifier: string;
+  filename: string;
+};
 
 type EntityStatus = "active" | "deleted";
 
@@ -94,6 +105,7 @@ const toPostIdentifier = (post: Post) => {
   const partition = toPartitionKey(post.subTopicId, 8);
   return `${POST_PREFIX}${partition}-${post.subTopicId}-${post.id}`;
 };
+const toImageIdentifier = (imageId: string) => `${IMAGE_PREFIX}${imageId}`;
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
   if (providedName?.trim()) {
@@ -478,5 +490,63 @@ export const forumQdnService = {
     );
 
     await verifyPublication(resolvedOwner, identifier, "post");
+  },
+
+  async publishPostImage(file: File, ownerName?: string): Promise<ForumPostImageReference> {
+    const resolvedOwner = await resolveOwnerName(ownerName);
+    const imageId = generateForumEntityId("image", resolvedOwner);
+    const identifier = toImageIdentifier(imageId);
+
+    await requestQortal<unknown>(
+      {
+        action: "PUBLISH_QDN_RESOURCE",
+        service: FORUM_IMAGE_SERVICE,
+        name: resolvedOwner,
+        identifier,
+        filename: file.name,
+        file,
+      },
+      {
+        timeoutMs: IMAGE_PUBLISH_TIMEOUT_MS,
+      }
+    );
+
+    return {
+      service: FORUM_IMAGE_SERVICE,
+      name: resolvedOwner,
+      identifier,
+      filename: file.name,
+    };
+  },
+
+  async getPostImageResourceUrl(reference: {
+    service: string;
+    name: string;
+    identifier: string;
+  }): Promise<string> {
+    const cacheKey = `${reference.service}:${reference.name}:${reference.identifier}`;
+    const cached = imageUrlCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      await ensureQdnResourceReady(
+        reference.service,
+        reference.name,
+        reference.identifier
+      );
+    } catch {
+      // Continue with direct URL fetch when readiness polling fails.
+    }
+
+    const resourceUrl = await requestQortal<string>({
+      action: "GET_QDN_RESOURCE_URL",
+      service: reference.service,
+      name: reference.name,
+      identifier: reference.identifier,
+    });
+    imageUrlCache.set(cacheKey, resourceUrl);
+    return resourceUrl;
   },
 };

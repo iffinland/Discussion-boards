@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+
 import { useForumData } from "../../hooks/useForumData";
 
 type ThemeMode = "light-cyan" | "soft-cyan";
@@ -44,17 +46,145 @@ const MoonIcon = ({ active }: { active: boolean }) => (
   </svg>
 );
 
+const initialsFromName = (name: string | null) => {
+  if (!name) {
+    return "Q";
+  }
+
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+};
+
 const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   const {
-    users,
+    availableAuthNames,
+    activeAuthName,
     currentUser,
     setCurrentUser,
-    canSwitchUser,
-    authMode,
-    isAuthenticated,
-    isAuthReady,
-    authenticate,
   } = useForumData();
+  const [isNameMenuOpen, setIsNameMenuOpen] = useState(false);
+  const [highlightedNameIndex, setHighlightedNameIndex] = useState(0);
+  const nameMenuContainerRef = useRef<HTMLDivElement | null>(null);
+  const nameMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const nameOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const initials = useMemo(
+    () => initialsFromName(activeAuthName ?? currentUser.displayName ?? null),
+    [activeAuthName, currentUser.displayName]
+  );
+
+  useEffect(() => {
+    const closeIfOutside = (event: MouseEvent) => {
+      if (!nameMenuContainerRef.current) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof Node && !nameMenuContainerRef.current.contains(target)) {
+        setIsNameMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("click", closeIfOutside);
+    return () => {
+      window.removeEventListener("click", closeIfOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isNameMenuOpen || availableAuthNames.length === 0) {
+      return;
+    }
+
+    const activeIndex = availableAuthNames.findIndex((name) => name === activeAuthName);
+    const nextIndex = activeIndex >= 0 ? activeIndex : 0;
+    setHighlightedNameIndex(nextIndex);
+  }, [activeAuthName, availableAuthNames, isNameMenuOpen]);
+
+  useEffect(() => {
+    if (!isNameMenuOpen) {
+      return;
+    }
+
+    nameOptionRefs.current[highlightedNameIndex]?.focus();
+  }, [highlightedNameIndex, isNameMenuOpen]);
+
+  const selectHighlightedName = () => {
+    const selected = availableAuthNames[highlightedNameIndex];
+    if (!selected) {
+      return;
+    }
+
+    setCurrentUser(selected);
+    setIsNameMenuOpen(false);
+  };
+
+  const handleNameMenuKeyDown = (event: KeyboardEvent) => {
+    if (availableAuthNames.length === 0) {
+      return;
+    }
+
+    switch (event.key) {
+      case "Escape":
+        event.preventDefault();
+        setIsNameMenuOpen(false);
+        nameMenuTriggerRef.current?.focus();
+        return;
+      case "Tab": {
+        event.preventDefault();
+        if (event.shiftKey) {
+          setHighlightedNameIndex((current) =>
+            current === 0 ? availableAuthNames.length - 1 : current - 1
+          );
+        } else {
+          setHighlightedNameIndex((current) =>
+            current === availableAuthNames.length - 1 ? 0 : current + 1
+          );
+        }
+        return;
+      }
+      case "ArrowDown":
+        event.preventDefault();
+        setHighlightedNameIndex((current) =>
+          Math.min(current + 1, availableAuthNames.length - 1)
+        );
+        return;
+      case "ArrowUp":
+        event.preventDefault();
+        setHighlightedNameIndex((current) => Math.max(current - 1, 0));
+        return;
+      case "Home":
+        event.preventDefault();
+        setHighlightedNameIndex(0);
+        return;
+      case "End":
+        event.preventDefault();
+        setHighlightedNameIndex(availableAuthNames.length - 1);
+        return;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        selectHighlightedName();
+        return;
+      default:
+        return;
+    }
+  };
+
+  const handleNameButtonKeyDown = (event: KeyboardEvent) => {
+    if (availableAuthNames.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setIsNameMenuOpen(true);
+    }
+  };
 
   return (
     <header className="bg-forum-header border-brand-primary sticky top-0 z-20 border-b backdrop-blur-sm">
@@ -85,51 +215,76 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
             <MoonIcon active={themeMode === "soft-cyan"} />
           </button>
 
-          <div className="forum-card border-brand-primary flex items-center gap-3 px-3 py-2">
-            <div
-              className={`${currentUser.avatarColor} h-8 w-8 rounded-full ring-2 ring-cyan-100`}
-              aria-hidden="true"
-            />
-            <div className="leading-tight">
-              <p className="text-ui-strong text-sm font-semibold">
-                {currentUser.displayName}
-              </p>
-              <p className="text-ui-muted text-xs">{currentUser.role}</p>
-            </div>
-            <select
-              value={currentUser.id}
-              onChange={(event) => setCurrentUser(event.target.value)}
-              className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs"
-              aria-label="Current user"
-              disabled={!canSwitchUser}
-            >
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} ({user.role})
-                </option>
-              ))}
-            </select>
-          </div>
-          {authMode === "qortal" && !isAuthenticated ? (
+          <div className="forum-card border-brand-primary relative px-2 py-2" ref={nameMenuContainerRef}>
             <button
               type="button"
-              onClick={() => {
-                void authenticate();
-              }}
-              className="rounded-md bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+              ref={nameMenuTriggerRef}
+              className="flex items-center gap-3 rounded-md px-1 py-1"
+              onClick={() => setIsNameMenuOpen((value) => !value)}
+              onKeyDown={handleNameButtonKeyDown}
+              disabled={availableAuthNames.length === 0}
+              aria-label="Open identity menu"
+              aria-expanded={isNameMenuOpen}
+              aria-haspopup="menu"
             >
-              Authenticate
+              <div
+                className={`${currentUser.avatarColor} flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-cyan-100`}
+                aria-hidden="true"
+              >
+                {initials}
+              </div>
+              <div className="leading-tight text-left">
+                <p className="text-ui-strong text-sm font-semibold">
+                  {activeAuthName ?? currentUser.displayName}
+                </p>
+                <p className="text-ui-muted text-xs">
+                  {availableAuthNames.length > 0
+                    ? `${availableAuthNames.length} names`
+                    : "No names"}
+                </p>
+              </div>
+              <span className="text-ui-muted text-xs">{isNameMenuOpen ? "▴" : "▾"}</span>
             </button>
-          ) : null}
-          <div className="text-ui-muted text-[10px] leading-tight">
-            <p>{isAuthReady ? "Auth Ready" : "Auth Loading..."}</p>
-            <p>
-              {authMode === "qortal"
-                ? isAuthenticated
-                  ? "Qortal Connected"
-                  : "Qortal Not Authenticated"
-                : "Qortal"}
-            </p>
+
+            {availableAuthNames.length > 0 ? (
+              <div
+                className={[
+                  "bg-surface-card absolute right-0 top-[calc(100%+6px)] z-30 min-w-44 rounded-md border border-slate-200 p-1 shadow-lg transition-all duration-150 ease-out",
+                  isNameMenuOpen
+                    ? "pointer-events-auto translate-y-0 opacity-100"
+                    : "pointer-events-none -translate-y-1 opacity-0",
+                ].join(" ")}
+                role="menu"
+                aria-hidden={!isNameMenuOpen}
+                onKeyDown={handleNameMenuKeyDown}
+              >
+                {availableAuthNames.map((name, index) => (
+                  <button
+                    key={name}
+                    ref={(element) => {
+                      nameOptionRefs.current[index] = element;
+                    }}
+                    type="button"
+                    tabIndex={isNameMenuOpen ? 0 : -1}
+                    role="menuitemradio"
+                    aria-checked={name === activeAuthName}
+                    onMouseEnter={() => setHighlightedNameIndex(index)}
+                    onClick={() => {
+                      setCurrentUser(name);
+                      setIsNameMenuOpen(false);
+                    }}
+                    className={[
+                      "block w-full rounded-md px-3 py-2 text-left text-xs font-medium transition",
+                      index === highlightedNameIndex || name === activeAuthName
+                        ? "bg-cyan-50 text-cyan-700"
+                        : "text-slate-700 hover:bg-slate-100",
+                    ].join(" ")}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

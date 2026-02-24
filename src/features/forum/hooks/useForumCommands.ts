@@ -2,10 +2,11 @@ import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { generateForumEntityId } from "../../../services/forum/forumId";
+import { encodeQdnImageTag } from "../../../services/forum/richText";
 import { threadPostCache } from "../../../services/forum/threadPostCache";
 import { forumQdnService } from "../../../services/qdn/forumQdnService";
 import type { Post, SubTopic, Topic, User } from "../../../types";
-import type { ForumMutationResult } from "../types";
+import type { ForumMutationResult, ForumUploadImageResult } from "../types";
 
 type UseForumCommandsParams = {
   currentUser: User;
@@ -327,6 +328,35 @@ export const useForumCommands = ({
     [currentUser.username, isAuthenticated, setPosts]
   );
 
+  const uploadPostImage = useCallback(
+    async (file: File): Promise<ForumUploadImageResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: "Authenticate with Qortal first." };
+      }
+
+      try {
+        const reference = await forumQdnService.publishPostImage(
+          file,
+          currentUser.username
+        );
+        return {
+          ok: true,
+          imageTag: encodeQdnImageTag({
+            name: reference.name,
+            identifier: reference.identifier,
+          }),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? error.message : "Failed to upload image.",
+        };
+      }
+    },
+    [currentUser.username, isAuthenticated]
+  );
+
   return {
     createTopic,
     createSubTopic,
@@ -334,5 +364,6 @@ export const useForumCommands = ({
     updatePost,
     deletePost,
     likePost,
+    uploadPostImage,
   };
 };

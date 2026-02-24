@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 
 import type { Post } from "../../../types";
-import type { ForumMutationResult } from "../types";
+import type { ForumMutationResult, ForumUploadImageResult } from "../types";
 
 type UseThreadActionsParams = {
   threadId?: string;
   createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
+  uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
   updatePost: (input: { postId: string; content: string }) => Promise<ForumMutationResult>;
   deletePost: (postId: string) => Promise<ForumMutationResult>;
   resolveAuthorDisplayName: (authorUserId: string) => string;
@@ -14,6 +15,7 @@ type UseThreadActionsParams = {
 export const useThreadActions = ({
   threadId,
   createPost,
+  uploadPostImage,
   updatePost,
   deletePost,
   resolveAuthorDisplayName,
@@ -99,6 +101,18 @@ export const useThreadActions = ({
     }));
   }, []);
 
+  const uploadImageForReply = useCallback(
+    async (file: File): Promise<string> => {
+      const result = await uploadPostImage(file);
+      if (!result.ok || !result.imageTag) {
+        throw new Error(result.error ?? "Unable to upload image.");
+      }
+
+      return result.imageTag;
+    },
+    [uploadPostImage]
+  );
+
   return {
     replyText,
     setReplyText,
@@ -110,5 +124,6 @@ export const useThreadActions = ({
     handleDeletePost,
     handleSharePost,
     handleSendTip,
+    uploadImageForReply,
   };
 };

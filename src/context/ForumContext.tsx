@@ -11,7 +11,10 @@ import {
 
 import { useForumCommands } from "../features/forum/hooks/useForumCommands";
 import { useForumDataQuery } from "../features/forum/hooks/useForumDataQuery";
-import type { ForumMutationResult } from "../features/forum/types";
+import type {
+  ForumMutationResult,
+  ForumUploadImageResult,
+} from "../features/forum/types";
 import { threadPostCache } from "../services/forum/threadPostCache";
 import { forumQdnService } from "../services/qdn/forumQdnService";
 import type { Post, SubTopic, Topic, User } from "../types";
@@ -21,6 +24,8 @@ type ForumAuthMode = "qortal";
 type ForumContextValue = {
   users: User[];
   currentUser: User;
+  availableAuthNames: string[];
+  activeAuthName: string | null;
   topics: Topic[];
   subTopics: SubTopic[];
   posts: Post[];
@@ -40,6 +45,7 @@ type ForumContextValue = {
     description: string;
   }) => Promise<ForumMutationResult>;
   createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
+  uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
   updatePost: (input: {
     postId: string;
     content: string;
@@ -74,6 +80,9 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     posts,
     setPosts,
     currentUser,
+    availableAuthNames,
+    activeAuthName,
+    setActiveAuthName,
     isAuthReady,
     authMode,
     isAuthenticated,
@@ -83,6 +92,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     createTopic,
     createSubTopic,
     createPost,
+    uploadPostImage,
     updatePost,
     deletePost,
     likePost,
@@ -102,10 +112,13 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   const [isThreadPostsLoading, setIsThreadPostsLoading] = useState(false);
 
   const setCurrentUser = useCallback(
-    (_userId: string) => {
-      return;
+    (name: string) => {
+      if (!name) {
+        return;
+      }
+      setActiveAuthName(name);
     },
-    []
+    [setActiveAuthName]
   );
 
   const loadThreadPosts = useCallback(
@@ -156,6 +169,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       users,
       currentUser,
+      availableAuthNames,
+      activeAuthName,
       topics,
       subTopics,
       posts,
@@ -163,11 +178,12 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthenticated,
       isAuthReady,
       authenticate,
-      canSwitchUser: false,
+      canSwitchUser: availableAuthNames.length > 1,
       setCurrentUser,
       createTopic,
       createSubTopic,
       createPost,
+      uploadPostImage,
       updatePost,
       deletePost,
       likePost,
@@ -177,6 +193,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     [
       users,
       currentUser,
+      availableAuthNames,
+      activeAuthName,
       topics,
       subTopics,
       posts,
@@ -188,6 +206,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       createTopic,
       createSubTopic,
       createPost,
+      uploadPostImage,
       updatePost,
       deletePost,
       likePost,

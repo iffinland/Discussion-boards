@@ -4,12 +4,14 @@ type ThreadComposerProps = {
   replyText: string;
   onReplyTextChange: (value: string) => void;
   onSubmit: () => void;
+  onUploadImage: (file: File) => Promise<string>;
 };
 
 const ThreadComposer = ({
   replyText,
   onReplyTextChange,
   onSubmit,
+  onUploadImage,
 }: ThreadComposerProps) => {
   return (
     <section>
@@ -18,6 +20,7 @@ const ThreadComposer = ({
         value={replyText}
         onChange={onReplyTextChange}
         onSubmit={onSubmit}
+        onUploadImage={onUploadImage}
         placeholder="Share your thoughts with the community..."
       />
     </section>

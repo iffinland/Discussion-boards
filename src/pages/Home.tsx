@@ -143,9 +143,6 @@ const Home = () => {
 
       <section className="space-y-3">
         <h2 className="text-brand-primary text-lg font-semibold">Main Topics</h2>
-        <p className="text-ui-muted text-sm">
-          Expand a topic to browse sub-topics. Opening one topic closes others.
-        </p>
       </section>
 
       <div className="space-y-4">

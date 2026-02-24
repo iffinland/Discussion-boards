@@ -1,5 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import RichTextContent from "../../../components/forum/RichTextContent";
+import RichTextToolsModal from "../../../components/forum/RichTextToolsModal";
+import {
+  applyWrapFormat,
+  formatToTags,
+  type RichTextFormatType,
+} from "../../../services/forum/richText";
 import type { Post, User } from "../../../types";
 import PostActionsModal from "./PostActionsModal";
 
@@ -50,6 +57,8 @@ const ThreadPostCard = ({
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(post.content);
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false);
+  const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleStartEdit = () => {
     setDraftContent(post.content);
@@ -69,6 +78,39 @@ const ThreadPostCard = ({
   const handleCancelEdit = () => {
     setDraftContent(post.content);
     setIsEditing(false);
+  };
+
+  const applyDraftFormatting = (openTag: string, closeTag: string) => {
+    const textarea = editTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const result = applyWrapFormat({
+      value: draftContent,
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+      openTag,
+      closeTag,
+    });
+    setDraftContent(result.value);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(
+        result.nextSelectionStart,
+        result.nextSelectionEnd
+      );
+    });
+  };
+
+  const handleDraftFormat = (format: RichTextFormatType) => {
+    const [openTag, closeTag] = formatToTags[format];
+    applyDraftFormatting(openTag, closeTag);
+  };
+
+  const handleDraftColor = (color: string) => {
+    applyDraftFormatting(`[color=${color}]`, "[/color]");
   };
 
   return (
@@ -97,7 +139,17 @@ const ThreadPostCard = ({
 
       {isEditing ? (
         <div className="mt-3 space-y-2">
+          <div className="border-brand-primary bg-brand-primary-soft flex items-center gap-2 rounded-md border p-2">
+            <button
+              type="button"
+              onClick={() => setIsToolsModalOpen(true)}
+              className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
+            >
+              Rich Text
+            </button>
+          </div>
           <textarea
+            ref={editTextareaRef}
             value={draftContent}
             onChange={(event) => setDraftContent(event.target.value)}
             className="bg-surface-card text-ui-strong min-h-24 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-cyan-300"
@@ -118,11 +170,18 @@ const ThreadPostCard = ({
               Cancel
             </button>
           </div>
+          <RichTextToolsModal
+            isOpen={isToolsModalOpen}
+            onClose={() => setIsToolsModalOpen(false)}
+            onApplyFormat={handleDraftFormat}
+            onApplyColor={handleDraftColor}
+          />
         </div>
       ) : (
-        <p className="text-ui-strong mt-3 whitespace-pre-wrap text-sm leading-relaxed">
-          {post.content}
-        </p>
+        <RichTextContent
+          value={post.content}
+          className="text-ui-strong mt-3 text-sm leading-relaxed"
+        />
       )}
 
       <div className="mt-4 flex items-center gap-4 text-xs text-slate-600">

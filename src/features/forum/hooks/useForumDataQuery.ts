@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "qapp-core";
 
+import { getAccountNames } from "../../../services/qortal/walletService";
 import { forumQdnService } from "../../../services/qdn/forumQdnService";
 import { isQortalRequestAvailable } from "../../../services/qortal/qortalClient";
 import type { Post, SubTopic, Topic, User } from "../../../types";
@@ -10,13 +11,11 @@ type ForumAuthMode = "qortal";
 const GUEST_USER: User = {
   id: "qortal-guest",
   username: "qortal-guest",
-  displayName: "Not Authenticated",
+  displayName: "Guest",
   role: "Member",
   avatarColor: "bg-slate-400",
   joinedAt: new Date(0).toISOString(),
 };
-
-let hasTriggeredAutoAuthThisSession = false;
 
 const resolveRoleForName = (name?: string): User["role"] => {
   const rawAdmins = import.meta.env.VITE_FORUM_ADMIN_NAMES ?? "";
@@ -72,8 +71,12 @@ export const useForumDataQuery = () => {
   const [subTopics, setSubTopics] = useState<SubTopic[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>(GUEST_USER.id);
+  const [availableAuthNames, setAvailableAuthNames] = useState<string[]>([]);
+  const [activeAuthName, setActiveAuthName] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
   const loadedIdentityRef = useRef<string | null>(null);
+  const authAttemptInFlightRef = useRef(false);
+  const lastAuthAttemptAtRef = useRef(0);
   const authMode: ForumAuthMode = "qortal";
 
   const currentUser = useMemo(() => {
@@ -82,16 +85,77 @@ export const useForumDataQuery = () => {
 
   useEffect(() => {
     let active = true;
+
+    const syncAccountNames = async () => {
+      const address = auth.address?.trim();
+      const primary = auth.primaryName?.trim();
+      const authName = auth.name?.trim();
+      const known = [primary, authName].filter(
+        (value): value is string => Boolean(value)
+      );
+
+      if (!address) {
+        if (!active) {
+          return;
+        }
+        setAvailableAuthNames(known);
+        setActiveAuthName((current) => current ?? known[0] ?? null);
+        return;
+      }
+
+      try {
+        const resolved = await getAccountNames(address);
+        if (!active) {
+          return;
+        }
+
+        const merged = Array.from(new Set([...known, ...resolved])).filter(Boolean);
+        setAvailableAuthNames(merged);
+        setActiveAuthName((current) => {
+          if (current && merged.includes(current)) {
+            return current;
+          }
+
+          if (primary && merged.includes(primary)) {
+            return primary;
+          }
+
+          if (authName && merged.includes(authName)) {
+            return authName;
+          }
+
+          return merged[0] ?? null;
+        });
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setAvailableAuthNames(known);
+        setActiveAuthName((current) => current ?? known[0] ?? null);
+      }
+    };
+
+    void syncAccountNames();
+
+    return () => {
+      active = false;
+    };
+  }, [auth.address, auth.name, auth.primaryName]);
+
+  useEffect(() => {
+    let active = true;
     const isQortal = isQortalRequestAvailable();
 
     if (!isQortal) {
-      hasTriggeredAutoAuthThisSession = false;
       loadedIdentityRef.current = null;
       setUsers([GUEST_USER]);
       setTopics([]);
       setSubTopics([]);
       setPosts([]);
       setCurrentUserId(GUEST_USER.id);
+      setAvailableAuthNames([]);
+      setActiveAuthName(null);
       setIsAuthReady(true);
       return () => {
         active = false;
@@ -99,7 +163,11 @@ export const useForumDataQuery = () => {
     }
 
     const identity =
-      auth.primaryName?.trim() || auth.name?.trim() || auth.address?.trim() || "";
+      activeAuthName?.trim() ||
+      auth.primaryName?.trim() ||
+      auth.name?.trim() ||
+      auth.address?.trim() ||
+      "";
 
     if (auth.isLoadingUser) {
       setIsAuthReady(false);
@@ -109,27 +177,32 @@ export const useForumDataQuery = () => {
     }
 
     if (!identity) {
-      if (!hasTriggeredAutoAuthThisSession) {
-        hasTriggeredAutoAuthThisSession = true;
-        setUsers([GUEST_USER]);
-        setTopics([]);
-        setSubTopics([]);
-        setPosts([]);
-        setCurrentUserId(GUEST_USER.id);
-        setIsAuthReady(false);
-        void auth.authenticateUser().catch(() => undefined);
-        return () => {
-          active = false;
-        };
-      }
-
-      loadedIdentityRef.current = null;
       setUsers([GUEST_USER]);
       setTopics([]);
       setSubTopics([]);
       setPosts([]);
       setCurrentUserId(GUEST_USER.id);
-      setIsAuthReady(true);
+
+      const now = Date.now();
+      const canRetry =
+        !authAttemptInFlightRef.current &&
+        now - lastAuthAttemptAtRef.current >= 5000;
+
+      if (canRetry) {
+        authAttemptInFlightRef.current = true;
+        lastAuthAttemptAtRef.current = now;
+        setIsAuthReady(false);
+        void auth
+          .authenticateUser()
+          .catch(() => undefined)
+          .finally(() => {
+            authAttemptInFlightRef.current = false;
+          });
+      } else {
+        setIsAuthReady(true);
+      }
+
+      loadedIdentityRef.current = null;
       return () => {
         active = false;
       };
@@ -197,7 +270,14 @@ export const useForumDataQuery = () => {
     return () => {
       active = false;
     };
-  }, [auth.address, auth.authenticateUser, auth.isLoadingUser, auth.name, auth.primaryName]);
+  }, [
+    activeAuthName,
+    auth.address,
+    auth.authenticateUser,
+    auth.isLoadingUser,
+    auth.name,
+    auth.primaryName,
+  ]);
 
   const authenticate = useCallback(async () => {
     await auth.authenticateUser();
@@ -219,5 +299,8 @@ export const useForumDataQuery = () => {
     authMode,
     isAuthenticated,
     authenticate,
+    availableAuthNames,
+    activeAuthName,
+    setActiveAuthName,
   };
 };

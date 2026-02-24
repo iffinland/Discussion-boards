@@ -18,6 +18,7 @@ const ThreadPage = () => {
     subTopics,
     posts,
     createPost,
+    uploadPostImage,
     updatePost,
     deletePost,
     likePost,
@@ -48,9 +49,11 @@ const ThreadPage = () => {
     handleDeletePost,
     handleSharePost,
     handleSendTip,
+    uploadImageForReply,
   } = useThreadActions({
     threadId: id,
     createPost,
+    uploadPostImage,
     updatePost,
     deletePost,
     resolveAuthorDisplayName,
@@ -168,6 +171,7 @@ const ThreadPage = () => {
         replyText={replyText}
         onReplyTextChange={setReplyText}
         onSubmit={handleSubmitReply}
+        onUploadImage={uploadImageForReply}
       />
 
       <Link to="/" className="forum-link inline-block text-sm font-medium">
