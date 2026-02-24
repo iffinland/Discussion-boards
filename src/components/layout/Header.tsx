@@ -76,6 +76,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
     () => initialsFromName(activeAuthName ?? currentUser.displayName ?? null),
     [activeAuthName, currentUser.displayName]
   );
+  const canOpenNameMenu = availableAuthNames.length > 1;
 
   useEffect(() => {
     const closeIfOutside = (event: MouseEvent) => {
@@ -124,7 +125,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   };
 
   const handleNameMenuKeyDown = (event: KeyboardEvent) => {
-    if (availableAuthNames.length === 0) {
+    if (!canOpenNameMenu) {
       return;
     }
 
@@ -176,7 +177,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   };
 
   const handleNameButtonKeyDown = (event: KeyboardEvent) => {
-    if (availableAuthNames.length === 0) {
+    if (!canOpenNameMenu) {
       return;
     }
 
@@ -220,9 +221,14 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
               type="button"
               ref={nameMenuTriggerRef}
               className="flex items-center gap-3 rounded-md px-1 py-1"
-              onClick={() => setIsNameMenuOpen((value) => !value)}
+              onClick={() => {
+                if (!canOpenNameMenu) {
+                  return;
+                }
+                setIsNameMenuOpen((value) => !value);
+              }}
               onKeyDown={handleNameButtonKeyDown}
-              disabled={availableAuthNames.length === 0}
+              disabled={!canOpenNameMenu}
               aria-label="Open identity menu"
               aria-expanded={isNameMenuOpen}
               aria-haspopup="menu"
@@ -239,14 +245,18 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                 </p>
                 <p className="text-ui-muted text-xs">
                   {availableAuthNames.length > 0
-                    ? `${availableAuthNames.length} names`
+                    ? `${availableAuthNames.length} name${availableAuthNames.length === 1 ? "" : "s"}`
                     : "No names"}
                 </p>
               </div>
-              <span className="text-ui-muted text-xs">{isNameMenuOpen ? "▴" : "▾"}</span>
+              {canOpenNameMenu ? (
+                <span className="text-ui-muted text-xs">
+                  {isNameMenuOpen ? "▴" : "▾"}
+                </span>
+              ) : null}
             </button>
 
-            {availableAuthNames.length > 0 ? (
+            {canOpenNameMenu ? (
               <div
                 className={[
                   "bg-surface-card absolute right-0 top-[calc(100%+6px)] z-30 min-w-44 rounded-md border border-slate-200 p-1 shadow-lg transition-all duration-150 ease-out",

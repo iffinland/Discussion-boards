@@ -31,6 +31,28 @@ const resolveRoleForName = (name?: string): User["role"] => {
   return adminNames.includes(name.toLowerCase()) ? "Admin" : "Member";
 };
 
+const toUniqueNames = (input: Array<string | null | undefined>) => {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  input.forEach((value) => {
+    const normalized = value?.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    next.push(normalized);
+  });
+
+  return next;
+};
+
 const mergeUsersFromForumData = (
   baseUsers: User[],
   topics: Topic[],
@@ -90,9 +112,7 @@ export const useForumDataQuery = () => {
       const address = auth.address?.trim();
       const primary = auth.primaryName?.trim();
       const authName = auth.name?.trim();
-      const known = [primary, authName].filter(
-        (value): value is string => Boolean(value)
-      );
+      const known = toUniqueNames([primary, authName]);
 
       if (!address) {
         if (!active) {
@@ -109,7 +129,7 @@ export const useForumDataQuery = () => {
           return;
         }
 
-        const merged = Array.from(new Set([...known, ...resolved])).filter(Boolean);
+        const merged = toUniqueNames([...known, ...resolved]);
         setAvailableAuthNames(merged);
         setActiveAuthName((current) => {
           if (current && merged.includes(current)) {
@@ -145,7 +165,13 @@ export const useForumDataQuery = () => {
 
   useEffect(() => {
     let active = true;
-    const isQortal = isQortalRequestAvailable();
+    const hasAuthSignal = Boolean(
+      auth.address?.trim() ||
+        auth.name?.trim() ||
+        auth.primaryName?.trim() ||
+        auth.isLoadingUser
+    );
+    const isQortal = isQortalRequestAvailable() || hasAuthSignal;
 
     if (!isQortal) {
       loadedIdentityRef.current = null;

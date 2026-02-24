@@ -50,6 +50,13 @@ const parseRequestError = (response: unknown): string | null => {
 };
 
 const getQortalRequest = () => {
+  const globalRequest = (
+    globalThis as typeof globalThis & { qortalRequest?: unknown }
+  ).qortalRequest;
+  if (typeof globalRequest === "function") {
+    return globalRequest;
+  }
+
   if (typeof window === "undefined") {
     return null;
   }
@@ -68,7 +75,23 @@ const getQortalRequest = () => {
   }
 
   const localRequest = (window as Window & { qortalRequest?: unknown }).qortalRequest;
-  return typeof localRequest === "function" ? localRequest : null;
+  if (typeof localRequest === "function") {
+    return localRequest;
+  }
+
+  let topRequest: unknown = null;
+  try {
+    topRequest = (
+      window as Window & { top?: { qortalRequest?: unknown } }
+    ).top?.qortalRequest;
+  } catch {
+    topRequest = null;
+  }
+  if (typeof topRequest === "function") {
+    return topRequest;
+  }
+
+  return null;
 };
 
 export const isQortalRequestAvailable = () => {
