@@ -4,8 +4,8 @@ See juhend kirjeldab, kuidas kasutada tööruumi backupi ja taastamise skripte.
 
 ## Asukoht
 
-- Backupid salvestatakse kausta: `~/REACT-PROJECTS/_workspace_backups/Discussion_Boards`
-- Backup failinimi on kujul: `discussion-boards-YYYY-MM-DD_HH-MM-SS.tar.gz`
+- Backupid salvestatakse kausta: `~/REACT-PROJECTS/_workspace_backups/NodeFM`
+- Backup failinimi on kujul: `nodefm-workspace-YYYY-MM-DD_HH-MM-SS.tar.gz`
 
 ## Backupi loomine
 

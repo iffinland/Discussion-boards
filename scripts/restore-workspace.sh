@@ -2,14 +2,14 @@
 set -euo pipefail
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKUP_DIR="${HOME}/REACT-PROJECTS/_workspace_backups/Discussion_Boards"
+BACKUP_DIR="${HOME}/REACT-PROJECTS/_workspace_backups/NodeFM"
 
 if [[ ! -d "${BACKUP_DIR}" ]]; then
   echo "Backup directory not found: ${BACKUP_DIR}"
   exit 1
 fi
 
-mapfile -t backups < <(find "${BACKUP_DIR}" -maxdepth 1 -type f -name 'discussion-boards-*.tar.gz' | sort -r)
+mapfile -t backups < <(find "${BACKUP_DIR}" -maxdepth 1 -type f -name 'nodefm-workspace-*.tar.gz' | sort -r)
 
 if ((${#backups[@]} == 0)); then
   echo "No backups found in: ${BACKUP_DIR}"
