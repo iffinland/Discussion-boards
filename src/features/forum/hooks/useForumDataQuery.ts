@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "qapp-core";
 
-import { getAccountNames } from "../../../services/qortal/walletService";
+import { getAccountNames, getUserAccount } from "../../../services/qortal/walletService";
 import { forumQdnService } from "../../../services/qdn/forumQdnService";
+import {
+  forumSearchIndexService,
+  type ThreadSearchSnapshot,
+  type TopicDirectorySnapshot,
+} from "../../../services/qdn/forumSearchIndexService";
+import {
+  createDefaultRoleRegistry,
+  forumRolesService,
+  resolveRoleForAddress,
+} from "../../../services/qdn/forumRolesService";
 import { isQortalRequestAvailable } from "../../../services/qortal/qortalClient";
-import type { Post, SubTopic, Topic, User } from "../../../types";
+import type { ForumRoleRegistry, Post, SubTopic, Topic, User } from "../../../types";
 
 type ForumAuthMode = "qortal";
 
@@ -12,23 +22,10 @@ const GUEST_USER: User = {
   id: "qortal-guest",
   username: "qortal-guest",
   displayName: "Guest",
+  address: null,
   role: "Member",
   avatarColor: "bg-slate-400",
   joinedAt: new Date(0).toISOString(),
-};
-
-const resolveRoleForName = (name?: string): User["role"] => {
-  const rawAdmins = import.meta.env.VITE_FORUM_ADMIN_NAMES ?? "";
-  const adminNames = rawAdmins
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (!name) {
-    return "Member";
-  }
-
-  return adminNames.includes(name.toLowerCase()) ? "Admin" : "Member";
 };
 
 const toUniqueNames = (input: Array<string | null | undefined>) => {
@@ -76,7 +73,8 @@ const mergeUsersFromForumData = (
       id,
       username: id,
       displayName: id,
-      role: resolveRoleForName(id),
+      address: null,
+      role: "Member",
       avatarColor: "bg-cyan-500",
       joinedAt: new Date().toISOString(),
     });
@@ -96,14 +94,33 @@ export const useForumDataQuery = () => {
   const [availableAuthNames, setAvailableAuthNames] = useState<string[]>([]);
   const [activeAuthName, setActiveAuthName] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [authenticatedAddress, setAuthenticatedAddress] = useState<string | null>(null);
+  const [roleRegistry, setRoleRegistry] = useState<ForumRoleRegistry>(
+    createDefaultRoleRegistry()
+  );
+  const [topicDirectoryIndex, setTopicDirectoryIndex] =
+    useState<TopicDirectorySnapshot | null>(null);
+  const [threadSearchIndexes, setThreadSearchIndexes] = useState<
+    Record<string, ThreadSearchSnapshot>
+  >({});
   const loadedIdentityRef = useRef<string | null>(null);
   const authAttemptInFlightRef = useRef(false);
   const lastAuthAttemptAtRef = useRef(0);
   const authMode: ForumAuthMode = "qortal";
 
   const currentUser = useMemo(() => {
-    return users.find((user) => user.id === currentUserId) ?? users[0];
-  }, [currentUserId, users]);
+    const baseUser = users.find((user) => user.id === currentUserId) ?? users[0];
+
+    if (baseUser.id === GUEST_USER.id) {
+      return baseUser;
+    }
+
+    return {
+      ...baseUser,
+      address: authenticatedAddress,
+      role: resolveRoleForAddress(authenticatedAddress, roleRegistry),
+    };
+  }, [authenticatedAddress, currentUserId, roleRegistry, users]);
 
   useEffect(() => {
     let active = true;
@@ -173,18 +190,20 @@ export const useForumDataQuery = () => {
     );
     const isQortal = isQortalRequestAvailable() || hasAuthSignal;
 
-    if (!isQortal) {
-      loadedIdentityRef.current = null;
-      setUsers([GUEST_USER]);
-      setTopics([]);
-      setSubTopics([]);
-      setPosts([]);
-      setCurrentUserId(GUEST_USER.id);
-      setAvailableAuthNames([]);
-      setActiveAuthName(null);
-      setIsAuthReady(true);
-      return () => {
-        active = false;
+      if (!isQortal) {
+        loadedIdentityRef.current = null;
+        setUsers([GUEST_USER]);
+        setTopics([]);
+        setSubTopics([]);
+        setPosts([]);
+        setCurrentUserId(GUEST_USER.id);
+        setAuthenticatedAddress(null);
+        setAvailableAuthNames([]);
+        setActiveAuthName(null);
+        setRoleRegistry(createDefaultRoleRegistry());
+        setIsAuthReady(true);
+        return () => {
+          active = false;
       };
     }
 
@@ -208,6 +227,8 @@ export const useForumDataQuery = () => {
       setSubTopics([]);
       setPosts([]);
       setCurrentUserId(GUEST_USER.id);
+      setAuthenticatedAddress(null);
+      setRoleRegistry(createDefaultRoleRegistry());
 
       const now = Date.now();
       const canRetry =
@@ -242,24 +263,68 @@ export const useForumDataQuery = () => {
     }
 
     const bootstrapQdnData = async () => {
+      let qortalUser: User | null = null;
+
       try {
         setIsAuthReady(false);
 
-        const qortalUser: User = {
+        const authenticatedAddress =
+          auth.address?.trim() ||
+          (await getUserAccount()
+            .then((account) => account.address?.trim() ?? "")
+            .catch(() => ""));
+
+        qortalUser = {
           id: identity,
           username: identity,
           displayName: identity,
-          role: resolveRoleForName(identity),
+          address: authenticatedAddress,
+          role: resolveRoleForAddress(authenticatedAddress, roleRegistry),
           avatarColor: "bg-cyan-600",
           joinedAt: new Date().toISOString(),
         };
 
-        const remoteData = await forumQdnService.loadForumStructure();
+        const [structureResult, registryResult, topicDirectoryIndexResult] =
+          await Promise.allSettled([
+          forumQdnService.loadForumStructure(),
+          forumRolesService.loadRoleRegistry(),
+          forumSearchIndexService.loadTopicDirectoryIndex(),
+        ]);
+        const nextRoleRegistry =
+          registryResult.status === "fulfilled"
+            ? registryResult.value
+            : createDefaultRoleRegistry();
+
+        qortalUser = {
+          ...qortalUser,
+          role: resolveRoleForAddress(authenticatedAddress, nextRoleRegistry),
+        };
+
+        setAuthenticatedAddress(authenticatedAddress || null);
+        setRoleRegistry(nextRoleRegistry);
+        setTopicDirectoryIndex(
+          topicDirectoryIndexResult.status === "fulfilled"
+            ? topicDirectoryIndexResult.value
+            : null
+        );
+        setThreadSearchIndexes({});
+        setUsers([qortalUser]);
+        setCurrentUserId(qortalUser.id);
 
         if (!active) {
           return;
         }
 
+        if (structureResult.status !== "fulfilled") {
+          setTopics([]);
+          setSubTopics([]);
+          setPosts([]);
+          setThreadSearchIndexes({});
+          loadedIdentityRef.current = identity;
+          return;
+        }
+
+        const remoteData = structureResult.value;
         const mergedUsers = mergeUsersFromForumData(
           [qortalUser],
           remoteData.topics,
@@ -271,6 +336,7 @@ export const useForumDataQuery = () => {
         setTopics(remoteData.topics);
         setSubTopics(remoteData.subTopics);
         setPosts([]);
+        setThreadSearchIndexes({});
         setCurrentUserId(qortalUser.id);
         loadedIdentityRef.current = identity;
       } catch {
@@ -278,12 +344,21 @@ export const useForumDataQuery = () => {
           return;
         }
 
-        setUsers([GUEST_USER]);
+        if (qortalUser) {
+          setAuthenticatedAddress(qortalUser.address?.trim() ?? null);
+          setUsers([qortalUser]);
+          setCurrentUserId(qortalUser.id);
+        } else {
+          setAuthenticatedAddress(null);
+          setUsers([GUEST_USER]);
+          setCurrentUserId(GUEST_USER.id);
+        }
         setTopics([]);
         setSubTopics([]);
         setPosts([]);
-        setCurrentUserId(GUEST_USER.id);
-        loadedIdentityRef.current = null;
+        setTopicDirectoryIndex(null);
+        setThreadSearchIndexes({});
+        loadedIdentityRef.current = qortalUser ? identity : null;
       } finally {
         if (active) {
           setIsAuthReady(true);
@@ -325,6 +400,13 @@ export const useForumDataQuery = () => {
     authMode,
     isAuthenticated,
     authenticate,
+    authenticatedAddress,
+    roleRegistry,
+    topicDirectoryIndex,
+    threadSearchIndexes,
+    setRoleRegistry,
+    setTopicDirectoryIndex,
+    setThreadSearchIndexes,
     availableAuthNames,
     activeAuthName,
     setActiveAuthName,

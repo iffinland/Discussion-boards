@@ -1,19 +1,63 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useDeferredValue, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import TopicAccordion from "../components/forum/TopicAccordion";
 import HomeSkeleton from "../features/forum/components/HomeSkeleton";
 import { useForumData } from "../hooks/useForumData";
+import {
+  buildForumStructureSearchIndex,
+  createSearchHaystack,
+  searchForumStructure,
+  tokenizeSearchQuery,
+} from "../services/forum/forumSearch";
+import type { SubTopic, Topic, TopicAccess } from "../types";
+
+const parseAddressInput = (value: string) =>
+  value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const topicAccessOptions: Array<{ value: TopicAccess; label: string; helper: string }> = [
+  {
+    value: "everyone",
+    label: "Everyone",
+    helper: "Any authenticated member can create sub-topics here.",
+  },
+  {
+    value: "moderators",
+    label: "Moderators+",
+    helper: "Moderators, admins and the super admin can create sub-topics.",
+  },
+  {
+    value: "admins",
+    label: "Admins only",
+    helper: "Only admins and the super admin can create sub-topics.",
+  },
+  {
+    value: "custom",
+    label: "Specific wallets",
+    helper: "Only listed wallet addresses can create sub-topics.",
+  },
+];
 
 const Home = () => {
   const navigate = useNavigate();
   const {
     currentUser,
+    authenticatedAddress,
+    roleRegistry,
     users,
+    searchQuery,
+    topicDirectoryIndex,
     topics,
     subTopics,
     createTopic,
     createSubTopic,
+    updateTopicSettings,
+    updateSubTopicSettings,
+    upsertRoleAssignment,
+    removeRoleAssignment,
     isAuthReady,
   } = useForumData();
 
@@ -21,6 +65,9 @@ const Home = () => {
 
   const [topicTitle, setTopicTitle] = useState("");
   const [topicDescription, setTopicDescription] = useState("");
+  const [topicStatus, setTopicStatus] = useState<"open" | "locked">("open");
+  const [topicAccess, setTopicAccess] = useState<TopicAccess>("everyone");
+  const [topicAllowedAddresses, setTopicAllowedAddresses] = useState("");
   const [topicFeedback, setTopicFeedback] = useState<string | null>(null);
   const [openCreatePanel, setOpenCreatePanel] = useState<"main" | "sub" | null>(
     null
@@ -30,23 +77,98 @@ const Home = () => {
   const [subTopicTitle, setSubTopicTitle] = useState("");
   const [subTopicDescription, setSubTopicDescription] = useState("");
   const [subTopicFeedback, setSubTopicFeedback] = useState<string | null>(null);
+  const [roleAddress, setRoleAddress] = useState("");
+  const [roleType, setRoleType] = useState<"Admin" | "Moderator">("Admin");
+  const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
+  const [managedTopicId, setManagedTopicId] = useState<string | null>(null);
+  const [managedTopicStatus, setManagedTopicStatus] = useState<"open" | "locked">(
+    "open"
+  );
+  const [managedTopicVisibility, setManagedTopicVisibility] = useState<
+    "visible" | "hidden"
+  >("visible");
+  const [managedTopicAccess, setManagedTopicAccess] =
+    useState<TopicAccess>("everyone");
+  const [managedTopicAllowedAddresses, setManagedTopicAllowedAddresses] =
+    useState("");
+  const [managementFeedback, setManagementFeedback] = useState<string | null>(null);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
-  const topicsWithSubTopics = useMemo(() => {
+  const isAdmin = currentUser.role === "Admin" || currentUser.role === "SuperAdmin";
+  const isSuperAdmin = currentUser.role === "SuperAdmin";
+  const canModerate = currentUser.role !== "Member";
+
+  const visibleTopicsWithSubTopics = useMemo(() => {
     return topics.map((topic) => ({
       ...topic,
       subTopics: subTopics
-        .filter((subTopic) => subTopic.topicId === topic.id)
+        .filter(
+          (subTopic) =>
+            subTopic.topicId === topic.id &&
+            (canModerate || subTopic.visibility !== "hidden")
+        )
         .sort(
           (a, b) =>
             new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
         ),
-    }));
-  }, [topics, subTopics]);
+    }))
+      .filter((topic) => canModerate || topic.visibility !== "hidden");
+  }, [canModerate, topics, subTopics]);
+
+  const structureSearchIndex = useMemo(
+    () =>
+      topicDirectoryIndex
+        ? {
+            topicEntries: topicDirectoryIndex.topics.map((topic) => ({
+              topicId: topic.topicId,
+              haystack: createSearchHaystack([
+                topic.title,
+                topic.description,
+                topic.status,
+                topic.visibility,
+                topic.subTopicAccess,
+                ...topic.allowedAddresses,
+              ]),
+            })),
+            subTopicEntries: topicDirectoryIndex.subTopics.map((subTopic) => ({
+              subTopicId: subTopic.subTopicId,
+              topicId: subTopic.topicId,
+              haystack: createSearchHaystack([
+                subTopic.title,
+                subTopic.description,
+                subTopic.status,
+                subTopic.visibility,
+                subTopic.authorUserId,
+              ]),
+            })),
+          }
+        : buildForumStructureSearchIndex(topics, subTopics, users),
+    [topicDirectoryIndex, topics, subTopics, users]
+  );
+
+  const structureSearchResult = useMemo(
+    () =>
+      searchForumStructure(
+        structureSearchIndex,
+        visibleTopicsWithSubTopics,
+        deferredSearchQuery
+      ),
+    [deferredSearchQuery, structureSearchIndex, visibleTopicsWithSubTopics]
+  );
+
+  const filteredTopicsWithSubTopics = structureSearchResult.topics;
+  const hasActiveSearch = tokenizeSearchQuery(deferredSearchQuery).length > 0;
 
   const activeSubTopics = useMemo(() => {
     const userMap = new Map(users.map((user) => [user.id, user.displayName]));
 
+    const allowedSubTopicIds = new Set(
+      filteredTopicsWithSubTopics.flatMap((topic) => topic.subTopics.map((subTopic) => subTopic.id))
+    );
+
     return [...subTopics]
+      .filter((subTopic) => canModerate || subTopic.visibility !== "hidden")
+      .filter((subTopic) => !hasActiveSearch || allowedSubTopicIds.has(subTopic.id))
       .sort(
         (a, b) =>
           new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
@@ -56,7 +178,7 @@ const Home = () => {
         ...subTopic,
         authorName: userMap.get(subTopic.authorUserId) ?? "Unknown User",
       }));
-  }, [subTopics, users]);
+  }, [canModerate, filteredTopicsWithSubTopics, hasActiveSearch, subTopics, users]);
 
   const handleToggle = (topicId: string) => {
     setOpenTopicId((current) => (current === topicId ? null : topicId));
@@ -72,6 +194,9 @@ const Home = () => {
     const result = await createTopic({
       title: topicTitle,
       description: topicDescription,
+      status: topicStatus,
+      subTopicAccess: topicAccess,
+      allowedAddresses: parseAddressInput(topicAllowedAddresses),
     });
 
     if (!result.ok) {
@@ -81,6 +206,9 @@ const Home = () => {
 
     setTopicTitle("");
     setTopicDescription("");
+    setTopicStatus("open");
+    setTopicAccess("everyone");
+    setTopicAllowedAddresses("");
     setTopicFeedback("Main topic created successfully.");
   };
 
@@ -112,7 +240,85 @@ const Home = () => {
     setOpenTopicId(parentTopicId);
   };
 
-  const isAdmin = currentUser.role === "Admin";
+  const handleUpsertRole = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const result = await upsertRoleAssignment({
+      address: roleAddress,
+      role: roleType,
+    });
+
+    if (!result.ok) {
+      setRoleFeedback(result.error ?? "Unable to update forum role.");
+      return;
+    }
+
+    setRoleAddress("");
+    setRoleFeedback(`${roleType} role updated successfully.`);
+  };
+
+  const handleRemoveRole = async (address: string) => {
+    const result = await removeRoleAssignment(address);
+    setRoleFeedback(
+      result.ok
+        ? "Role removed successfully."
+        : result.error ?? "Unable to remove forum role."
+    );
+  };
+
+  const handleOpenTopicManager = (topic: Topic) => {
+    setManagedTopicId((current) => (current === topic.id ? null : topic.id));
+    setManagedTopicStatus(topic.status);
+    setManagedTopicVisibility(topic.visibility);
+    setManagedTopicAccess(topic.subTopicAccess);
+    setManagedTopicAllowedAddresses(topic.allowedAddresses.join(", "));
+    setManagementFeedback(null);
+    setOpenTopicId(topic.id);
+  };
+
+  const handleSaveTopicManager = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!managedTopicId) {
+      return;
+    }
+
+    const result = await updateTopicSettings({
+      topicId: managedTopicId,
+      status: managedTopicStatus,
+      visibility: managedTopicVisibility,
+      subTopicAccess: managedTopicAccess,
+      allowedAddresses: parseAddressInput(managedTopicAllowedAddresses),
+    });
+
+    setManagementFeedback(
+      result.ok ? "Main topic settings updated." : result.error ?? "Unable to update main topic."
+    );
+  };
+
+  const handleToggleSubTopicStatus = async (subTopic: SubTopic) => {
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      status: subTopic.status === "locked" ? "open" : "locked",
+      visibility: subTopic.visibility,
+    });
+
+    setManagementFeedback(
+      result.ok ? "Sub-topic status updated." : result.error ?? "Unable to update sub-topic."
+    );
+  };
+
+  const handleToggleSubTopicVisibility = async (subTopic: SubTopic) => {
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      status: subTopic.status,
+      visibility: subTopic.visibility === "hidden" ? "visible" : "hidden",
+    });
+
+    setManagementFeedback(
+      result.ok ? "Sub-topic visibility updated." : result.error ?? "Unable to update sub-topic."
+    );
+  };
 
   if (!isAuthReady) {
     return <HomeSkeleton />;
@@ -143,19 +349,209 @@ const Home = () => {
 
       <section className="space-y-3">
         <h2 className="text-brand-primary text-lg font-semibold">Main Topics</h2>
+        {hasActiveSearch ? (
+          <p className="text-ui-muted text-sm">
+            Search results: {structureSearchResult.matchedTopicCount} topics and{" "}
+            {structureSearchResult.matchedSubTopicCount} sub-topics.
+          </p>
+        ) : null}
       </section>
 
+      {isSuperAdmin ? (
+        <section className="space-y-3">
+          <h2 className="text-brand-primary text-lg font-semibold">Forum Roles</h2>
+
+          <article className="forum-card-primary p-4">
+            <div className="space-y-1">
+              <p className="text-ui-strong text-sm font-semibold">
+                Super admin wallet
+              </p>
+              <p className="text-ui-muted text-xs break-all">
+                {roleRegistry.superAdminAddress}
+              </p>
+              <p className="text-ui-muted text-xs break-all">
+                Authenticated as: {authenticatedAddress ?? "No wallet detected"}
+              </p>
+            </div>
+
+            <form className="mt-4 space-y-2" onSubmit={handleUpsertRole}>
+              <input
+                value={roleAddress}
+                onChange={(event) => setRoleAddress(event.target.value)}
+                placeholder="Wallet address"
+                className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+              <select
+                value={roleType}
+                onChange={(event) =>
+                  setRoleType(event.target.value as "Admin" | "Moderator")
+                }
+                className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="Admin">Admin</option>
+                <option value="Moderator">Moderator</option>
+              </select>
+              <button
+                type="submit"
+                className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-white"
+              >
+                Save Role
+              </button>
+            </form>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div>
+                <h3 className="text-ui-strong text-sm font-semibold">Admins</h3>
+                <ul className="mt-2 space-y-2">
+                  {roleRegistry.admins.map((address) => (
+                    <li
+                      key={address}
+                      className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                    >
+                      <span className="text-ui-muted text-xs break-all">{address}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRole(address)}
+                        className="text-brand-accent-strong text-xs font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                  {roleRegistry.admins.length === 0 ? (
+                    <li className="text-ui-muted text-xs">No admins added yet.</li>
+                  ) : null}
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-ui-strong text-sm font-semibold">Moderators</h3>
+                <ul className="mt-2 space-y-2">
+                  {roleRegistry.moderators.map((address) => (
+                    <li
+                      key={address}
+                      className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                    >
+                      <span className="text-ui-muted text-xs break-all">{address}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRole(address)}
+                        className="text-brand-accent-strong text-xs font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                  {roleRegistry.moderators.length === 0 ? (
+                    <li className="text-ui-muted text-xs">No moderators added yet.</li>
+                  ) : null}
+                </ul>
+              </div>
+            </div>
+
+            {roleFeedback ? (
+              <p className="text-ui-muted mt-3 text-xs">{roleFeedback}</p>
+            ) : null}
+          </article>
+        </section>
+      ) : null}
+
       <div className="space-y-4">
-        {topicsWithSubTopics.map((topic) => (
-          <TopicAccordion
-            key={topic.id}
-            topic={topic}
-            users={users}
-            isOpen={openTopicId === topic.id}
-            onToggle={handleToggle}
-            onOpenThread={handleOpenThread}
-          />
+        {filteredTopicsWithSubTopics.map((topic) => (
+          <div key={topic.id} className="space-y-2">
+            <TopicAccordion
+              topic={topic}
+              users={users}
+              isOpen={openTopicId === topic.id}
+              onToggle={handleToggle}
+              onOpenThread={handleOpenThread}
+              canManageTopic={isAdmin}
+              canManageSubTopics={canModerate}
+              onManageTopic={handleOpenTopicManager}
+              onToggleSubTopicStatus={handleToggleSubTopicStatus}
+              onToggleSubTopicVisibility={handleToggleSubTopicVisibility}
+            />
+
+            {managedTopicId === topic.id ? (
+              <form
+                className="forum-card p-4 space-y-2"
+                onSubmit={handleSaveTopicManager}
+              >
+                <h3 className="text-ui-strong text-sm font-semibold">
+                  Manage Main Topic
+                </h3>
+                <select
+                  value={managedTopicStatus}
+                  onChange={(event) =>
+                    setManagedTopicStatus(event.target.value as "open" | "locked")
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="open">Open</option>
+                  <option value="locked">Locked</option>
+                </select>
+                <select
+                  value={managedTopicVisibility}
+                  onChange={(event) =>
+                    setManagedTopicVisibility(
+                      event.target.value as "visible" | "hidden"
+                    )
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="visible">Visible</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+                <select
+                  value={managedTopicAccess}
+                  onChange={(event) =>
+                    setManagedTopicAccess(event.target.value as TopicAccess)
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {topicAccessOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {managedTopicAccess === "custom" ? (
+                  <textarea
+                    value={managedTopicAllowedAddresses}
+                    onChange={(event) =>
+                      setManagedTopicAllowedAddresses(event.target.value)
+                    }
+                    placeholder="Comma-separated wallet addresses"
+                    className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                ) : null}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Save Topic Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManagedTopicId(null)}
+                    className="bg-surface-card text-ui-muted rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              </form>
+            ) : null}
+          </div>
         ))}
+        {filteredTopicsWithSubTopics.length === 0 ? (
+          <div className="forum-card p-5">
+            <p className="text-ui-strong text-sm font-semibold">No matches found</p>
+            <p className="text-ui-muted mt-1 text-sm">
+              Refine the search phrase or clear the search field.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <section className="space-y-3 pt-2">
@@ -198,6 +594,45 @@ const Home = () => {
                     placeholder="Topic description"
                     className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                   />
+                  <select
+                    value={topicStatus}
+                    onChange={(event) =>
+                      setTopicStatus(event.target.value as "open" | "locked")
+                    }
+                    className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value="open">Open main topic</option>
+                    <option value="locked">Locked main topic</option>
+                  </select>
+                  <select
+                    value={topicAccess}
+                    onChange={(event) =>
+                      setTopicAccess(event.target.value as TopicAccess)
+                    }
+                    className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    {topicAccessOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-ui-muted text-xs">
+                    {
+                      topicAccessOptions.find((option) => option.value === topicAccess)
+                        ?.helper
+                    }
+                  </p>
+                  {topicAccess === "custom" ? (
+                    <textarea
+                      value={topicAllowedAddresses}
+                      onChange={(event) =>
+                        setTopicAllowedAddresses(event.target.value)
+                      }
+                      placeholder="Comma-separated wallet addresses"
+                      className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  ) : null}
                   <button
                     type="submit"
                     className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-white"
@@ -207,7 +642,7 @@ const Home = () => {
                 </form>
               ) : (
                 <p className="text-brand-accent-strong text-xs font-semibold">
-                  You are currently a Member. Switch to an Admin user in header.
+                  Main-topic creation is available only to admins and the super admin.
                 </p>
               )}
 
@@ -248,7 +683,7 @@ const Home = () => {
                   className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 >
                   <option value="">Select main topic</option>
-                  {topics.map((topic) => (
+                  {filteredTopicsWithSubTopics.map((topic) => (
                     <option key={topic.id} value={topic.id}>
                       {topic.title}
                     </option>
@@ -280,6 +715,10 @@ const Home = () => {
             </div>
           ) : null}
         </article>
+
+        {managementFeedback ? (
+          <p className="text-ui-muted text-xs">{managementFeedback}</p>
+        ) : null}
       </section>
     </div>
   );

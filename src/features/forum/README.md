@@ -18,7 +18,7 @@
 - Thread post list uses incremental rendering with `IntersectionObserver`.
 - Thread posts use local `offline-first` cache (`src/services/forum/threadPostCache.ts`).
 - Background idle sync warms recent thread caches.
-- App bootstrap defers heavy `qapp-core` mount until idle/timeout.
+- `qapp-core` mounts immediately through `AppWrapper` / `GlobalProvider` so auth and Qortal bridge setup happen as early as possible.
 
 ## Rules
 - Keep view-level components in `features/forum/components`.

@@ -1,11 +1,17 @@
+import { useLocation } from "react-router-dom";
+
 import { useForumData } from "../../hooks/useForumData";
 
 const StatsBar = () => {
-  const { topics, subTopics, posts } = useForumData();
+  const { topics, subTopics, posts, searchQuery, setSearchQuery } = useForumData();
+  const location = useLocation();
+  const placeholder = location.pathname.startsWith("/thread/")
+    ? "Search posts in this thread"
+    : "Search main topics and sub-topics";
 
   return (
     <div className="bg-forum-stats border-brand-primary border-b">
-      <div className="text-ui-muted mx-auto flex max-w-6xl flex-wrap items-center gap-5 px-4 py-2 text-xs sm:px-6">
+      <div className="text-ui-muted mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2 text-xs sm:px-6">
         <span className="forum-pill-primary rounded-md px-2 py-1">
           Total Topics:{" "}
           <strong className="text-brand-primary-strong font-semibold">
@@ -24,6 +30,19 @@ const StatsBar = () => {
             {posts.length}
           </strong>
         </span>
+        <div className="ml-auto min-w-[220px] flex-1 sm:max-w-sm">
+          <label className="sr-only" htmlFor="forum-search">
+            Search forum
+          </label>
+          <input
+            id="forum-search"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={placeholder}
+            className="bg-surface-card text-ui-strong placeholder:text-ui-muted w-full rounded-md border border-slate-200 px-3 py-2 text-xs"
+          />
+        </div>
       </div>
     </div>
   );

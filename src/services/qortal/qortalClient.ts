@@ -1,3 +1,5 @@
+declare const qortalRequest: unknown;
+
 const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
@@ -50,6 +52,10 @@ const parseRequestError = (response: unknown): string | null => {
 };
 
 const getQortalRequest = () => {
+  if (typeof qortalRequest === "function") {
+    return qortalRequest;
+  }
+
   const globalRequest = (
     globalThis as typeof globalThis & { qortalRequest?: unknown }
   ).qortalRequest;

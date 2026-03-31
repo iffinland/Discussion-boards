@@ -1,5 +1,5 @@
 import type { Post, SubTopic, Topic } from "../../types";
-import { generateForumEntityId, toPartitionKey } from "../forum/forumId";
+import { generateForumEntityId } from "../forum/forumId";
 import { ensureQdnResourceReady } from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getUserAccount } from "../qortal/walletService";
@@ -7,15 +7,16 @@ import { getUserAccount } from "../qortal/walletService";
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
 const FORUM_IMAGE_SERVICE = import.meta.env.VITE_QORTAL_QDN_IMAGE_SERVICE ?? "IMAGE";
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qforum-2026";
-const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-v2-`;
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qdb";
+const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-`;
 const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
-const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}subtopic-`;
+const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}sub-`;
 const POST_PREFIX = `${FORUM_IDENTIFIER_PREFIX}post-`;
-const IMAGE_PREFIX = `${FORUM_IDENTIFIER_PREFIX}image-`;
+const IMAGE_PREFIX = `${FORUM_IDENTIFIER_PREFIX}img-`;
 const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
 const IMAGE_PUBLISH_TIMEOUT_MS = 5 * 60 * 1000;
+const MAX_SAFE_QDN_IDENTIFIER_LENGTH = 64;
 const imageUrlCache = new Map<string, string>();
 
 interface SearchQdnResourceResult {
@@ -95,16 +96,18 @@ const sleep = async (durationMs: number) => {
   });
 };
 
+const assertIdentifierLength = (identifier: string) => {
+  if (identifier.length > MAX_SAFE_QDN_IDENTIFIER_LENGTH) {
+    throw new Error(
+      `Generated QDN identifier is too long (${identifier.length}). Maximum supported length is ${MAX_SAFE_QDN_IDENTIFIER_LENGTH}.`
+    );
+  }
+};
+
 const toTopicIdentifier = (topicId: string) => `${TOPIC_PREFIX}${topicId}`;
 const toSubTopicIdentifier = (subTopicId: string) => `${SUBTOPIC_PREFIX}${subTopicId}`;
-const toPostSearchPrefix = (subTopicId: string) => {
-  const partition = toPartitionKey(subTopicId, 8);
-  return `${POST_PREFIX}${partition}-${subTopicId}-`;
-};
-const toPostIdentifier = (post: Post) => {
-  const partition = toPartitionKey(post.subTopicId, 8);
-  return `${POST_PREFIX}${partition}-${post.subTopicId}-${post.id}`;
-};
+const toPostSearchPrefix = () => POST_PREFIX;
+const toPostIdentifier = (post: Post) => `${POST_PREFIX}${post.id}`;
 const toImageIdentifier = (imageId: string) => `${IMAGE_PREFIX}${imageId}`;
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
@@ -247,34 +250,92 @@ const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
 
-const isTopic = (value: unknown): value is Topic => {
-  if (!isObject(value)) {
-    return false;
+const sanitizeAddressList = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return [];
   }
 
-  return (
-    typeof value.id === "string" &&
-    typeof value.title === "string" &&
-    typeof value.description === "string" &&
-    typeof value.createdByUserId === "string" &&
-    typeof value.createdAt === "string"
-  );
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+
+    const normalized = entry.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    next.push(normalized);
+  });
+
+  return next;
 };
 
-const isSubTopic = (value: unknown): value is SubTopic => {
+const sanitizeTopic = (value: unknown): Topic | null => {
   if (!isObject(value)) {
-    return false;
+    return null;
   }
 
-  return (
-    typeof value.id === "string" &&
-    typeof value.topicId === "string" &&
-    typeof value.title === "string" &&
-    typeof value.description === "string" &&
-    typeof value.authorUserId === "string" &&
-    typeof value.createdAt === "string" &&
-    typeof value.lastPostAt === "string"
-  );
+  if (
+    typeof value.id !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.description !== "string" ||
+    typeof value.createdByUserId !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title,
+    description: value.description,
+    createdByUserId: value.createdByUserId,
+    createdAt: value.createdAt,
+    status: value.status === "locked" ? "locked" : "open",
+    visibility: value.visibility === "hidden" ? "hidden" : "visible",
+    subTopicAccess:
+      value.subTopicAccess === "moderators" ||
+      value.subTopicAccess === "admins" ||
+      value.subTopicAccess === "custom"
+        ? value.subTopicAccess
+        : "everyone",
+    allowedAddresses: sanitizeAddressList(value.allowedAddresses),
+  };
+};
+
+const sanitizeSubTopic = (value: unknown): SubTopic | null => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.topicId !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.description !== "string" ||
+    typeof value.authorUserId !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.lastPostAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    topicId: value.topicId,
+    title: value.title,
+    description: value.description,
+    authorUserId: value.authorUserId,
+    createdAt: value.createdAt,
+    lastPostAt: value.lastPostAt,
+    status: value.status === "locked" ? "locked" : "open",
+    visibility: value.visibility === "hidden" ? "hidden" : "visible",
+  };
 };
 
 const isPost = (value: unknown): value is Post => {
@@ -293,7 +354,12 @@ const isPost = (value: unknown): value is Post => {
 };
 
 const parseTopicPayload = (raw: unknown): TopicPayload | null => {
-  if (!isObject(raw) || raw.type !== "topic" || !isTopic(raw.topic)) {
+  if (!isObject(raw) || raw.type !== "topic") {
+    return null;
+  }
+
+  const topic = sanitizeTopic(raw.topic);
+  if (!topic) {
     return null;
   }
 
@@ -303,12 +369,17 @@ const parseTopicPayload = (raw: unknown): TopicPayload | null => {
     type: "topic",
     status,
     updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
-    topic: raw.topic,
+    topic,
   };
 };
 
 const parseSubTopicPayload = (raw: unknown): SubTopicPayload | null => {
-  if (!isObject(raw) || raw.type !== "subtopic" || !isSubTopic(raw.subTopic)) {
+  if (!isObject(raw) || raw.type !== "subtopic") {
+    return null;
+  }
+
+  const subTopic = sanitizeSubTopic(raw.subTopic);
+  if (!subTopic) {
     return null;
   }
 
@@ -318,7 +389,7 @@ const parseSubTopicPayload = (raw: unknown): SubTopicPayload | null => {
     type: "subtopic",
     status,
     updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
-    subTopic: raw.subTopic,
+    subTopic,
   };
 };
 
@@ -345,6 +416,8 @@ const publishPayload = async (
   description: string,
   tags: string[]
 ) => {
+  assertIdentifierLength(identifier);
+
   await requestQortal<unknown>({
     action: "PUBLISH_QDN_RESOURCE",
     service: FORUM_SERVICE,
@@ -353,7 +426,7 @@ const publishPayload = async (
     title,
     description,
     tags,
-    base64: encodeBase64Json(payload),
+    data64: encodeBase64Json(payload),
   });
 };
 
@@ -383,13 +456,7 @@ export const forumQdnService = {
   },
 
   async loadPostsBySubTopic(subTopicId: string) {
-    const nextPrefix = toPostSearchPrefix(subTopicId);
-    let postPayloads = await fetchPostPayloadsByPrefix(nextPrefix);
-
-    // Backward compatibility with older identifiers without subTopicId segment.
-    if (postPayloads.length === 0) {
-      postPayloads = await fetchPostPayloadsByPrefix(POST_PREFIX);
-    }
+    const postPayloads = await fetchPostPayloadsByPrefix(toPostSearchPrefix());
 
     const postMap = mapLatestPayloads(postPayloads, (payload) => payload.post.id);
     const posts = [...postMap.values()]
@@ -496,6 +563,7 @@ export const forumQdnService = {
     const resolvedOwner = await resolveOwnerName(ownerName);
     const imageId = generateForumEntityId("image", resolvedOwner);
     const identifier = toImageIdentifier(imageId);
+    assertIdentifierLength(identifier);
 
     await requestQortal<unknown>(
       {

@@ -8,6 +8,11 @@ type TopicAccordionProps = {
   isOpen: boolean;
   onToggle: (topicId: string) => void;
   onOpenThread: (subTopicId: string) => void;
+  canManageTopic?: boolean;
+  canManageSubTopics?: boolean;
+  onManageTopic?: (topic: Topic) => void;
+  onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
+  onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
 };
 
 const TopicAccordion = ({
@@ -16,6 +21,11 @@ const TopicAccordion = ({
   isOpen,
   onToggle,
   onOpenThread,
+  canManageTopic = false,
+  canManageSubTopics = false,
+  onManageTopic,
+  onToggleSubTopicStatus,
+  onToggleSubTopicVisibility,
 }: TopicAccordionProps) => {
   const cardClasses = [
     "overflow-hidden rounded-lg transition",
@@ -28,34 +38,71 @@ const TopicAccordion = ({
 
   return (
     <div className={cardClasses}>
-      <button
-        type="button"
-        onClick={() => onToggle(topic.id)}
+      <div
         className={[
-          "flex w-full items-center justify-between px-5 py-4 text-left transition",
+          "flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition",
           isOpen ? "bg-brand-primary-soft" : "hover:bg-brand-accent-soft",
         ].join(" ")}
       >
-        <div>
-          <h3 className="text-ui-strong text-lg font-semibold">{topic.title}</h3>
-          <p className="text-ui-muted mt-1 text-sm">{topic.description}</p>
+        <button type="button" onClick={() => onToggle(topic.id)} className="min-w-0 flex-1 text-left">
+          <div>
+            <h3 className="text-ui-strong text-lg font-semibold">{topic.title}</h3>
+            <p className="text-ui-muted mt-1 text-sm">{topic.description}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+                {topic.status === "locked" ? "Locked" : "Open"}
+              </span>
+              <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+                {topic.subTopicAccess === "everyone" && "Sub-topics: Everyone"}
+                {topic.subTopicAccess === "moderators" && "Sub-topics: Moderators+"}
+                {topic.subTopicAccess === "admins" && "Sub-topics: Admins"}
+                {topic.subTopicAccess === "custom" && "Sub-topics: Custom wallets"}
+              </span>
+              {topic.visibility === "hidden" ? (
+                <span className="text-ui-muted text-[11px] font-semibold">Hidden</span>
+              ) : null}
+              {topic.allowedAddresses.length > 0 ? (
+                <span className="text-ui-muted text-[11px]">
+                  {topic.allowedAddresses.length} allowed wallet
+                  {topic.allowedAddresses.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-2">
+          {canManageTopic ? (
+            <button
+              type="button"
+              onClick={() => onManageTopic?.(topic)}
+              className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+            >
+              Manage
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onToggle(topic.id)}
+            className={[
+              "rounded-md px-2 py-1 text-xs font-semibold",
+              isOpen
+                ? "bg-brand-primary-soft text-brand-primary-strong border-brand-primary border"
+                : "bg-brand-accent-soft text-brand-accent-strong border-brand-accent border",
+            ].join(" ")}
+          >
+            {isOpen ? "Close" : "Open"}
+          </button>
         </div>
-        <span
-          className={[
-            "rounded-md px-2 py-1 text-xs font-semibold",
-            isOpen
-              ? "bg-brand-primary-soft text-brand-primary-strong border-brand-primary border"
-              : "bg-brand-accent-soft text-brand-accent-strong border-brand-accent border",
-          ].join(" ")}
-        >
-          {isOpen ? "Close" : "Open"}
-        </span>
-      </button>
+      </div>
       {isOpen ? (
         <SubTopicList
           subTopics={topic.subTopics}
           users={users}
           onOpenThread={onOpenThread}
+          canManageSubTopics={canManageSubTopics}
+          onToggleSubTopicStatus={onToggleSubTopicStatus}
+          onToggleSubTopicVisibility={onToggleSubTopicVisibility}
         />
       ) : null}
     </div>

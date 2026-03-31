@@ -3,6 +3,7 @@ import AppModal from "../../../components/common/AppModal";
 type PostActionsModalProps = {
   isOpen: boolean;
   isOwner: boolean;
+  canModerate: boolean;
   likes: number;
   tipCount: number;
   onClose: () => void;
@@ -23,6 +24,7 @@ const dangerButtonClass =
 const PostActionsModal = ({
   isOpen,
   isOwner,
+  canModerate,
   likes,
   tipCount,
   onClose,
@@ -105,6 +107,17 @@ const PostActionsModal = ({
               Delete
             </button>
           </>
+        ) : canModerate ? (
+          <button
+            type="button"
+            className={dangerButtonClass}
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+          >
+            Moderation Delete
+          </button>
         ) : null}
       </div>
     </AppModal>

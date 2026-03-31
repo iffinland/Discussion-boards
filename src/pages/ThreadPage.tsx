@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import ThreadComposer from "../features/forum/components/ThreadComposer";
@@ -7,6 +7,12 @@ import ThreadPostCard from "../features/forum/components/ThreadPostCard";
 import { useThreadActions } from "../features/forum/hooks/useThreadActions";
 import { useThreadDataQuery } from "../features/forum/hooks/useThreadDataQuery";
 import { useForumData } from "../hooks/useForumData";
+import {
+  buildThreadPostSearchIndex,
+  createSearchHaystack,
+  searchThreadPosts,
+  tokenizeSearchQuery,
+} from "../services/forum/forumSearch";
 
 const THREAD_BATCH_SIZE = 12;
 
@@ -17,6 +23,9 @@ const ThreadPage = () => {
     currentUser,
     subTopics,
     posts,
+    searchQuery,
+    threadSearchIndexes,
+    updateSubTopicSettings,
     createPost,
     uploadPostImage,
     updatePost,
@@ -27,8 +36,10 @@ const ThreadPage = () => {
     isAuthReady,
   } = useForumData();
   const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
+  const [moderationFeedback, setModerationFeedback] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const { subTopic, threadPosts, userMap, resolveAuthorDisplayName } =
     useThreadDataQuery({
@@ -59,12 +70,70 @@ const ThreadPage = () => {
     resolveAuthorDisplayName,
   });
 
+  const postSearchIndex = useMemo(
+    () =>
+      subTopic && threadSearchIndexes[subTopic.id]
+        ? {
+            entries: threadSearchIndexes[subTopic.id].posts.map((post) => ({
+              postId: post.postId,
+              haystack: createSearchHaystack([post.content, post.authorUserId]),
+            })),
+          }
+        : buildThreadPostSearchIndex(threadPosts, users),
+    [subTopic, threadPosts, threadSearchIndexes, users]
+  );
+  const filteredThreadPosts = useMemo(
+    () => searchThreadPosts(postSearchIndex, threadPosts, deferredSearchQuery),
+    [deferredSearchQuery, postSearchIndex, threadPosts]
+  );
   const visiblePosts = useMemo(
-    () => threadPosts.slice(0, visibleCount),
-    [threadPosts, visibleCount]
+    () => filteredThreadPosts.slice(0, visibleCount),
+    [filteredThreadPosts, visibleCount]
   );
 
-  const canLoadMore = visibleCount < threadPosts.length;
+  const canLoadMore = visibleCount < filteredThreadPosts.length;
+  const canModerate = currentUser.role !== "Member";
+  const hasActiveSearch = tokenizeSearchQuery(deferredSearchQuery).length > 0;
+  const isComposerDisabled =
+    subTopic?.status === "locked" || subTopic?.visibility === "hidden";
+  const composerHelperText =
+    subTopic?.visibility === "hidden"
+      ? "This sub-topic is hidden."
+      : subTopic?.status === "locked"
+        ? "This sub-topic is locked."
+        : null;
+
+  const handleToggleSubTopicStatus = async () => {
+    if (!subTopic) {
+      return;
+    }
+
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      status: subTopic.status === "locked" ? "open" : "locked",
+      visibility: subTopic.visibility,
+    });
+
+    setModerationFeedback(
+      result.ok ? "Sub-topic status updated." : result.error ?? "Unable to update sub-topic."
+    );
+  };
+
+  const handleToggleSubTopicVisibility = async () => {
+    if (!subTopic) {
+      return;
+    }
+
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      status: subTopic.status,
+      visibility: subTopic.visibility === "hidden" ? "visible" : "hidden",
+    });
+
+    setModerationFeedback(
+      result.ok ? "Sub-topic visibility updated." : result.error ?? "Unable to update sub-topic."
+    );
+  };
 
   useEffect(() => {
     if (!id) {
@@ -86,7 +155,7 @@ const ThreadPage = () => {
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
-  }, [id, threadPosts.length]);
+  }, [filteredThreadPosts.length, id]);
 
   useEffect(() => {
     if (!canLoadMore || !loadMoreRef.current) {
@@ -101,7 +170,7 @@ const ThreadPage = () => {
         }
 
         setVisibleCount((current) =>
-          Math.min(current + THREAD_BATCH_SIZE, threadPosts.length)
+          Math.min(current + THREAD_BATCH_SIZE, filteredThreadPosts.length)
         );
       },
       {
@@ -115,7 +184,7 @@ const ThreadPage = () => {
     return () => {
       observer.disconnect();
     };
-  }, [canLoadMore, threadPosts.length]);
+  }, [canLoadMore, filteredThreadPosts.length]);
 
   if (!isAuthReady) {
     return <ThreadSkeleton />;
@@ -132,15 +201,62 @@ const ThreadPage = () => {
     );
   }
 
+  if (subTopic.visibility === "hidden" && !canModerate) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-ui-strong text-lg font-semibold">Thread not available</h2>
+        <p className="text-ui-muted text-sm">This sub-topic is hidden.</p>
+        <Link to="/" className="forum-link text-sm font-medium">
+          Back to topics
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="forum-card-primary p-5">
         <h2 className="text-ui-strong text-2xl font-semibold">{subTopic.title}</h2>
         <p className="text-ui-muted mt-1 text-sm">{subTopic.description}</p>
-        <p className="text-ui-muted mt-2 text-xs">{threadPosts.length} posts in this thread</p>
+        <p className="text-ui-muted mt-2 text-xs">
+          {hasActiveSearch
+            ? `${filteredThreadPosts.length} matching posts in this thread`
+            : `${threadPosts.length} posts in this thread`}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
+            {subTopic.status === "locked" ? "Locked" : "Open"}
+          </span>
+          {subTopic.visibility === "hidden" ? (
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
+              Hidden
+            </span>
+          ) : null}
+          {canModerate ? (
+            <>
+              <button
+                type="button"
+                onClick={handleToggleSubTopicStatus}
+                className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+              >
+                {subTopic.status === "locked" ? "Unlock Sub-Topic" : "Lock Sub-Topic"}
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleSubTopicVisibility}
+                className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+              >
+                {subTopic.visibility === "hidden" ? "Show Sub-Topic" : "Hide Sub-Topic"}
+              </button>
+            </>
+          ) : null}
+        </div>
       </section>
 
       {feedback ? <p className="text-ui-muted text-xs">{feedback}</p> : null}
+      {moderationFeedback ? (
+        <p className="text-ui-muted text-xs">{moderationFeedback}</p>
+      ) : null}
       {threadLoadError ? <p className="text-ui-muted text-xs">{threadLoadError}</p> : null}
       {isThreadPostsLoading ? (
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
@@ -153,6 +269,7 @@ const ThreadPage = () => {
             post={post}
             author={userMap.get(post.authorUserId)}
             isOwner={post.authorUserId === currentUser.id}
+            canModerate={canModerate}
             tipCount={tipsByPostId[post.id] ?? 0}
             onLike={likePost}
             onReply={handleReplyToPost}
@@ -165,6 +282,14 @@ const ThreadPage = () => {
         {canLoadMore ? (
           <div ref={loadMoreRef} className="h-6 w-full" aria-hidden="true" />
         ) : null}
+        {visiblePosts.length === 0 ? (
+          <div className="forum-card p-5">
+            <p className="text-ui-strong text-sm font-semibold">No matching posts</p>
+            <p className="text-ui-muted mt-1 text-sm">
+              Adjust the forum search field to search this thread differently.
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <ThreadComposer
@@ -172,6 +297,8 @@ const ThreadPage = () => {
         onReplyTextChange={setReplyText}
         onSubmit={handleSubmitReply}
         onUploadImage={uploadImageForReply}
+        disabled={isComposerDisabled}
+        helperText={composerHelperText}
       />
 
       <Link to="/" className="forum-link inline-block text-sm font-medium">

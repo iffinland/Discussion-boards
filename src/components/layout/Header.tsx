@@ -63,6 +63,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   const {
     availableAuthNames,
     activeAuthName,
+    authenticatedAddress,
     currentUser,
     setCurrentUser,
   } = useForumData();
@@ -244,10 +245,13 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                   {activeAuthName ?? currentUser.displayName}
                 </p>
                 <p className="text-ui-muted text-xs">
-                  {availableAuthNames.length > 0
-                    ? `${availableAuthNames.length} name${availableAuthNames.length === 1 ? "" : "s"}`
-                    : "No names"}
+                  {currentUser.role}
                 </p>
+                {authenticatedAddress ? (
+                  <p className="text-ui-muted max-w-48 truncate text-[11px]">
+                    {authenticatedAddress}
+                  </p>
+                ) : null}
               </div>
               {canOpenNameMenu ? (
                 <span className="text-ui-muted text-xs">

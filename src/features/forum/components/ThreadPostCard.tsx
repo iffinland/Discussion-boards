@@ -14,6 +14,7 @@ type ThreadPostCardProps = {
   post: Post;
   author: User | undefined;
   isOwner: boolean;
+  canModerate: boolean;
   tipCount: number;
   onLike: (postId: string) => void;
   onReply: (post: Post) => void;
@@ -44,6 +45,7 @@ const ThreadPostCard = ({
   post,
   author,
   isOwner,
+  canModerate,
   tipCount,
   onLike,
   onReply,
@@ -192,6 +194,7 @@ const ThreadPostCard = ({
       <PostActionsModal
         isOpen={isActionsModalOpen}
         isOwner={isOwner}
+        canModerate={canModerate}
         likes={post.likes}
         tipCount={tipCount}
         onClose={() => setIsActionsModalOpen(false)}

@@ -1,0 +1,310 @@
+import type { ForumRoleRegistry, UserRole } from "../../types";
+import { ensureQdnResourceReady } from "./qdnReadiness";
+import { requestQortal } from "../qortal/qortalClient";
+import { getAccountNames, getUserAccount } from "../qortal/walletService";
+
+const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
+const FORUM_NAMESPACE =
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qdb";
+
+export const SUPER_ADMIN_ADDRESS = "QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE";
+
+const ROLE_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-roles-`;
+const PRIMARY_ROLE_IDENTIFIER = `${ROLE_IDENTIFIER_PREFIX}default`;
+const VERIFY_RETRIES = 5;
+const VERIFY_DELAY_MS = 1500;
+
+type SearchQdnResourceResult = {
+  name: string;
+  identifier: string;
+};
+
+type RoleRegistryPayload = {
+  version: 1;
+  type: "role-registry";
+  updatedAt: number;
+  registry: {
+    superAdminAddress: string;
+    admins: string[];
+    moderators: string[];
+  };
+};
+
+const isObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
+};
+
+const sleep = async (durationMs: number) => {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+};
+
+const encodeBase64Json = (value: unknown): string => {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+
+  return btoa(binary);
+};
+
+const decodeBase64Json = (value: string): unknown => {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const decoded = new TextDecoder().decode(bytes);
+  return JSON.parse(decoded) as unknown;
+};
+
+const parseJsonLike = (raw: unknown): unknown => {
+  if (typeof raw !== "string") {
+    return raw;
+  }
+
+  const trimmed = raw.trim();
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return decodeBase64Json(trimmed);
+  }
+};
+
+const normalizeAddressList = (input: unknown) => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  input.forEach((value) => {
+    if (typeof value !== "string") {
+      return;
+    }
+
+    const normalized = value.trim();
+    if (!normalized || normalized === SUPER_ADMIN_ADDRESS || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    next.push(normalized);
+  });
+
+  return next;
+};
+
+export const createDefaultRoleRegistry = (): ForumRoleRegistry => ({
+  superAdminAddress: SUPER_ADMIN_ADDRESS,
+  admins: [],
+  moderators: [],
+  updatedAt: null,
+});
+
+const parseRoleRegistryPayload = (raw: unknown): RoleRegistryPayload | null => {
+  if (!isObject(raw) || raw.type !== "role-registry" || !isObject(raw.registry)) {
+    return null;
+  }
+
+  return {
+    version: 1,
+    type: "role-registry",
+    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    registry: {
+      superAdminAddress:
+        typeof raw.registry.superAdminAddress === "string" &&
+        raw.registry.superAdminAddress.trim()
+          ? raw.registry.superAdminAddress.trim()
+          : SUPER_ADMIN_ADDRESS,
+      admins: normalizeAddressList(raw.registry.admins),
+      moderators: normalizeAddressList(raw.registry.moderators),
+    },
+  };
+};
+
+const toForumRoleRegistry = (payload: RoleRegistryPayload): ForumRoleRegistry => ({
+  superAdminAddress: payload.registry.superAdminAddress,
+  admins: payload.registry.admins.filter(
+    (address) => !payload.registry.moderators.includes(address)
+  ),
+  moderators: payload.registry.moderators.filter(
+    (address) => !payload.registry.admins.includes(address)
+  ),
+  updatedAt: payload.updatedAt,
+});
+
+const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]> => {
+  const search = await requestQortal<SearchQdnResourceResult[]>({
+    action: "SEARCH_QDN_RESOURCES",
+    service: FORUM_SERVICE,
+    identifier: prefix,
+    prefix: true,
+    mode: "ALL",
+    reverse: true,
+    limit: 100,
+    offset: 0,
+  });
+
+  return Array.isArray(search) ? search : [];
+};
+
+const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
+  try {
+    await ensureQdnResourceReady(FORUM_SERVICE, name, identifier);
+  } catch {
+    // Continue with direct fetch when readiness polling fails.
+  }
+
+  const raw = await requestQortal<unknown>({
+    action: "FETCH_QDN_RESOURCE",
+    service: FORUM_SERVICE,
+    name,
+    identifier,
+  });
+
+  return parseJsonLike(raw);
+};
+
+const verifyPublication = async (ownerName: string, identifier: string) => {
+  for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt += 1) {
+    try {
+      const raw = await requestQortal<unknown>({
+        action: "FETCH_QDN_RESOURCE",
+        service: FORUM_SERVICE,
+        name: ownerName,
+        identifier,
+      });
+
+      const parsed = parseRoleRegistryPayload(parseJsonLike(raw));
+      if (parsed) {
+        return;
+      }
+    } catch {
+      // Keep retrying.
+    }
+
+    if (attempt < VERIFY_RETRIES) {
+      await sleep(VERIFY_DELAY_MS);
+    }
+  }
+
+  throw new Error("Role registry was submitted but could not be verified yet.");
+};
+
+const resolveOwnerName = async (providedName?: string): Promise<string> => {
+  if (providedName?.trim()) {
+    return providedName.trim();
+  }
+
+  const account = await getUserAccount();
+
+  if (account.name?.trim()) {
+    return account.name.trim();
+  }
+
+  throw new Error("Authenticated account has no Qortal name.");
+};
+
+export const resolveRoleForAddress = (
+  address: string | null | undefined,
+  registry: ForumRoleRegistry
+): UserRole => {
+  if (!address?.trim()) {
+    return "Member";
+  }
+
+  const normalized = address.trim();
+
+  if (normalized === registry.superAdminAddress) {
+    return "SuperAdmin";
+  }
+
+  if (registry.admins.includes(normalized)) {
+    return "Admin";
+  }
+
+  if (registry.moderators.includes(normalized)) {
+    return "Moderator";
+  }
+
+  return "Member";
+};
+
+export const forumRolesService = {
+  async loadRoleRegistry(): Promise<ForumRoleRegistry> {
+    let trustedNames: string[] = [];
+
+    try {
+      trustedNames = await getAccountNames(SUPER_ADMIN_ADDRESS);
+    } catch {
+      trustedNames = [];
+    }
+
+    if (trustedNames.length === 0) {
+      return createDefaultRoleRegistry();
+    }
+
+    const trustedNameSet = new Set(trustedNames.map((name) => name.trim().toLowerCase()));
+    const results = (await searchByPrefix(ROLE_IDENTIFIER_PREFIX)).filter((item) =>
+      trustedNameSet.has(item.name.trim().toLowerCase())
+    );
+
+    for (const item of results) {
+      try {
+        const raw = await fetchResource(item.name, item.identifier);
+        const payload = parseRoleRegistryPayload(raw);
+
+        if (payload) {
+          return toForumRoleRegistry(payload);
+        }
+      } catch {
+        // Ignore malformed resources and continue.
+      }
+    }
+
+    return createDefaultRoleRegistry();
+  },
+
+  async publishRoleRegistry(registry: ForumRoleRegistry, ownerName?: string) {
+    const resolvedOwner = await resolveOwnerName(ownerName);
+    const updatedAt = Date.now();
+    const sanitizedRegistry: ForumRoleRegistry = {
+      superAdminAddress: SUPER_ADMIN_ADDRESS,
+      admins: normalizeAddressList(registry.admins),
+      moderators: normalizeAddressList(registry.moderators).filter(
+        (address) => !normalizeAddressList(registry.admins).includes(address)
+      ),
+      updatedAt,
+    };
+
+    const payload: RoleRegistryPayload = {
+      version: 1,
+      type: "role-registry",
+      updatedAt,
+      registry: {
+        superAdminAddress: sanitizedRegistry.superAdminAddress,
+        admins: sanitizedRegistry.admins,
+        moderators: sanitizedRegistry.moderators,
+      },
+    };
+
+    await requestQortal<unknown>({
+      action: "PUBLISH_QDN_RESOURCE",
+      service: FORUM_SERVICE,
+      name: resolvedOwner,
+      identifier: PRIMARY_ROLE_IDENTIFIER,
+      title: "Forum role registry",
+      description: "Qortal discussion board role registry",
+      tags: ["forum", "roles", "qforum"],
+      data64: encodeBase64Json(payload),
+    });
+
+    await verifyPublication(resolvedOwner, PRIMARY_ROLE_IDENTIFIER);
+
+    return sanitizedRegistry;
+  },
+};

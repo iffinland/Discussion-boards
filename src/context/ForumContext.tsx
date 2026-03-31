@@ -15,17 +15,27 @@ import type {
   ForumMutationResult,
   ForumUploadImageResult,
 } from "../features/forum/types";
+import type {
+  ThreadSearchSnapshot,
+  TopicDirectorySnapshot,
+} from "../services/qdn/forumSearchIndexService";
 import { threadPostCache } from "../services/forum/threadPostCache";
+import { forumSearchIndexService } from "../services/qdn/forumSearchIndexService";
 import { forumQdnService } from "../services/qdn/forumQdnService";
-import type { Post, SubTopic, Topic, User } from "../types";
+import type { ForumRoleRegistry, Post, SubTopic, Topic, TopicAccess, User } from "../types";
 
 type ForumAuthMode = "qortal";
 
 type ForumContextValue = {
   users: User[];
   currentUser: User;
+  authenticatedAddress: string | null;
+  roleRegistry: ForumRoleRegistry;
   availableAuthNames: string[];
   activeAuthName: string | null;
+  searchQuery: string;
+  topicDirectoryIndex: TopicDirectorySnapshot | null;
+  threadSearchIndexes: Record<string, ThreadSearchSnapshot>;
   topics: Topic[];
   subTopics: SubTopic[];
   posts: Post[];
@@ -35,16 +45,37 @@ type ForumContextValue = {
   canSwitchUser: boolean;
   authenticate: () => Promise<void>;
   setCurrentUser: (userId: string) => void;
+  setSearchQuery: (value: string) => void;
   createTopic: (input: {
     title: string;
     description: string;
+    status: Topic["status"];
+    subTopicAccess: TopicAccess;
+    allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
   createSubTopic: (input: {
     topicId: string;
     title: string;
     description: string;
   }) => Promise<ForumMutationResult>;
+  updateTopicSettings: (input: {
+    topicId: string;
+    status: Topic["status"];
+    visibility: Topic["visibility"];
+    subTopicAccess: TopicAccess;
+    allowedAddresses: string[];
+  }) => Promise<ForumMutationResult>;
+  updateSubTopicSettings: (input: {
+    subTopicId: string;
+    status: SubTopic["status"];
+    visibility: SubTopic["visibility"];
+  }) => Promise<ForumMutationResult>;
   createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
+  upsertRoleAssignment: (input: {
+    address: string;
+    role: "Admin" | "Moderator";
+  }) => Promise<ForumMutationResult>;
+  removeRoleAssignment: (address: string) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
   updatePost: (input: {
     postId: string;
@@ -80,6 +111,13 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     posts,
     setPosts,
     currentUser,
+    authenticatedAddress,
+    roleRegistry,
+    topicDirectoryIndex,
+    threadSearchIndexes,
+    setRoleRegistry,
+    setTopicDirectoryIndex,
+    setThreadSearchIndexes,
     availableAuthNames,
     activeAuthName,
     setActiveAuthName,
@@ -91,6 +129,10 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   const {
     createTopic,
     createSubTopic,
+    updateTopicSettings,
+    updateSubTopicSettings,
+    upsertRoleAssignment,
+    removeRoleAssignment,
     createPost,
     uploadPostImage,
     updatePost,
@@ -99,9 +141,14 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   } = useForumCommands({
     currentUser,
     isAuthenticated,
+    authenticatedAddress,
+    roleRegistry,
     topics,
     subTopics,
     posts,
+    setTopicDirectoryIndex,
+    setThreadSearchIndexes,
+    setRoleRegistry,
     setUsers,
     setTopics,
     setSubTopics,
@@ -110,6 +157,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   const loadedThreadsRef = useRef<Set<string>>(new Set());
   const isBackgroundSyncingRef = useRef(false);
   const [isThreadPostsLoading, setIsThreadPostsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const setCurrentUser = useCallback(
     (name: string) => {
@@ -144,6 +192,19 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       setIsThreadPostsLoading(true);
       try {
         const loadedPosts = await forumQdnService.loadPostsBySubTopic(normalizedId);
+        try {
+          const loadedThreadIndex = await forumSearchIndexService.loadThreadIndex(
+            normalizedId
+          );
+          if (loadedThreadIndex) {
+            setThreadSearchIndexes((current) => ({
+              ...current,
+              [normalizedId]: loadedThreadIndex,
+            }));
+          }
+        } catch {
+          // Keep thread loading successful even if the persistent search index is unavailable.
+        }
         setPosts((current) => mergePostsByLatestCreatedAt(current, loadedPosts));
         threadPostCache.write(normalizedId, loadedPosts);
         loadedThreadsRef.current.add(normalizedId);
@@ -162,15 +223,20 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
         setIsThreadPostsLoading(false);
       }
     },
-    [setPosts]
+    [setPosts, setThreadSearchIndexes]
   );
 
   const value = useMemo<ForumContextValue>(
     () => ({
       users,
       currentUser,
+      authenticatedAddress,
+      roleRegistry,
       availableAuthNames,
       activeAuthName,
+      searchQuery,
+      topicDirectoryIndex,
+      threadSearchIndexes,
       topics,
       subTopics,
       posts,
@@ -180,8 +246,13 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       authenticate,
       canSwitchUser: availableAuthNames.length > 1,
       setCurrentUser,
+      setSearchQuery,
       createTopic,
       createSubTopic,
+      updateTopicSettings,
+      updateSubTopicSettings,
+      upsertRoleAssignment,
+      removeRoleAssignment,
       createPost,
       uploadPostImage,
       updatePost,
@@ -193,8 +264,13 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     [
       users,
       currentUser,
+      authenticatedAddress,
+      roleRegistry,
+      topicDirectoryIndex,
+      threadSearchIndexes,
       availableAuthNames,
       activeAuthName,
+      searchQuery,
       topics,
       subTopics,
       posts,
@@ -203,8 +279,13 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthReady,
       authenticate,
       setCurrentUser,
+      setSearchQuery,
       createTopic,
       createSubTopic,
+      updateTopicSettings,
+      updateSubTopicSettings,
+      upsertRoleAssignment,
+      removeRoleAssignment,
       createPost,
       uploadPostImage,
       updatePost,
