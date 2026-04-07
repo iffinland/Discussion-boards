@@ -13,6 +13,10 @@ import {
   searchThreadPosts,
   tokenizeSearchQuery,
 } from '../services/forum/forumSearch';
+import {
+  canAccessSubTopic,
+  resolveAccessLabel,
+} from '../services/forum/forumAccess';
 
 const THREAD_BATCH_SIZE = 12;
 
@@ -25,6 +29,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   const {
     users,
     currentUser,
+    authenticatedAddress,
     subTopics,
     posts,
     threadSearchIndexes,
@@ -98,11 +103,17 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
   const canLoadMore = visibleCount < filteredThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
+  const hasSubTopicAccess = subTopic
+    ? canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
+    : false;
   const hasActiveSearch = tokenizeSearchQuery(deferredSearchQuery).length > 0;
   const isComposerDisabled =
-    subTopic?.status === 'locked' || subTopic?.visibility === 'hidden';
-  const composerHelperText =
-    subTopic?.visibility === 'hidden'
+    !hasSubTopicAccess ||
+    subTopic?.status === 'locked' ||
+    subTopic?.visibility === 'hidden';
+  const composerHelperText = !hasSubTopicAccess
+    ? 'You do not have access to post in this sub-topic.'
+    : subTopic?.visibility === 'hidden'
       ? 'This sub-topic is hidden.'
       : subTopic?.status === 'locked'
         ? 'This sub-topic is locked.'
@@ -118,6 +129,8 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
       status: subTopic.status === 'locked' ? 'open' : 'locked',
       visibility: subTopic.visibility,
       isPinned: subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setModerationFeedback(
@@ -137,6 +150,8 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
       status: subTopic.status,
       visibility: subTopic.visibility === 'hidden' ? 'visible' : 'hidden',
       isPinned: subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setModerationFeedback(
@@ -156,6 +171,8 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
       status: subTopic.status,
       visibility: subTopic.visibility,
       isPinned: !subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setModerationFeedback(
@@ -251,6 +268,22 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
     );
   }
 
+  if (!hasSubTopicAccess && !canModerate) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-ui-strong text-lg font-semibold">
+          Thread not available
+        </h2>
+        <p className="text-ui-muted text-sm">
+          You do not have access to this sub-topic.
+        </p>
+        <Link to="/" className="forum-link text-sm font-medium">
+          Back to topics
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="forum-card-primary p-5">
@@ -275,6 +308,11 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
           {subTopic.isPinned ? (
             <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
               Pinned
+            </span>
+          ) : null}
+          {subTopic.access !== 'everyone' ? (
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
+              Access: {resolveAccessLabel(subTopic.access)}
             </span>
           ) : null}
           {subTopic.visibility === 'hidden' ? (

@@ -63,6 +63,8 @@ type ForumContextValue = {
     topicId: string;
     title: string;
     description: string;
+    access: TopicAccess;
+    allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
   updateTopicSettings: (input: {
     topicId: string;
@@ -76,6 +78,8 @@ type ForumContextValue = {
     status: SubTopic['status'];
     visibility: SubTopic['visibility'];
     isPinned: boolean;
+    access: TopicAccess;
+    allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
   createPost: (input: {
     subTopicId: string;

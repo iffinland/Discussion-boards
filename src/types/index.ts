@@ -38,6 +38,8 @@ export interface SubTopic {
   lastPostAt: string;
   isPinned: boolean;
   pinnedAt: string | null;
+  access: TopicAccess;
+  allowedAddresses: string[];
   status: SubTopicStatus;
   visibility: SubTopicVisibility;
 }

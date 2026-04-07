@@ -83,6 +83,8 @@ export const buildForumStructureSearchIndex = (
           [
             subTopic.title,
             subTopic.description,
+            subTopic.access,
+            ...subTopic.allowedAddresses,
             subTopic.status,
             subTopic.visibility,
             authorName,

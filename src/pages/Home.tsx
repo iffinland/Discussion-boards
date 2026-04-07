@@ -5,6 +5,10 @@ import TopicAccordion from '../components/forum/TopicAccordion';
 import HomeSkeleton from '../features/forum/components/HomeSkeleton';
 import { useForumData } from '../hooks/useForumData';
 import {
+  canAccessSubTopic,
+  resolveAccessLabel,
+} from '../services/forum/forumAccess';
+import {
   buildForumStructureSearchIndex,
   createSearchHaystack,
   searchForumStructure,
@@ -24,6 +28,8 @@ const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
   next.splice(toIndex, 0, moved);
   return next;
 };
+
+const ACTIVE_SUBTOPIC_LIMIT = 6;
 
 const sortSubTopics = (items: SubTopic[]) => {
   return [...items].sort((a, b) => {
@@ -110,6 +116,8 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [subTopicTitle, setSubTopicTitle] = useState('');
   const [subTopicDescription, setSubTopicDescription] = useState('');
+  const [subTopicAccess, setSubTopicAccess] = useState<TopicAccess>('everyone');
+  const [subTopicAllowedAddresses, setSubTopicAllowedAddresses] = useState('');
   const [subTopicFeedback, setSubTopicFeedback] = useState<string | null>(null);
   const [roleAddress, setRoleAddress] = useState('');
   const [roleType, setRoleType] = useState<'Admin' | 'Moderator'>('Admin');
@@ -124,6 +132,19 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [managedTopicAccess, setManagedTopicAccess] =
     useState<TopicAccess>('everyone');
   const [managedTopicAllowedAddresses, setManagedTopicAllowedAddresses] =
+    useState('');
+  const [managedSubTopicId, setManagedSubTopicId] = useState<string | null>(
+    null
+  );
+  const [managedSubTopicStatus, setManagedSubTopicStatus] = useState<
+    'open' | 'locked'
+  >('open');
+  const [managedSubTopicVisibility, setManagedSubTopicVisibility] = useState<
+    'visible' | 'hidden'
+  >('visible');
+  const [managedSubTopicAccess, setManagedSubTopicAccess] =
+    useState<TopicAccess>('everyone');
+  const [managedSubTopicAllowedAddresses, setManagedSubTopicAllowedAddresses] =
     useState('');
   const [managementFeedback, setManagementFeedback] = useState<string | null>(
     null
@@ -146,12 +167,18 @@ const Home = ({ searchQuery }: HomeProps) => {
           subTopics.filter(
             (subTopic) =>
               subTopic.topicId === topic.id &&
+              (canModerate ||
+                canAccessSubTopic(
+                  subTopic,
+                  currentUser,
+                  authenticatedAddress
+                )) &&
               (canModerate || subTopic.visibility !== 'hidden')
           )
         ),
       }))
       .filter((topic) => canModerate || topic.visibility !== 'hidden');
-  }, [canModerate, topics, subTopics]);
+  }, [authenticatedAddress, canModerate, currentUser, topics, subTopics]);
 
   const structureSearchIndex = useMemo(
     () =>
@@ -174,6 +201,8 @@ const Home = ({ searchQuery }: HomeProps) => {
               haystack: createSearchHaystack([
                 subTopic.title,
                 subTopic.description,
+                subTopic.access,
+                ...subTopic.allowedAddresses,
                 subTopic.status,
                 subTopic.visibility,
                 subTopic.authorUserId,
@@ -206,22 +235,31 @@ const Home = ({ searchQuery }: HomeProps) => {
       )
     );
 
-    return sortSubTopics(
-      subTopics
-        .filter((subTopic) => canModerate || subTopic.visibility !== 'hidden')
-        .filter(
-          (subTopic) => !hasActiveSearch || allowedSubTopicIds.has(subTopic.id)
-        )
-    )
-      .slice(0, 3)
+    return [...subTopics]
+      .filter((subTopic) => canModerate || subTopic.visibility !== 'hidden')
+      .filter(
+        (subTopic) =>
+          canModerate ||
+          canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
+      )
+      .filter(
+        (subTopic) => !hasActiveSearch || allowedSubTopicIds.has(subTopic.id)
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
+      )
+      .slice(0, ACTIVE_SUBTOPIC_LIMIT)
       .map((subTopic) => ({
         ...subTopic,
         authorName: userMap.get(subTopic.authorUserId) ?? 'Unknown User',
       }));
   }, [
     canModerate,
+    currentUser,
     filteredTopicsWithSubTopics,
     hasActiveSearch,
+    authenticatedAddress,
     subTopics,
     users,
   ]);
@@ -317,6 +355,8 @@ const Home = ({ searchQuery }: HomeProps) => {
       topicId: parentTopicId,
       title: subTopicTitle,
       description: subTopicDescription,
+      access: subTopicAccess,
+      allowedAddresses: parseAddressInput(subTopicAllowedAddresses),
     });
 
     if (!result.ok) {
@@ -327,6 +367,8 @@ const Home = ({ searchQuery }: HomeProps) => {
     setSelectedTopicId(parentTopicId);
     setSubTopicTitle('');
     setSubTopicDescription('');
+    setSubTopicAccess('everyone');
+    setSubTopicAllowedAddresses('');
     setSubTopicFeedback('Sub-topic created successfully.');
     setOpenTopicId(parentTopicId);
   };
@@ -395,6 +437,8 @@ const Home = ({ searchQuery }: HomeProps) => {
       status: subTopic.status === 'locked' ? 'open' : 'locked',
       visibility: subTopic.visibility,
       isPinned: subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setManagementFeedback(
@@ -410,6 +454,8 @@ const Home = ({ searchQuery }: HomeProps) => {
       status: subTopic.status,
       visibility: subTopic.visibility === 'hidden' ? 'visible' : 'hidden',
       isPinned: subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setManagementFeedback(
@@ -425,6 +471,8 @@ const Home = ({ searchQuery }: HomeProps) => {
       status: subTopic.status,
       visibility: subTopic.visibility,
       isPinned: !subTopic.isPinned,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
     });
 
     setManagementFeedback(
@@ -433,6 +481,49 @@ const Home = ({ searchQuery }: HomeProps) => {
           ? 'Sub-topic unpinned.'
           : 'Sub-topic pinned to the top.'
         : (result.error ?? 'Unable to update sub-topic pin.')
+    );
+  };
+
+  const handleOpenSubTopicManager = (subTopic: SubTopic) => {
+    setManagedSubTopicId((current) =>
+      current === subTopic.id ? null : subTopic.id
+    );
+    setManagedSubTopicStatus(subTopic.status);
+    setManagedSubTopicVisibility(subTopic.visibility);
+    setManagedSubTopicAccess(subTopic.access);
+    setManagedSubTopicAllowedAddresses(subTopic.allowedAddresses.join(', '));
+    setManagementFeedback(null);
+  };
+
+  const handleSaveSubTopicManager = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (!managedSubTopicId) {
+      return;
+    }
+
+    const existingSubTopic = subTopics.find(
+      (subTopic) => subTopic.id === managedSubTopicId
+    );
+    if (!existingSubTopic) {
+      return;
+    }
+
+    const result = await updateSubTopicSettings({
+      subTopicId: managedSubTopicId,
+      status: managedSubTopicStatus,
+      visibility: managedSubTopicVisibility,
+      isPinned: existingSubTopic.isPinned,
+      access: managedSubTopicAccess,
+      allowedAddresses: parseAddressInput(managedSubTopicAllowedAddresses),
+    });
+
+    setManagementFeedback(
+      result.ok
+        ? 'Sub-topic settings updated.'
+        : (result.error ?? 'Unable to update sub-topic.')
     );
   };
 
@@ -455,11 +546,6 @@ const Home = ({ searchQuery }: HomeProps) => {
                 className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
               >
                 <p className="text-ui-strong text-sm font-semibold">
-                  {subTopic.isPinned ? (
-                    <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent mr-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle">
-                      Pinned
-                    </span>
-                  ) : null}
                   {subTopic.title}
                 </p>
                 <p className="text-ui-muted text-xs">
@@ -621,6 +707,7 @@ const Home = ({ searchQuery }: HomeProps) => {
               canManageTopic={isAdmin}
               canManageSubTopics={canModerate}
               onManageTopic={handleOpenTopicManager}
+              onManageSubTopic={handleOpenSubTopicManager}
               onToggleSubTopicPin={handleToggleSubTopicPin}
               onToggleSubTopicStatus={handleToggleSubTopicStatus}
               onToggleSubTopicVisibility={handleToggleSubTopicVisibility}
@@ -691,6 +778,84 @@ const Home = ({ searchQuery }: HomeProps) => {
                   <button
                     type="button"
                     onClick={() => setManagedTopicId(null)}
+                    className="bg-surface-card text-ui-muted rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {topic.subTopics.some(
+              (subTopic) => subTopic.id === managedSubTopicId
+            ) ? (
+              <form
+                className="forum-card p-4 space-y-2"
+                onSubmit={handleSaveSubTopicManager}
+              >
+                <h3 className="text-ui-strong text-sm font-semibold">
+                  Manage Sub-Topic
+                </h3>
+                <select
+                  value={managedSubTopicStatus}
+                  onChange={(event) =>
+                    setManagedSubTopicStatus(
+                      event.target.value as 'open' | 'locked'
+                    )
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="open">Open</option>
+                  <option value="locked">Locked</option>
+                </select>
+                <select
+                  value={managedSubTopicVisibility}
+                  onChange={(event) =>
+                    setManagedSubTopicVisibility(
+                      event.target.value as 'visible' | 'hidden'
+                    )
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="visible">Visible</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+                <select
+                  value={managedSubTopicAccess}
+                  onChange={(event) =>
+                    setManagedSubTopicAccess(event.target.value as TopicAccess)
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {topicAccessOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-ui-muted text-xs">
+                  Access: {resolveAccessLabel(managedSubTopicAccess)}
+                </p>
+                {managedSubTopicAccess === 'custom' ? (
+                  <textarea
+                    value={managedSubTopicAllowedAddresses}
+                    onChange={(event) =>
+                      setManagedSubTopicAllowedAddresses(event.target.value)
+                    }
+                    placeholder="Comma-separated wallet addresses"
+                    className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                ) : null}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Save Sub-Topic Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManagedSubTopicId(null)}
                     className="bg-surface-card text-ui-muted rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold"
                   >
                     Close
@@ -871,6 +1036,36 @@ const Home = ({ searchQuery }: HomeProps) => {
                   placeholder="Sub-topic description"
                   className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 />
+                <select
+                  value={subTopicAccess}
+                  onChange={(event) =>
+                    setSubTopicAccess(event.target.value as TopicAccess)
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {topicAccessOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-ui-muted text-xs">
+                  {
+                    topicAccessOptions.find(
+                      (option) => option.value === subTopicAccess
+                    )?.helper
+                  }
+                </p>
+                {subTopicAccess === 'custom' ? (
+                  <textarea
+                    value={subTopicAllowedAddresses}
+                    onChange={(event) =>
+                      setSubTopicAllowedAddresses(event.target.value)
+                    }
+                    placeholder="Comma-separated wallet addresses"
+                    className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                ) : null}
                 <button
                   type="submit"
                   className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-white"

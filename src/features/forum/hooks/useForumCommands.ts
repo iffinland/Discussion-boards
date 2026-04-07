@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { generateForumEntityId } from '../../../services/forum/forumId';
+import { canAccessSubTopic } from '../../../services/forum/forumAccess';
 import { encodeQdnImageTag } from '../../../services/forum/richText';
 import { threadPostCache } from '../../../services/forum/threadPostCache';
 import { forumQdnService } from '../../../services/qdn/forumQdnService';
@@ -303,9 +304,12 @@ export const useForumCommands = ({
       topicId: string;
       title: string;
       description: string;
+      access: TopicAccess;
+      allowedAddresses: string[];
     }): Promise<ForumMutationResult> => {
       const title = input.title.trim();
       const description = input.description.trim();
+      const allowedAddresses = normalizeAddressList(input.allowedAddresses);
 
       if (!title || !description) {
         return { ok: false, error: 'Title and description are required.' };
@@ -338,6 +342,13 @@ export const useForumCommands = ({
         };
       }
 
+      if (input.access === 'custom' && allowedAddresses.length === 0) {
+        return {
+          ok: false,
+          error: 'Add at least one wallet address for custom sub-topic access.',
+        };
+      }
+
       const duplicate = subTopics.some(
         (subTopic) =>
           subTopic.topicId === input.topicId &&
@@ -362,6 +373,8 @@ export const useForumCommands = ({
         lastPostAt: createdAt,
         isPinned: false,
         pinnedAt: null,
+        access: input.access,
+        allowedAddresses,
         status: 'open',
         visibility: 'visible',
       };
@@ -474,6 +487,8 @@ export const useForumCommands = ({
       status: SubTopic['status'];
       visibility: SubTopic['visibility'];
       isPinned: boolean;
+      access: TopicAccess;
+      allowedAddresses: string[];
     }): Promise<ForumMutationResult> => {
       const target = subTopics.find(
         (subTopic) => subTopic.id === input.subTopicId
@@ -494,6 +509,14 @@ export const useForumCommands = ({
         };
       }
 
+      const allowedAddresses = normalizeAddressList(input.allowedAddresses);
+      if (input.access === 'custom' && allowedAddresses.length === 0) {
+        return {
+          ok: false,
+          error: 'Add at least one wallet address for custom sub-topic access.',
+        };
+      }
+
       const updatedSubTopic: SubTopic = {
         ...target,
         status: input.status,
@@ -502,6 +525,8 @@ export const useForumCommands = ({
         pinnedAt: input.isPinned
           ? (target.pinnedAt ?? new Date().toISOString())
           : null,
+        access: input.access,
+        allowedAddresses,
       };
 
       try {
@@ -713,6 +738,15 @@ export const useForumCommands = ({
         return { ok: false, error: 'This sub-topic is hidden.' };
       }
 
+      if (
+        !canAccessSubTopic(targetSubTopic, currentUser, authenticatedAddress)
+      ) {
+        return {
+          ok: false,
+          error: 'You do not have access to post in this sub-topic.',
+        };
+      }
+
       const createdAt = new Date().toISOString();
       const newPost: Post = {
         id: generateForumEntityId('post', currentUser.username),
@@ -760,6 +794,7 @@ export const useForumCommands = ({
     },
     [
       currentUser,
+      authenticatedAddress,
       isAuthenticated,
       posts,
       setPosts,

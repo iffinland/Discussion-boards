@@ -359,6 +359,13 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
       typeof value.pinnedAt === 'string' && value.pinnedAt.trim()
         ? value.pinnedAt
         : null,
+    access:
+      value.access === 'moderators' ||
+      value.access === 'admins' ||
+      value.access === 'custom'
+        ? value.access
+        : 'everyone',
+    allowedAddresses: sanitizeAddressList(value.allowedAddresses),
     status: value.status === 'locked' ? 'locked' : 'open',
     visibility: value.visibility === 'hidden' ? 'hidden' : 'visible',
   };

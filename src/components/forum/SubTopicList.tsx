@@ -1,4 +1,5 @@
 import type { SubTopic, User } from '../../types';
+import { resolveAccessLabel } from '../../services/forum/forumAccess';
 
 type SubTopicListProps = {
   subTopics: SubTopic[];
@@ -8,6 +9,7 @@ type SubTopicListProps = {
   onToggleSubTopicPin?: (subTopic: SubTopic) => void;
   onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
   onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
+  onManageSubTopic?: (subTopic: SubTopic) => void;
 };
 
 const formatDate = (date: string) =>
@@ -31,6 +33,7 @@ const SubTopicList = ({
   onToggleSubTopicPin,
   onToggleSubTopicStatus,
   onToggleSubTopicVisibility,
+  onManageSubTopic,
 }: SubTopicListProps) => {
   const usernameMap = new Map(users.map((user) => [user.id, user.displayName]));
 
@@ -61,6 +64,9 @@ const SubTopicList = ({
                   <span className="text-ui-muted ml-2 text-xs">
                     {subTopic.status === 'locked' ? 'Locked' : 'Open'}
                     {subTopic.visibility === 'hidden' ? ' • Hidden' : ''}
+                    {subTopic.access !== 'everyone'
+                      ? ` • Access: ${resolveAccessLabel(subTopic.access)}`
+                      : ''}
                   </span>
                 </span>
                 <span className="text-brand-primary-strong text-sm">
@@ -73,6 +79,13 @@ const SubTopicList = ({
 
               {canManageSubTopics ? (
                 <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onManageSubTopic?.(subTopic)}
+                    className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+                  >
+                    Manage
+                  </button>
                   <button
                     type="button"
                     onClick={() => onToggleSubTopicPin?.(subTopic)}
@@ -94,6 +107,12 @@ const SubTopicList = ({
                   >
                     {subTopic.visibility === 'hidden' ? 'Show' : 'Hide'}
                   </button>
+                  {subTopic.allowedAddresses.length > 0 ? (
+                    <span className="text-ui-muted inline-flex items-center px-1 text-xs">
+                      {subTopic.allowedAddresses.length} wallet
+                      {subTopic.allowedAddresses.length === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
             </div>

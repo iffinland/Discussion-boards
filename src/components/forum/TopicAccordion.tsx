@@ -18,6 +18,7 @@ type TopicAccordionProps = {
   canManageTopic?: boolean;
   canManageSubTopics?: boolean;
   onManageTopic?: (topic: Topic) => void;
+  onManageSubTopic?: (subTopic: SubTopic) => void;
   onToggleSubTopicPin?: (subTopic: SubTopic) => void;
   onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
   onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
@@ -39,6 +40,7 @@ const TopicAccordion = ({
   canManageTopic = false,
   canManageSubTopics = false,
   onManageTopic,
+  onManageSubTopic,
   onToggleSubTopicPin,
   onToggleSubTopicStatus,
   onToggleSubTopicVisibility,
@@ -160,6 +162,7 @@ const TopicAccordion = ({
           users={users}
           onOpenThread={onOpenThread}
           canManageSubTopics={canManageSubTopics}
+          onManageSubTopic={onManageSubTopic}
           onToggleSubTopicPin={onToggleSubTopicPin}
           onToggleSubTopicStatus={onToggleSubTopicStatus}
           onToggleSubTopicVisibility={onToggleSubTopicVisibility}
