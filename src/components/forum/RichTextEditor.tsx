@@ -7,6 +7,7 @@ import {
 } from 'react';
 
 import {
+  applyListFormat,
   applyWrapFormat,
   formatToTags,
   RICH_TEXT_IMAGE_LIMITS,
@@ -71,6 +72,30 @@ const RichTextEditor = ({
   };
 
   const handleFormat = (format: RichTextFormatType) => {
+    if (format === 'unorderedList' || format === 'orderedList') {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+
+      const result = applyListFormat({
+        value,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+        ordered: format === 'orderedList',
+      });
+      onChange(result.value);
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          result.nextSelectionStart,
+          result.nextSelectionEnd
+        );
+      });
+      return;
+    }
+
     const [openTag, closeTag] = formatToTags[format];
     applyFormatting(openTag, closeTag);
   };
@@ -228,6 +253,20 @@ const RichTextEditor = ({
           </button>
           <button
             type="button"
+            onClick={() => handleFormat('unorderedList')}
+            className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            Bullet List
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('orderedList')}
+            className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            Numbered List
+          </button>
+          <button
+            type="button"
             onClick={() => setIsToolsModalOpen(true)}
             className="forum-pill-accent text-brand-accent-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
@@ -296,7 +335,8 @@ const RichTextEditor = ({
 
       <div className="mt-3 flex items-center justify-between">
         <p className="text-ui-muted text-xs">
-          Supported tags: [b], [i], [u], [quote], [color], [img]
+          Supported tags: [b], [i], [u], [s], [quote], [code], [ul], [ol],
+          [color], [img]
         </p>
         <button
           type="submit"

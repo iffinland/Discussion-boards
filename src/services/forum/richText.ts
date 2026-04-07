@@ -1,4 +1,12 @@
-export type RichTextFormatType = 'bold' | 'italic' | 'underline' | 'quote';
+export type RichTextFormatType =
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strike'
+  | 'quote'
+  | 'code'
+  | 'unorderedList'
+  | 'orderedList';
 
 export type QdnImageTagReference = {
   service: 'IMAGE';
@@ -32,6 +40,13 @@ export type ApplyWrapFormatResult = {
   value: string;
   nextSelectionStart: number;
   nextSelectionEnd: number;
+};
+
+type ApplyListFormatInput = {
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+  ordered: boolean;
 };
 
 const escapeHtml = (value: string) =>
@@ -169,11 +184,61 @@ export const applyWrapFormat = ({
   };
 };
 
+export const applyListFormat = ({
+  value,
+  selectionStart,
+  selectionEnd,
+  ordered,
+}: ApplyListFormatInput): ApplyWrapFormatResult => {
+  const before = value.slice(0, selectionStart);
+  const selected = value.slice(selectionStart, selectionEnd);
+  const after = value.slice(selectionEnd);
+  const listTag = ordered ? 'ol' : 'ul';
+
+  if (!selected.trim()) {
+    const placeholder = '[li]List item[/li]';
+    const wrapped = `[${listTag}]${placeholder}[/${listTag}]`;
+    const nextValue = `${before}${wrapped}${after}`;
+    const start = before.length + `[${listTag}]`.length;
+    return {
+      value: nextValue,
+      nextSelectionStart: start,
+      nextSelectionEnd: start + placeholder.length,
+    };
+  }
+
+  const lines = selected
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return {
+      value,
+      nextSelectionStart: selectionStart,
+      nextSelectionEnd: selectionEnd,
+    };
+  }
+
+  const wrappedLines = lines.map((line) => `[li]${line}[/li]`).join('');
+  const wrapped = `[${listTag}]${wrappedLines}[/${listTag}]`;
+  const nextValue = `${before}${wrapped}${after}`;
+  return {
+    value: nextValue,
+    nextSelectionStart: before.length,
+    nextSelectionEnd: before.length + wrapped.length,
+  };
+};
+
 export const formatToTags: Record<RichTextFormatType, [string, string]> = {
   bold: ['[b]', '[/b]'],
   italic: ['[i]', '[/i]'],
   underline: ['[u]', '[/u]'],
+  strike: ['[s]', '[/s]'],
   quote: ['[quote]', '[/quote]'],
+  code: ['[code]', '[/code]'],
+  unorderedList: ['[ul]', '[/ul]'],
+  orderedList: ['[ol]', '[/ol]'],
 };
 
 export const toRichTextHtml = (value: string): string => {
@@ -196,9 +261,42 @@ export const toRichTextHtml = (value: string): string => {
   );
   html = replacePatternRecursively(
     html,
+    /\[s\]([\s\S]*?)\[\/s\]/gi,
+    (_full, content) => `<s>${content}</s>`
+  );
+  html = replacePatternRecursively(
+    html,
     /\[quote\]([\s\S]*?)\[\/quote\]/gi,
     (_full, content) =>
       `<blockquote class="my-2 border-l-2 border-slate-300 pl-3 text-slate-600">${content}</blockquote>`
+  );
+  html = replacePatternRecursively(
+    html,
+    /\[code\]([\s\S]*?)\[\/code\]/gi,
+    (_full, content) =>
+      `<pre class="my-3 overflow-x-auto rounded-md border border-slate-200 bg-slate-950/95 p-3 text-xs text-slate-100"><code>${content}</code></pre>`
+  );
+  html = replacePatternRecursively(
+    html,
+    /\[ul\]([\s\S]*?)\[\/ul\]/gi,
+    (_full, content) => {
+      const items = content.replace(
+        /\[li\]([\s\S]*?)\[\/li\]/gi,
+        '<li>$1</li>'
+      );
+      return `<ul class="my-3 list-disc space-y-1 pl-5">${items}</ul>`;
+    }
+  );
+  html = replacePatternRecursively(
+    html,
+    /\[ol\]([\s\S]*?)\[\/ol\]/gi,
+    (_full, content) => {
+      const items = content.replace(
+        /\[li\]([\s\S]*?)\[\/li\]/gi,
+        '<li>$1</li>'
+      );
+      return `<ol class="my-3 list-decimal space-y-1 pl-5">${items}</ol>`;
+    }
   );
   html = replacePatternRecursively(
     html,

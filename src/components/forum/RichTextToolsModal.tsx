@@ -22,7 +22,11 @@ const formatActions: Array<{ label: string; value: RichTextFormatType }> = [
   { label: 'Bold', value: 'bold' },
   { label: 'Italic', value: 'italic' },
   { label: 'Underline', value: 'underline' },
+  { label: 'Strikethrough', value: 'strike' },
   { label: 'Quote', value: 'quote' },
+  { label: 'Code Block', value: 'code' },
+  { label: 'Bullet List', value: 'unorderedList' },
+  { label: 'Numbered List', value: 'orderedList' },
 ];
 
 const RichTextToolsModal = ({

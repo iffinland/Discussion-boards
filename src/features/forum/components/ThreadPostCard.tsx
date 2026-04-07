@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import RichTextContent from '../../../components/forum/RichTextContent';
 import RichTextToolsModal from '../../../components/forum/RichTextToolsModal';
 import {
+  applyListFormat,
   applyWrapFormat,
   formatToTags,
   type RichTextFormatType,
@@ -111,6 +112,30 @@ const ThreadPostCard = ({
   };
 
   const handleDraftFormat = (format: RichTextFormatType) => {
+    if (format === 'unorderedList' || format === 'orderedList') {
+      const textarea = editTextareaRef.current;
+      if (!textarea) {
+        return;
+      }
+
+      const result = applyListFormat({
+        value: draftContent,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+        ordered: format === 'orderedList',
+      });
+      setDraftContent(result.value);
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          result.nextSelectionStart,
+          result.nextSelectionEnd
+        );
+      });
+      return;
+    }
+
     const [openTag, closeTag] = formatToTags[format];
     applyDraftFormatting(openTag, closeTag);
   };
