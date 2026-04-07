@@ -1,6 +1,10 @@
 import type { Post, SubTopic, Topic } from "../../types";
 import { generateForumEntityId } from "../forum/forumId";
-import { ensureQdnResourceReady } from "./qdnReadiness";
+import {
+  ensureQdnResourceReady,
+  fetchWithQdnReadyFallback,
+  mapWithConcurrency,
+} from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getUserAccount } from "../qortal/walletService";
 
@@ -170,19 +174,15 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
 };
 
 const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
-  try {
-    await ensureQdnResourceReady(FORUM_SERVICE, name, identifier);
-  } catch {
-    // Continue with direct fetch when readiness polling fails.
-  }
+  const fetcher = () =>
+    requestQortal<unknown>({
+      action: "FETCH_QDN_RESOURCE",
+      service: FORUM_SERVICE,
+      name,
+      identifier,
+    });
 
-  const raw = await requestQortal<unknown>({
-    action: "FETCH_QDN_RESOURCE",
-    service: FORUM_SERVICE,
-    name,
-    identifier,
-  });
-
+  const raw = await fetchWithQdnReadyFallback(FORUM_SERVICE, name, identifier, fetcher);
   return parseJsonLike(raw);
 };
 
@@ -206,44 +206,38 @@ const mapLatestPayloads = <TPayload extends { updatedAt: number }, TKey>(
 
 const fetchTopicPayloads = async () => {
   const topicResults = await searchByPrefix(TOPIC_PREFIX);
-  return Promise.all(
-    topicResults.map(async (item) => {
+  return mapWithConcurrency(topicResults, async (item) => {
       try {
         const raw = await fetchResource(item.name, item.identifier);
         return parseTopicPayload(raw);
       } catch {
         return null;
       }
-    })
-  );
+    });
 };
 
 const fetchSubTopicPayloads = async () => {
   const subTopicResults = await searchByPrefix(SUBTOPIC_PREFIX);
-  return Promise.all(
-    subTopicResults.map(async (item) => {
+  return mapWithConcurrency(subTopicResults, async (item) => {
       try {
         const raw = await fetchResource(item.name, item.identifier);
         return parseSubTopicPayload(raw);
       } catch {
         return null;
       }
-    })
-  );
+    });
 };
 
 const fetchPostPayloadsByPrefix = async (prefix: string) => {
   const postResults = await searchByPrefix(prefix);
-  return Promise.all(
-    postResults.map(async (item) => {
+  return mapWithConcurrency(postResults, async (item) => {
       try {
         const raw = await fetchResource(item.name, item.identifier);
         return parsePostPayload(raw);
       } catch {
         return null;
       }
-    })
-  );
+    });
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => {

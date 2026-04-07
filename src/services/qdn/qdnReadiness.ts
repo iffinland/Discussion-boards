@@ -9,6 +9,7 @@ const BUILDABLE_STATUSES = new Set([
 ]);
 const STATUS_POLL_RETRIES = 8;
 const STATUS_POLL_DELAY_MS = 1200;
+const RESOURCE_FETCH_CONCURRENCY = 6;
 
 type QdnStatusResponse =
   | string
@@ -82,4 +83,44 @@ export const ensureQdnResourceReady = async (
       await sleep(STATUS_POLL_DELAY_MS);
     }
   }
+};
+
+export const fetchWithQdnReadyFallback = async <T>(
+  service: string,
+  name: string,
+  identifier: string,
+  fetcher: () => Promise<T>
+) => {
+  try {
+    return await fetcher();
+  } catch (initialError) {
+    try {
+      await ensureQdnResourceReady(service, name, identifier);
+    } catch {
+      throw initialError;
+    }
+
+    return fetcher();
+  }
+};
+
+export const mapWithConcurrency = async <TInput, TOutput>(
+  items: TInput[],
+  mapper: (item: TInput, index: number) => Promise<TOutput>,
+  concurrency = RESOURCE_FETCH_CONCURRENCY
+) => {
+  const results = new Array<TOutput>(items.length);
+  let nextIndex = 0;
+
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  };
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
 };

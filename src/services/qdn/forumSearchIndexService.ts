@@ -1,5 +1,5 @@
 import type { Post, SubTopic, Topic } from "../../types";
-import { ensureQdnResourceReady } from "./qdnReadiness";
+import { fetchWithQdnReadyFallback, mapWithConcurrency } from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getUserAccount } from "../qortal/walletService";
 
@@ -145,19 +145,15 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
 };
 
 const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
-  try {
-    await ensureQdnResourceReady(FORUM_SERVICE, name, identifier);
-  } catch {
-    // Continue with direct fetch when readiness polling fails.
-  }
+  const fetcher = () =>
+    requestQortal<unknown>({
+      action: "FETCH_QDN_RESOURCE",
+      service: FORUM_SERVICE,
+      name,
+      identifier,
+    });
 
-  const raw = await requestQortal<unknown>({
-    action: "FETCH_QDN_RESOURCE",
-    service: FORUM_SERVICE,
-    name,
-    identifier,
-  });
-
+  const raw = await fetchWithQdnReadyFallback(FORUM_SERVICE, name, identifier, fetcher);
   return parseJsonLike(raw);
 };
 
@@ -321,16 +317,14 @@ const pickLatest = <TPayload extends { updatedAt: number }>(
 export const forumSearchIndexService = {
   async loadTopicDirectoryIndex(): Promise<TopicDirectorySnapshot | null> {
     const resources = await searchByPrefix(TOPIC_DIRECTORY_IDENTIFIER);
-    const payloads = await Promise.all(
-      resources.map(async (item) => {
+    const payloads = await mapWithConcurrency(resources, async (item) => {
         try {
           const raw = await fetchResource(item.name, item.identifier);
           return parseTopicDirectoryPayload(raw);
         } catch {
           return null;
         }
-      })
-    );
+      });
 
     return pickLatest(payloads)?.snapshot ?? null;
   },
@@ -389,16 +383,14 @@ export const forumSearchIndexService = {
   async loadThreadIndex(subTopicId: string): Promise<ThreadSearchSnapshot | null> {
     const identifier = `${THREAD_INDEX_PREFIX}${subTopicId}`;
     const resources = await searchByPrefix(identifier);
-    const payloads = await Promise.all(
-      resources.map(async (item) => {
+    const payloads = await mapWithConcurrency(resources, async (item) => {
         try {
           const raw = await fetchResource(item.name, item.identifier);
           return parseThreadIndexPayload(raw);
         } catch {
           return null;
         }
-      })
-    );
+      });
 
     return (
       pickLatest(payloads.filter((item) => item?.snapshot.subTopicId === subTopicId))?.snapshot ??

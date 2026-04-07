@@ -1,5 +1,5 @@
 import type { ForumRoleRegistry, UserRole } from "../../types";
-import { ensureQdnResourceReady } from "./qdnReadiness";
+import { fetchWithQdnReadyFallback } from "./qdnReadiness";
 import { requestQortal } from "../qortal/qortalClient";
 import { getAccountNames, getUserAccount } from "../qortal/walletService";
 
@@ -153,19 +153,15 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
 };
 
 const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
-  try {
-    await ensureQdnResourceReady(FORUM_SERVICE, name, identifier);
-  } catch {
-    // Continue with direct fetch when readiness polling fails.
-  }
+  const fetcher = () =>
+    requestQortal<unknown>({
+      action: "FETCH_QDN_RESOURCE",
+      service: FORUM_SERVICE,
+      name,
+      identifier,
+    });
 
-  const raw = await requestQortal<unknown>({
-    action: "FETCH_QDN_RESOURCE",
-    service: FORUM_SERVICE,
-    name,
-    identifier,
-  });
-
+  const raw = await fetchWithQdnReadyFallback(FORUM_SERVICE, name, identifier, fetcher);
   return parseJsonLike(raw);
 };
 
