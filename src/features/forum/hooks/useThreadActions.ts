@@ -1,13 +1,19 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState } from 'react';
 
-import type { Post } from "../../../types";
-import type { ForumMutationResult, ForumUploadImageResult } from "../types";
+import type { Post } from '../../../types';
+import type { ForumMutationResult, ForumUploadImageResult } from '../types';
 
 type UseThreadActionsParams = {
   threadId?: string;
-  createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
+  createPost: (input: {
+    subTopicId: string;
+    content: string;
+  }) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
-  updatePost: (input: { postId: string; content: string }) => Promise<ForumMutationResult>;
+  updatePost: (input: {
+    postId: string;
+    content: string;
+  }) => Promise<ForumMutationResult>;
   deletePost: (postId: string) => Promise<ForumMutationResult>;
   resolveAuthorDisplayName: (authorUserId: string) => string;
 };
@@ -20,7 +26,7 @@ export const useThreadActions = ({
   deletePost,
   resolveAuthorDisplayName,
 }: UseThreadActionsParams) => {
-  const [replyText, setReplyText] = useState("");
+  const [replyText, setReplyText] = useState('');
   const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -35,12 +41,12 @@ export const useThreadActions = ({
     });
 
     if (!result.ok) {
-      setFeedback(result.error ?? "Unable to publish post.");
+      setFeedback(result.error ?? 'Unable to publish post.');
       return;
     }
 
-    setReplyText("");
-    setFeedback("Reply published.");
+    setReplyText('');
+    setFeedback('Reply published.');
   }, [createPost, replyText, threadId]);
 
   const handleReplyToPost = useCallback(
@@ -55,11 +61,11 @@ export const useThreadActions = ({
     async (postId: string, content: string) => {
       const result = await updatePost({ postId, content });
       if (!result.ok) {
-        setFeedback(result.error ?? "Unable to update post.");
+        setFeedback(result.error ?? 'Unable to update post.');
         return;
       }
 
-      setFeedback("Post updated.");
+      setFeedback('Post updated.');
     },
     [updatePost]
   );
@@ -68,27 +74,27 @@ export const useThreadActions = ({
     async (postId: string) => {
       const result = await deletePost(postId);
       if (!result.ok) {
-        setFeedback(result.error ?? "Unable to delete post.");
+        setFeedback(result.error ?? 'Unable to delete post.');
         return;
       }
 
-      setFeedback("Post deleted.");
+      setFeedback('Post deleted.');
     },
     [deletePost]
   );
 
   const handleSharePost = useCallback(
     async (postId: string) => {
-      if (!threadId || typeof window === "undefined" || !navigator.clipboard) {
+      if (!threadId || typeof window === 'undefined' || !navigator.clipboard) {
         return;
       }
 
       const shareUrl = `${window.location.origin}${window.location.pathname}#/thread/${threadId}?post=${postId}`;
       try {
         await navigator.clipboard.writeText(shareUrl);
-        setFeedback("Post link copied.");
+        setFeedback('Post link copied.');
       } catch {
-        setFeedback("Unable to copy post link.");
+        setFeedback('Unable to copy post link.');
       }
     },
     [threadId]
@@ -105,7 +111,7 @@ export const useThreadActions = ({
     async (file: File): Promise<string> => {
       const result = await uploadPostImage(file);
       if (!result.ok || !result.imageTag) {
-        throw new Error(result.error ?? "Unable to upload image.");
+        throw new Error(result.error ?? 'Unable to upload image.');
       }
 
       return result.imageTag;

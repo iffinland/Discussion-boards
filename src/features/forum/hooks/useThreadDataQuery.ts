@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo } from 'react';
 
-import type { Post, SubTopic, User } from "../../../types";
+import type { Post, SubTopic, User } from '../../../types';
 
 type UseThreadDataQueryParams = {
   threadId?: string;
@@ -23,7 +23,10 @@ export const useThreadDataQuery = ({
   const threadPosts = useMemo(() => {
     return posts
       .filter((post) => post.subTopicId === threadId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
   }, [threadId, posts]);
 
   const userMap = useMemo(() => {
@@ -31,7 +34,7 @@ export const useThreadDataQuery = ({
   }, [users]);
 
   const resolveAuthorDisplayName = (authorUserId: string) =>
-    userMap.get(authorUserId)?.displayName ?? "Member";
+    userMap.get(authorUserId)?.displayName ?? 'Member';
 
   return {
     subTopic,

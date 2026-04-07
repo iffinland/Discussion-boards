@@ -1,9 +1,9 @@
-export type UserRole = "SuperAdmin" | "Admin" | "Moderator" | "Member";
-export type TopicStatus = "open" | "locked";
-export type TopicVisibility = "visible" | "hidden";
-export type TopicAccess = "everyone" | "moderators" | "admins" | "custom";
-export type SubTopicStatus = "open" | "locked";
-export type SubTopicVisibility = "visible" | "hidden";
+export type UserRole = 'SuperAdmin' | 'Admin' | 'Moderator' | 'Member';
+export type TopicStatus = 'open' | 'locked';
+export type TopicVisibility = 'visible' | 'hidden';
+export type TopicAccess = 'everyone' | 'moderators' | 'admins' | 'custom';
+export type SubTopicStatus = 'open' | 'locked';
+export type SubTopicVisibility = 'visible' | 'hidden';
 
 export interface User {
   id: string;
@@ -21,6 +21,7 @@ export interface Topic {
   description: string;
   createdByUserId: string;
   createdAt: string;
+  sortOrder: number;
   status: TopicStatus;
   visibility: TopicVisibility;
   subTopicAccess: TopicAccess;
@@ -35,6 +36,8 @@ export interface SubTopic {
   authorUserId: string;
   createdAt: string;
   lastPostAt: string;
+  isPinned: boolean;
+  pinnedAt: string | null;
   status: SubTopicStatus;
   visibility: SubTopicVisibility;
 }

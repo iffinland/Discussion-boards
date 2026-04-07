@@ -1,17 +1,18 @@
-import type { Post, SubTopic, Topic } from "../../types";
-import { generateForumEntityId } from "../forum/forumId";
+import type { Post, SubTopic, Topic } from '../../types';
+import { generateForumEntityId, toPartitionKey } from '../forum/forumId';
 import {
   ensureQdnResourceReady,
   fetchWithQdnReadyFallback,
   mapWithConcurrency,
-} from "./qdnReadiness";
-import { requestQortal } from "../qortal/qortalClient";
-import { getUserAccount } from "../qortal/walletService";
+} from './qdnReadiness';
+import { requestQortal } from '../qortal/qortalClient';
+import { getUserAccount } from '../qortal/walletService';
 
-const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
-const FORUM_IMAGE_SERVICE = import.meta.env.VITE_QORTAL_QDN_IMAGE_SERVICE ?? "IMAGE";
+const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
+const FORUM_IMAGE_SERVICE =
+  import.meta.env.VITE_QORTAL_QDN_IMAGE_SERVICE ?? 'IMAGE';
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qdb";
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdb';
 const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-`;
 const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
 const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}sub-`;
@@ -35,11 +36,11 @@ export type ForumPostImageReference = {
   filename: string;
 };
 
-type EntityStatus = "active" | "deleted";
+type EntityStatus = 'active' | 'deleted';
 
 type TopicPayload = {
   version: 1;
-  type: "topic";
+  type: 'topic';
   status: EntityStatus;
   updatedAt: number;
   topic: Topic;
@@ -47,7 +48,7 @@ type TopicPayload = {
 
 type SubTopicPayload = {
   version: 1;
-  type: "subtopic";
+  type: 'subtopic';
   status: EntityStatus;
   updatedAt: number;
   subTopic: SubTopic;
@@ -55,7 +56,7 @@ type SubTopicPayload = {
 
 type PostPayload = {
   version: 1;
-  type: "post";
+  type: 'post';
   status: EntityStatus;
   updatedAt: number;
   post: Post;
@@ -64,7 +65,7 @@ type PostPayload = {
 const encodeBase64Json = (value: unknown): string => {
   const json = JSON.stringify(value);
   const bytes = new TextEncoder().encode(json);
-  let binary = "";
+  let binary = '';
 
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
@@ -81,7 +82,7 @@ const decodeBase64Json = (value: string): unknown => {
 };
 
 const parseJsonLike = (raw: unknown): unknown => {
-  if (typeof raw !== "string") {
+  if (typeof raw !== 'string') {
     return raw;
   }
 
@@ -109,9 +110,16 @@ const assertIdentifierLength = (identifier: string) => {
 };
 
 const toTopicIdentifier = (topicId: string) => `${TOPIC_PREFIX}${topicId}`;
-const toSubTopicIdentifier = (subTopicId: string) => `${SUBTOPIC_PREFIX}${subTopicId}`;
-const toPostSearchPrefix = () => POST_PREFIX;
-const toPostIdentifier = (post: Post) => `${POST_PREFIX}${post.id}`;
+const toSubTopicIdentifier = (subTopicId: string) =>
+  `${SUBTOPIC_PREFIX}${subTopicId}`;
+const toThreadPostPartition = (subTopicId: string) =>
+  toPartitionKey(subTopicId, 8);
+const toThreadPostPrefix = (subTopicId: string) =>
+  `${POST_PREFIX}${toThreadPostPartition(subTopicId)}-`;
+const toLegacyPostSearchPrefix = () => POST_PREFIX;
+const toPostIdentifier = (post: Post) =>
+  `${toThreadPostPrefix(post.subTopicId)}${post.id}`;
+const toLegacyPostIdentifier = (post: Post) => `${POST_PREFIX}${post.id}`;
 const toImageIdentifier = (imageId: string) => `${IMAGE_PREFIX}${imageId}`;
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
@@ -125,18 +133,21 @@ const resolveOwnerName = async (providedName?: string): Promise<string> => {
     return account.name.trim();
   }
 
-  throw new Error("Authenticated account has no Qortal name.");
+  throw new Error('Authenticated account has no Qortal name.');
 };
 
 const verifyPublication = async (
   ownerName: string,
   identifier: string,
-  expectedType: TopicPayload["type"] | SubTopicPayload["type"] | PostPayload["type"]
+  expectedType:
+    | TopicPayload['type']
+    | SubTopicPayload['type']
+    | PostPayload['type']
 ) => {
   for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt += 1) {
     try {
       const raw = await requestQortal<unknown>({
-        action: "FETCH_QDN_RESOURCE",
+        action: 'FETCH_QDN_RESOURCE',
         service: FORUM_SERVICE,
         name: ownerName,
         identifier,
@@ -155,16 +166,20 @@ const verifyPublication = async (
     }
   }
 
-  throw new Error("Publish was submitted but resource could not be verified yet.");
+  throw new Error(
+    'Publish was submitted but resource could not be verified yet.'
+  );
 };
 
-const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]> => {
+const searchByPrefix = async (
+  prefix: string
+): Promise<SearchQdnResourceResult[]> => {
   const search = await requestQortal<SearchQdnResourceResult[]>({
-    action: "SEARCH_QDN_RESOURCES",
+    action: 'SEARCH_QDN_RESOURCES',
     service: FORUM_SERVICE,
     identifier: prefix,
     prefix: true,
-    mode: "ALL",
+    mode: 'ALL',
     reverse: true,
     limit: 1000,
     offset: 0,
@@ -173,16 +188,24 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
   return Array.isArray(search) ? search : [];
 };
 
-const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
+const fetchResource = async (
+  name: string,
+  identifier: string
+): Promise<unknown> => {
   const fetcher = () =>
     requestQortal<unknown>({
-      action: "FETCH_QDN_RESOURCE",
+      action: 'FETCH_QDN_RESOURCE',
       service: FORUM_SERVICE,
       name,
       identifier,
     });
 
-  const raw = await fetchWithQdnReadyFallback(FORUM_SERVICE, name, identifier, fetcher);
+  const raw = await fetchWithQdnReadyFallback(
+    FORUM_SERVICE,
+    name,
+    identifier,
+    fetcher
+  );
   return parseJsonLike(raw);
 };
 
@@ -207,41 +230,41 @@ const mapLatestPayloads = <TPayload extends { updatedAt: number }, TKey>(
 const fetchTopicPayloads = async () => {
   const topicResults = await searchByPrefix(TOPIC_PREFIX);
   return mapWithConcurrency(topicResults, async (item) => {
-      try {
-        const raw = await fetchResource(item.name, item.identifier);
-        return parseTopicPayload(raw);
-      } catch {
-        return null;
-      }
-    });
+    try {
+      const raw = await fetchResource(item.name, item.identifier);
+      return parseTopicPayload(raw);
+    } catch {
+      return null;
+    }
+  });
 };
 
 const fetchSubTopicPayloads = async () => {
   const subTopicResults = await searchByPrefix(SUBTOPIC_PREFIX);
   return mapWithConcurrency(subTopicResults, async (item) => {
-      try {
-        const raw = await fetchResource(item.name, item.identifier);
-        return parseSubTopicPayload(raw);
-      } catch {
-        return null;
-      }
-    });
+    try {
+      const raw = await fetchResource(item.name, item.identifier);
+      return parseSubTopicPayload(raw);
+    } catch {
+      return null;
+    }
+  });
 };
 
 const fetchPostPayloadsByPrefix = async (prefix: string) => {
   const postResults = await searchByPrefix(prefix);
   return mapWithConcurrency(postResults, async (item) => {
-      try {
-        const raw = await fetchResource(item.name, item.identifier);
-        return parsePostPayload(raw);
-      } catch {
-        return null;
-      }
-    });
+    try {
+      const raw = await fetchResource(item.name, item.identifier);
+      return parsePostPayload(raw);
+    } catch {
+      return null;
+    }
+  });
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 };
 
 const sanitizeAddressList = (value: unknown) => {
@@ -253,7 +276,7 @@ const sanitizeAddressList = (value: unknown) => {
   const next: string[] = [];
 
   value.forEach((entry) => {
-    if (typeof entry !== "string") {
+    if (typeof entry !== 'string') {
       return;
     }
 
@@ -275,11 +298,11 @@ const sanitizeTopic = (value: unknown): Topic | null => {
   }
 
   if (
-    typeof value.id !== "string" ||
-    typeof value.title !== "string" ||
-    typeof value.description !== "string" ||
-    typeof value.createdByUserId !== "string" ||
-    typeof value.createdAt !== "string"
+    typeof value.id !== 'string' ||
+    typeof value.title !== 'string' ||
+    typeof value.description !== 'string' ||
+    typeof value.createdByUserId !== 'string' ||
+    typeof value.createdAt !== 'string'
   ) {
     return null;
   }
@@ -290,14 +313,18 @@ const sanitizeTopic = (value: unknown): Topic | null => {
     description: value.description,
     createdByUserId: value.createdByUserId,
     createdAt: value.createdAt,
-    status: value.status === "locked" ? "locked" : "open",
-    visibility: value.visibility === "hidden" ? "hidden" : "visible",
+    sortOrder:
+      typeof value.sortOrder === 'number' && Number.isFinite(value.sortOrder)
+        ? value.sortOrder
+        : new Date(value.createdAt).getTime(),
+    status: value.status === 'locked' ? 'locked' : 'open',
+    visibility: value.visibility === 'hidden' ? 'hidden' : 'visible',
     subTopicAccess:
-      value.subTopicAccess === "moderators" ||
-      value.subTopicAccess === "admins" ||
-      value.subTopicAccess === "custom"
+      value.subTopicAccess === 'moderators' ||
+      value.subTopicAccess === 'admins' ||
+      value.subTopicAccess === 'custom'
         ? value.subTopicAccess
-        : "everyone",
+        : 'everyone',
     allowedAddresses: sanitizeAddressList(value.allowedAddresses),
   };
 };
@@ -308,13 +335,13 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
   }
 
   if (
-    typeof value.id !== "string" ||
-    typeof value.topicId !== "string" ||
-    typeof value.title !== "string" ||
-    typeof value.description !== "string" ||
-    typeof value.authorUserId !== "string" ||
-    typeof value.createdAt !== "string" ||
-    typeof value.lastPostAt !== "string"
+    typeof value.id !== 'string' ||
+    typeof value.topicId !== 'string' ||
+    typeof value.title !== 'string' ||
+    typeof value.description !== 'string' ||
+    typeof value.authorUserId !== 'string' ||
+    typeof value.createdAt !== 'string' ||
+    typeof value.lastPostAt !== 'string'
   ) {
     return null;
   }
@@ -327,8 +354,13 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
     authorUserId: value.authorUserId,
     createdAt: value.createdAt,
     lastPostAt: value.lastPostAt,
-    status: value.status === "locked" ? "locked" : "open",
-    visibility: value.visibility === "hidden" ? "hidden" : "visible",
+    isPinned: value.isPinned === true,
+    pinnedAt:
+      typeof value.pinnedAt === 'string' && value.pinnedAt.trim()
+        ? value.pinnedAt
+        : null,
+    status: value.status === 'locked' ? 'locked' : 'open',
+    visibility: value.visibility === 'hidden' ? 'hidden' : 'visible',
   };
 };
 
@@ -338,17 +370,17 @@ const isPost = (value: unknown): value is Post => {
   }
 
   return (
-    typeof value.id === "string" &&
-    typeof value.subTopicId === "string" &&
-    typeof value.authorUserId === "string" &&
-    typeof value.content === "string" &&
-    typeof value.createdAt === "string" &&
-    typeof value.likes === "number"
+    typeof value.id === 'string' &&
+    typeof value.subTopicId === 'string' &&
+    typeof value.authorUserId === 'string' &&
+    typeof value.content === 'string' &&
+    typeof value.createdAt === 'string' &&
+    typeof value.likes === 'number'
   );
 };
 
 const parseTopicPayload = (raw: unknown): TopicPayload | null => {
-  if (!isObject(raw) || raw.type !== "topic") {
+  if (!isObject(raw) || raw.type !== 'topic') {
     return null;
   }
 
@@ -357,18 +389,18 @@ const parseTopicPayload = (raw: unknown): TopicPayload | null => {
     return null;
   }
 
-  const status = raw.status === "deleted" ? "deleted" : "active";
+  const status = raw.status === 'deleted' ? 'deleted' : 'active';
   return {
     version: 1,
-    type: "topic",
+    type: 'topic',
     status,
-    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     topic,
   };
 };
 
 const parseSubTopicPayload = (raw: unknown): SubTopicPayload | null => {
-  if (!isObject(raw) || raw.type !== "subtopic") {
+  if (!isObject(raw) || raw.type !== 'subtopic') {
     return null;
   }
 
@@ -377,27 +409,27 @@ const parseSubTopicPayload = (raw: unknown): SubTopicPayload | null => {
     return null;
   }
 
-  const status = raw.status === "deleted" ? "deleted" : "active";
+  const status = raw.status === 'deleted' ? 'deleted' : 'active';
   return {
     version: 1,
-    type: "subtopic",
+    type: 'subtopic',
     status,
-    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     subTopic,
   };
 };
 
 const parsePostPayload = (raw: unknown): PostPayload | null => {
-  if (!isObject(raw) || raw.type !== "post" || !isPost(raw.post)) {
+  if (!isObject(raw) || raw.type !== 'post' || !isPost(raw.post)) {
     return null;
   }
 
-  const status = raw.status === "deleted" ? "deleted" : "active";
+  const status = raw.status === 'deleted' ? 'deleted' : 'active';
   return {
     version: 1,
-    type: "post",
+    type: 'post',
     status,
-    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     post: raw.post,
   };
 };
@@ -413,7 +445,7 @@ const publishPayload = async (
   assertIdentifierLength(identifier);
 
   await requestQortal<unknown>({
-    action: "PUBLISH_QDN_RESOURCE",
+    action: 'PUBLISH_QDN_RESOURCE',
     service: FORUM_SERVICE,
     name: ownerName,
     identifier,
@@ -431,30 +463,45 @@ export const forumQdnService = {
       fetchSubTopicPayloads(),
     ]);
 
-    const topicMap = mapLatestPayloads(topicPayloads, (payload) => payload.topic.id);
+    const topicMap = mapLatestPayloads(
+      topicPayloads,
+      (payload) => payload.topic.id
+    );
     const subTopicMap = mapLatestPayloads(
       subTopicPayloads,
       (payload) => payload.subTopic.id
     );
 
     const topics = [...topicMap.values()]
-      .filter((payload) => payload.status !== "deleted")
-      .map((payload) => payload.topic);
+      .filter((payload) => payload.status !== 'deleted')
+      .map((payload) => payload.topic)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
     const subTopics = [...subTopicMap.values()]
-      .filter((payload) => payload.status !== "deleted")
+      .filter((payload) => payload.status !== 'deleted')
       .map((payload) => payload.subTopic)
-      .filter((subTopic) => topics.some((topic) => topic.id === subTopic.topicId));
+      .filter((subTopic) =>
+        topics.some((topic) => topic.id === subTopic.topicId)
+      );
 
     return { topics, subTopics };
   },
 
   async loadPostsBySubTopic(subTopicId: string) {
-    const postPayloads = await fetchPostPayloadsByPrefix(toPostSearchPrefix());
+    const threadScopedPayloads = await fetchPostPayloadsByPrefix(
+      toThreadPostPrefix(subTopicId)
+    );
+    const postPayloads =
+      threadScopedPayloads.length > 0
+        ? threadScopedPayloads
+        : await fetchPostPayloadsByPrefix(toLegacyPostSearchPrefix());
 
-    const postMap = mapLatestPayloads(postPayloads, (payload) => payload.post.id);
+    const postMap = mapLatestPayloads(
+      postPayloads,
+      (payload) => payload.post.id
+    );
     const posts = [...postMap.values()]
-      .filter((payload) => payload.status !== "deleted")
+      .filter((payload) => payload.status !== 'deleted')
       .map((payload) => payload.post)
       .filter((post) => post.subTopicId === subTopicId);
 
@@ -466,8 +513,8 @@ export const forumQdnService = {
     const identifier = toTopicIdentifier(topic.id);
     const payload: TopicPayload = {
       version: 1,
-      type: "topic",
-      status: "active",
+      type: 'topic',
+      status: 'active',
       updatedAt: Date.now(),
       topic,
     };
@@ -478,10 +525,10 @@ export const forumQdnService = {
       payload,
       topic.title,
       topic.description,
-      ["forum", "topic", "qforum"]
+      ['forum', 'topic', 'qforum']
     );
 
-    await verifyPublication(resolvedOwner, identifier, "topic");
+    await verifyPublication(resolvedOwner, identifier, 'topic');
   },
 
   async publishSubTopic(subTopic: SubTopic, ownerName?: string) {
@@ -489,8 +536,8 @@ export const forumQdnService = {
     const identifier = toSubTopicIdentifier(subTopic.id);
     const payload: SubTopicPayload = {
       version: 1,
-      type: "subtopic",
-      status: "active",
+      type: 'subtopic',
+      status: 'active',
       updatedAt: Date.now(),
       subTopic,
     };
@@ -501,10 +548,10 @@ export const forumQdnService = {
       payload,
       subTopic.title,
       subTopic.description,
-      ["forum", "subtopic", "qforum"]
+      ['forum', 'subtopic', 'qforum']
     );
 
-    await verifyPublication(resolvedOwner, identifier, "subtopic");
+    await verifyPublication(resolvedOwner, identifier, 'subtopic');
   },
 
   async publishPost(post: Post, ownerName?: string) {
@@ -512,8 +559,8 @@ export const forumQdnService = {
     const identifier = toPostIdentifier(post);
     const payload: PostPayload = {
       version: 1,
-      type: "post",
-      status: "active",
+      type: 'post',
+      status: 'active',
       updatedAt: Date.now(),
       post,
     };
@@ -523,20 +570,21 @@ export const forumQdnService = {
       identifier,
       payload,
       `Forum post ${post.id}`,
-      "Qortal discussion board post",
-      ["forum", "post", "qforum"]
+      'Qortal discussion board post',
+      ['forum', 'post', 'qforum']
     );
 
-    await verifyPublication(resolvedOwner, identifier, "post");
+    await verifyPublication(resolvedOwner, identifier, 'post');
   },
 
   async deletePost(post: Post, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
     const identifier = toPostIdentifier(post);
+    const legacyIdentifier = toLegacyPostIdentifier(post);
     const payload: PostPayload = {
       version: 1,
-      type: "post",
-      status: "deleted",
+      type: 'post',
+      status: 'deleted',
       updatedAt: Date.now(),
       post,
     };
@@ -546,22 +594,38 @@ export const forumQdnService = {
       identifier,
       payload,
       `Delete forum post ${post.id}`,
-      "Qortal discussion board delete marker",
-      ["forum", "post", "qforum", "delete"]
+      'Qortal discussion board delete marker',
+      ['forum', 'post', 'qforum', 'delete']
     );
 
-    await verifyPublication(resolvedOwner, identifier, "post");
+    await verifyPublication(resolvedOwner, identifier, 'post');
+
+    // Publish a legacy tombstone too so older post identifiers stop reappearing
+    // while the thread gradually migrates to thread-scoped identifiers.
+    if (legacyIdentifier !== identifier) {
+      await publishPayload(
+        resolvedOwner,
+        legacyIdentifier,
+        payload,
+        `Delete forum post ${post.id}`,
+        'Qortal discussion board delete marker',
+        ['forum', 'post', 'qforum', 'delete', 'legacy']
+      );
+    }
   },
 
-  async publishPostImage(file: File, ownerName?: string): Promise<ForumPostImageReference> {
+  async publishPostImage(
+    file: File,
+    ownerName?: string
+  ): Promise<ForumPostImageReference> {
     const resolvedOwner = await resolveOwnerName(ownerName);
-    const imageId = generateForumEntityId("image", resolvedOwner);
+    const imageId = generateForumEntityId('image', resolvedOwner);
     const identifier = toImageIdentifier(imageId);
     assertIdentifierLength(identifier);
 
     await requestQortal<unknown>(
       {
-        action: "PUBLISH_QDN_RESOURCE",
+        action: 'PUBLISH_QDN_RESOURCE',
         service: FORUM_IMAGE_SERVICE,
         name: resolvedOwner,
         identifier,
@@ -603,7 +667,7 @@ export const forumQdnService = {
     }
 
     const resourceUrl = await requestQortal<string>({
-      action: "GET_QDN_RESOURCE_URL",
+      action: 'GET_QDN_RESOURCE_URL',
       service: reference.service,
       name: reference.name,
       identifier: reference.identifier,

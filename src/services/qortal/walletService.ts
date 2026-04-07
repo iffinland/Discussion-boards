@@ -1,4 +1,4 @@
-import { requestQortal } from "./qortalClient";
+import { requestQortal } from './qortalClient';
 
 export interface UserAccount {
   address: string;
@@ -17,13 +17,13 @@ const normalizeNames = (value: unknown): string[] => {
 
   return value
     .map((entry) => {
-      if (typeof entry === "string") {
+      if (typeof entry === 'string') {
         return entry;
       }
 
-      if (typeof entry === "object" && entry !== null) {
+      if (typeof entry === 'object' && entry !== null) {
         const candidate = (entry as AccountNameResponse).name;
-        return typeof candidate === "string" ? candidate : null;
+        return typeof candidate === 'string' ? candidate : null;
       }
 
       return null;
@@ -32,12 +32,12 @@ const normalizeNames = (value: unknown): string[] => {
 };
 
 export const getUserAccount = async (): Promise<UserAccount> => {
-  return requestQortal<UserAccount>({ action: "GET_USER_ACCOUNT" });
+  return requestQortal<UserAccount>({ action: 'GET_USER_ACCOUNT' });
 };
 
 export const getAccountNames = async (address: string): Promise<string[]> => {
   const raw = await requestQortal<unknown>({
-    action: "GET_ACCOUNT_NAMES",
+    action: 'GET_ACCOUNT_NAMES',
     address,
   });
 

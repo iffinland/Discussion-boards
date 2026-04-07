@@ -1,49 +1,51 @@
-# Backup ja taastamise kasutusjuhend
+# Backup and Restore Guide
 
-See juhend kirjeldab, kuidas kasutada tööruumi backupi ja taastamise skripte.
+This guide explains how to use the workspace backup and restore scripts.
 
-## Asukoht
+## Location
 
-- Backupid salvestatakse kausta: `~/REACT-PROJECTS/_workspace_backups/NodeFM`
-- Backup failinimi on kujul: `nodefm-workspace-YYYY-MM-DD_HH-MM-SS.tar.gz`
+- Backups are stored in `~/REACT-PROJECTS/_workspace_backups/NodeFM`
+- Backup filenames follow `nodefm-workspace-YYYY-MM-DD_HH-MM-SS.tar.gz`
 
-## Backupi loomine
+## Create a backup
 
-Käivita projektijuurest:
+Run from the project root:
 
 ```bash
 npm run backup:workspace
 ```
 
-See käsk:
-- loob kogu tööruumist `.tar.gz` backupi
-- lisab failinimele ajatembli
-- hoiab alles ainult 3 viimast backupi
-- kustutab automaatselt vanemad backupid
+This command:
 
-## Taastamine backupist
+- creates a `.tar.gz` backup of the workspace
+- adds a timestamp to the filename
+- keeps the 3 newest backups
+- removes older backups automatically
 
-Käivita projektijuurest:
+## Restore from a backup
+
+Run from the project root:
 
 ```bash
 npm run restore:workspace
 ```
 
-Taastamise voog:
-- kuvatakse nummerdatud loend olemasolevatest backupidest
-- valid taastatava backupi numbri järgi
-- kinnitad tegevuse kirjutades `RESTORE`
+Restore flow:
 
-## Tähtis hoiatus taastamisel
+- the script shows a numbered list of available backups
+- you choose the backup by number
+- you confirm the action by typing `RESTORE`
 
-Taastamine asendab tööruumi failid valitud backupi sisuga.
+## Important warning
 
-- Skript jätab alles `.git` kausta
-- Kõik muud tööruumi failid asendatakse backupi sisuga
+Restore replaces workspace files with the selected backup contents.
 
-## Otse skriptide käivitamine (alternatiiv)
+- the script keeps the `.git` directory
+- all other workspace files are replaced by the selected backup
 
-Soovi korral saad käivitada ka otse:
+## Run the scripts directly
+
+If needed, you can also run:
 
 ```bash
 bash scripts/backup-workspace.sh

@@ -1,7 +1,7 @@
-export type RichTextFormatType = "bold" | "italic" | "underline" | "quote";
+export type RichTextFormatType = 'bold' | 'italic' | 'underline' | 'quote';
 
 export type QdnImageTagReference = {
-  service: "IMAGE";
+  service: 'IMAGE';
   name: string;
   identifier: string;
   filename?: string;
@@ -16,7 +16,7 @@ export const RICH_TEXT_IMAGE_LIMITS = {
   maxBytes: 2 * 1024 * 1024,
   maxWidth: 1920,
   maxHeight: 1080,
-  acceptedTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+  acceptedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
 } as const;
 
 type ApplyWrapFormatInput = {
@@ -36,11 +36,11 @@ export type ApplyWrapFormatResult = {
 
 const escapeHtml = (value: string) =>
   value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const replacePatternRecursively = (
   value: string,
@@ -67,9 +67,9 @@ const sanitizeImageSource = (value: string): string | null => {
 
   const normalized = source.toLowerCase();
   if (
-    normalized.startsWith("https://") ||
-    normalized.startsWith("http://") ||
-    normalized.startsWith("data:image/")
+    normalized.startsWith('https://') ||
+    normalized.startsWith('http://') ||
+    normalized.startsWith('data:image/')
   ) {
     return source;
   }
@@ -87,8 +87,10 @@ const decodeQdnTagPart = (value: string) => {
   }
 };
 
-const parseQdnImageTagPayload = (payload: string): QdnImageTagReference | null => {
-  const [rawName, rawIdentifier] = payload.split("|");
+const parseQdnImageTagPayload = (
+  payload: string
+): QdnImageTagReference | null => {
+  const [rawName, rawIdentifier] = payload.split('|');
   if (!rawName || !rawIdentifier) {
     return null;
   }
@@ -100,7 +102,7 @@ const parseQdnImageTagPayload = (payload: string): QdnImageTagReference | null =
   }
 
   return {
-    service: "IMAGE",
+    service: 'IMAGE',
     name,
     identifier,
   };
@@ -117,12 +119,12 @@ export const encodeQdnImageTag = (reference: {
 
 export const extractQdnImageTags = (value: string): ParsedQdnImageTag[] => {
   const found: ParsedQdnImageTag[] = [];
-  const pattern = new RegExp(QDN_IMAGE_TAG_PATTERN.source, "gi");
+  const pattern = new RegExp(QDN_IMAGE_TAG_PATTERN.source, 'gi');
   let match = pattern.exec(value);
 
   while (match) {
     const rawTag = match[0];
-    const payload = match[1] ?? "";
+    const payload = match[1] ?? '';
     const reference = parseQdnImageTagPayload(payload);
     if (reference) {
       found.push({ rawTag, reference });
@@ -134,7 +136,7 @@ export const extractQdnImageTags = (value: string): ParsedQdnImageTag[] => {
 };
 
 export const stripQdnImageTags = (value: string) => {
-  return value.replace(QDN_IMAGE_TAG_PATTERN, "");
+  return value.replace(QDN_IMAGE_TAG_PATTERN, '');
 };
 
 export const applyWrapFormat = ({
@@ -143,7 +145,7 @@ export const applyWrapFormat = ({
   selectionEnd,
   openTag,
   closeTag,
-  placeholder = "text",
+  placeholder = 'text',
 }: ApplyWrapFormatInput): ApplyWrapFormatResult => {
   const before = value.slice(0, selectionStart);
   const selected = value.slice(selectionStart, selectionEnd);
@@ -168,10 +170,10 @@ export const applyWrapFormat = ({
 };
 
 export const formatToTags: Record<RichTextFormatType, [string, string]> = {
-  bold: ["[b]", "[/b]"],
-  italic: ["[i]", "[/i]"],
-  underline: ["[u]", "[/u]"],
-  quote: ["[quote]", "[/quote]"],
+  bold: ['[b]', '[/b]'],
+  italic: ['[i]', '[/i]'],
+  underline: ['[u]', '[/u]'],
+  quote: ['[quote]', '[/quote]'],
 };
 
 export const toRichTextHtml = (value: string): string => {
@@ -209,17 +211,13 @@ export const toRichTextHtml = (value: string): string => {
     (_full, content) => {
       const safeSource = sanitizeImageSource(content);
       if (!safeSource) {
-        return "";
+        return '';
       }
 
       return `<img src="${safeSource}" alt="Post image" loading="lazy" class="mt-2 max-h-48 w-auto max-w-full cursor-zoom-in rounded-md border border-slate-200 object-cover" data-preview-image="true" data-full-src="${safeSource}" />`;
     }
   );
-  html = replacePatternRecursively(
-    html,
-    QDN_IMAGE_TAG_PATTERN,
-    () => ""
-  );
+  html = replacePatternRecursively(html, QDN_IMAGE_TAG_PATTERN, () => '');
 
-  return html.replace(/\n/g, "<br/>");
+  return html.replace(/\n/g, '<br/>');
 };

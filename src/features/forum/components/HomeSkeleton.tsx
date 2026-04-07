@@ -1,4 +1,4 @@
-const pulseClass = "animate-pulse rounded-lg bg-slate-200/80";
+const pulseClass = 'animate-pulse rounded-lg bg-slate-200/80';
 
 const HomeSkeleton = () => {
   return (

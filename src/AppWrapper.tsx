@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
-import { GlobalProvider } from "qapp-core";
+import type { ReactNode } from 'react';
+import { GlobalProvider } from 'qapp-core';
 
-import { publicSalt, qappName } from "./qapp-config";
+import { publicSalt } from './qapp-config';
 
 type AppWrapperProps = {
   children: ReactNode;
@@ -11,7 +11,7 @@ export const AppWrapper = ({ children }: AppWrapperProps) => {
   return (
     <GlobalProvider
       config={{
-        appName: qappName,
+        appName: 'Discussion Boards',
         publicSalt,
         auth: {
           authenticateOnMount: true,

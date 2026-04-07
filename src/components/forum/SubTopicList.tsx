@@ -1,26 +1,34 @@
-import type { SubTopic, User } from "../../types";
+import type { SubTopic, User } from '../../types';
 
 type SubTopicListProps = {
   subTopics: SubTopic[];
   users: User[];
   onOpenThread: (subTopicId: string) => void;
   canManageSubTopics?: boolean;
+  onToggleSubTopicPin?: (subTopic: SubTopic) => void;
   onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
   onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
 };
 
 const formatDate = (date: string) =>
-  new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+  new Date(date).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   });
+
+const PinnedBadge = () => (
+  <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+    Pinned
+  </span>
+);
 
 const SubTopicList = ({
   subTopics,
   users,
   onOpenThread,
   canManageSubTopics = false,
+  onToggleSubTopicPin,
   onToggleSubTopicStatus,
   onToggleSubTopicVisibility,
 }: SubTopicListProps) => {
@@ -44,14 +52,19 @@ const SubTopicList = ({
                 className="grid w-full grid-cols-1 gap-1 text-left sm:grid-cols-[2fr_1fr_1fr] sm:gap-2"
               >
                 <span className="text-ui-strong font-medium">
+                  {subTopic.isPinned ? (
+                    <span className="mr-2 inline-flex align-middle">
+                      <PinnedBadge />
+                    </span>
+                  ) : null}
                   {subTopic.title}
                   <span className="text-ui-muted ml-2 text-xs">
-                    {subTopic.status === "locked" ? "Locked" : "Open"}
-                    {subTopic.visibility === "hidden" ? " • Hidden" : ""}
+                    {subTopic.status === 'locked' ? 'Locked' : 'Open'}
+                    {subTopic.visibility === 'hidden' ? ' • Hidden' : ''}
                   </span>
                 </span>
                 <span className="text-brand-primary-strong text-sm">
-                  {usernameMap.get(subTopic.authorUserId) ?? "Unknown User"}
+                  {usernameMap.get(subTopic.authorUserId) ?? 'Unknown User'}
                 </span>
                 <span className="text-ui-muted text-sm">
                   {formatDate(subTopic.lastPostAt)}
@@ -62,17 +75,24 @@ const SubTopicList = ({
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => onToggleSubTopicPin?.(subTopic)}
+                    className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+                  >
+                    {subTopic.isPinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onToggleSubTopicStatus?.(subTopic)}
                     className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
                   >
-                    {subTopic.status === "locked" ? "Unlock" : "Lock"}
+                    {subTopic.status === 'locked' ? 'Unlock' : 'Lock'}
                   </button>
                   <button
                     type="button"
                     onClick={() => onToggleSubTopicVisibility?.(subTopic)}
                     className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
                   >
-                    {subTopic.visibility === "hidden" ? "Show" : "Hide"}
+                    {subTopic.visibility === 'hidden' ? 'Show' : 'Hide'}
                   </button>
                 </div>
               ) : null}

@@ -1,6 +1,6 @@
-import App from "./App";
-import { AppWrapper } from "./AppWrapper";
-import { ForumProvider } from "./context/ForumContext";
+import App from './App';
+import { AppWrapper } from './AppWrapper';
+import { ForumProvider } from './context/ForumContext';
 
 const RootApp = () => {
   return (

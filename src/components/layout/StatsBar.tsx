@@ -1,31 +1,36 @@
-import { useLocation } from "react-router-dom";
+import { useLocation } from 'react-router-dom';
 
-import { useForumData } from "../../hooks/useForumData";
+import { useForumData } from '../../hooks/useForumData';
 
-const StatsBar = () => {
-  const { topics, subTopics, posts, searchQuery, setSearchQuery } = useForumData();
+type StatsBarProps = {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+};
+
+const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
+  const { topics, subTopics, posts } = useForumData();
   const location = useLocation();
-  const placeholder = location.pathname.startsWith("/thread/")
-    ? "Search posts in this thread"
-    : "Search main topics and sub-topics";
+  const placeholder = location.pathname.startsWith('/thread/')
+    ? 'Search posts in this thread'
+    : 'Search main topics and sub-topics';
 
   return (
     <div className="bg-forum-stats border-brand-primary border-b">
       <div className="text-ui-muted mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2 text-xs sm:px-6">
         <span className="forum-pill-primary rounded-md px-2 py-1">
-          Total Topics:{" "}
+          Total Topics:{' '}
           <strong className="text-brand-primary-strong font-semibold">
             {topics.length}
           </strong>
         </span>
         <span className="forum-pill-primary rounded-md px-2 py-1">
-          Total Sub-Topics:{" "}
+          Total Sub-Topics:{' '}
           <strong className="text-brand-primary-strong font-semibold">
             {subTopics.length}
           </strong>
         </span>
         <span className="forum-pill-primary rounded-md px-2 py-1">
-          Total Posts:{" "}
+          Total Posts:{' '}
           <strong className="text-brand-primary-strong font-semibold">
             {posts.length}
           </strong>
@@ -38,7 +43,7 @@ const StatsBar = () => {
             id="forum-search"
             type="search"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => onSearchQueryChange(event.target.value)}
             placeholder={placeholder}
             className="bg-surface-card text-ui-strong placeholder:text-ui-muted w-full rounded-md border border-slate-200 px-3 py-2 text-xs"
           />

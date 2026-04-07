@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 
 import {
   extractQdnImageTags,
   stripQdnImageTags,
   toRichTextHtml,
-} from "../../services/forum/richText";
-import { forumQdnService } from "../../services/qdn/forumQdnService";
-import ImagePreviewModal from "./ImagePreviewModal";
+} from '../../services/forum/richText';
+import { forumQdnService } from '../../services/qdn/forumQdnService';
+import ImagePreviewModal from './ImagePreviewModal';
 
 type RichTextContentProps = {
   value: string;
@@ -23,11 +23,11 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
       return;
     }
 
-    if (target.dataset.previewImage !== "true") {
+    if (target.dataset.previewImage !== 'true') {
       return;
     }
 
-    const source = target.dataset.fullSrc ?? target.getAttribute("src");
+    const source = target.dataset.fullSrc ?? target.getAttribute('src');
     if (!source) {
       return;
     }
@@ -58,16 +58,18 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
 
         if (!resolvedUrlCache.has(key)) {
           try {
-            resourceUrl = await forumQdnService.getPostImageResourceUrl(tag.reference);
+            resourceUrl = await forumQdnService.getPostImageResourceUrl(
+              tag.reference
+            );
           } catch {
             resourceUrl = null;
           }
           resolvedUrlCache.set(key, resourceUrl);
         }
 
-        nextValue = nextValue.split(tag.rawTag).join(
-          resourceUrl ? `[img]${resourceUrl}[/img]` : ""
-        );
+        nextValue = nextValue
+          .split(tag.rawTag)
+          .join(resourceUrl ? `[img]${resourceUrl}[/img]` : '');
       }
 
       if (active) {

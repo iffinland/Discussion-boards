@@ -1,14 +1,14 @@
-import { useRef, useState } from "react";
+import { useRef, useState } from 'react';
 
-import RichTextContent from "../../../components/forum/RichTextContent";
-import RichTextToolsModal from "../../../components/forum/RichTextToolsModal";
+import RichTextContent from '../../../components/forum/RichTextContent';
+import RichTextToolsModal from '../../../components/forum/RichTextToolsModal';
 import {
   applyWrapFormat,
   formatToTags,
   type RichTextFormatType,
-} from "../../../services/forum/richText";
-import type { Post, User } from "../../../types";
-import PostActionsModal from "./PostActionsModal";
+} from '../../../services/forum/richText';
+import type { Post, User } from '../../../types';
+import PostActionsModal from './PostActionsModal';
 
 type ThreadPostCardProps = {
   post: Post;
@@ -25,19 +25,19 @@ type ThreadPostCardProps = {
 };
 
 const formatDateTime = (value: string) =>
-  new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+  new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   });
 
 const getInitials = (name: string) =>
   name
-    .split(" ")
+    .split(' ')
     .map((part) => part[0])
-    .join("")
+    .join('')
     .slice(0, 2)
     .toUpperCase();
 
@@ -54,8 +54,8 @@ const ThreadPostCard = ({
   onEdit,
   onDelete,
 }: ThreadPostCardProps) => {
-  const displayName = author?.displayName ?? "Unknown User";
-  const avatarColor = author?.avatarColor ?? "bg-cyan-500";
+  const displayName = author?.displayName ?? 'Unknown User';
+  const avatarColor = author?.avatarColor ?? 'bg-cyan-500';
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(post.content);
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false);
@@ -112,7 +112,7 @@ const ThreadPostCard = ({
   };
 
   const handleDraftColor = (color: string) => {
-    applyDraftFormatting(`[color=${color}]`, "[/color]");
+    applyDraftFormatting(`[color=${color}]`, '[/color]');
   };
 
   return (
@@ -126,8 +126,12 @@ const ThreadPostCard = ({
             {getInitials(displayName)}
           </div>
           <div>
-            <p className="text-ui-strong text-sm font-semibold">{displayName}</p>
-            <p className="text-ui-muted text-xs">{formatDateTime(post.createdAt)}</p>
+            <p className="text-ui-strong text-sm font-semibold">
+              {displayName}
+            </p>
+            <p className="text-ui-muted text-xs">
+              {formatDateTime(post.createdAt)}
+            </p>
           </div>
         </div>
         <button

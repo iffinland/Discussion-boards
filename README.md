@@ -1,63 +1,107 @@
-# React + TypeScript + Vite
+# Qortal Discussion Boards
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Qortal Discussion Boards is a Qortal qApp for managing forum-style conversations on QDN.
+It supports main topics, sub-topics, thread replies, role-based moderation, image attachments,
+and Qortal-native authentication through `qapp-core`.
 
-Currently, two official plugins are available:
+## What the app does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Loads forum structure from QDN resources.
+- Loads thread posts on demand instead of pulling the full post set on first render.
+- Uses persistent thread search indexes and local cache to reduce repeated QDN reads.
+- Supports forum roles backed by a QDN role registry.
+- Runs inside the Qortal environment with relative asset paths and QDN readiness handling.
 
-## Expanding the ESLint configuration
+## Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React 19
+- TypeScript
+- Vite
+- `qapp-core`
+- React Router
+- ESLint + Prettier
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-});
+## Project structure
+
+```text
+src/
+  components/          Shared UI building blocks
+  context/             App-wide forum state orchestration
+  features/forum/      Forum feature hooks and feature-level components
+  hooks/               Small app-facing hooks
+  pages/               Route-level screens
+  services/forum/      Search, rich text, cache, and ID helpers
+  services/qdn/        QDN reads, writes, readiness, indexes, and roles
+  services/qortal/     Qortal bridge and wallet helpers
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Qortal-specific rules
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x';
-import reactDom from 'eslint-plugin-react-dom';
+- Vite build base is set to `./` for Qortal compatibility.
+- Static assets must stay relative-path friendly.
+- QDN resources are treated as asynchronous and may require readiness polling.
+- Thread content should prefer thread-scoped indexes and caches before broader fallback scans.
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-});
+## Environment variables
+
+See [.env.example](/home/iffiolen/VS-Code-Projects/REACT-PROJECTS/Qortal_Discussions_Boards/discussion-boards-2026/.env.example).
+
+- `VITE_QORTAL_QDN_SERVICE`: primary QDN service for forum data.
+- `VITE_QORTAL_QDN_IMAGE_SERVICE`: QDN service used for uploaded images.
+- `VITE_QORTAL_QDN_IDENTIFIER`: namespace prefix used for forum resources.
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
 ```
 
-## Internationalization of the app (I18N)
+Start the dev server:
 
-This template supports internationalization (i18n) using [i18next](https://www.i18next.com/), allowing seamless translation of UI text into multiple languages.
-The setup includes modularized translation files (namespaces), language detection, context and runtime language switching.
+```bash
+npm run dev
+```
 
-Files with translation are in `src/i18n/locales/<locale>` folder.
+Run lint:
 
-`core` namespace is already present and active.
+```bash
+npm run lint
+```
+
+Run a TypeScript build check:
+
+```bash
+npx tsc -b
+```
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+## Utility scripts
+
+- `npm run backup:workspace`
+- `npm run restore:workspace`
+- `npm run test:richtext`
+
+The backup and restore flow is documented in
+[scripts/BACKUP-RESTORE.md](/home/iffiolen/VS-Code-Projects/REACT-PROJECTS/Qortal_Discussions_Boards/discussion-boards-2026/scripts/BACKUP-RESTORE.md).
+
+## Current architecture notes
+
+- `ForumProvider` owns forum data loading, thread loading, and cache warming.
+- `forumSearchIndexService` provides persistent topic and thread indexes.
+- `forumQdnService` handles QDN publish/read flows for topics, sub-topics, posts, and images.
+- `forumRolesService` resolves the forum role registry from trusted QDN resources.
+
+## Verification status
+
+At the time of the latest maintenance pass:
+
+- `npm run lint` passes
+- `npx tsc -b` passes
+- `npm run build` should be used as the final production verification step before release

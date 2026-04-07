@@ -1,7 +1,7 @@
 declare const qortalRequest: unknown;
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 };
 
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -12,19 +12,19 @@ interface QortalRequestOptions {
 
 const parseRequestError = (response: unknown): string | null => {
   if (response === null || response === undefined) {
-    return "Qortal request returned an empty response.";
+    return 'Qortal request returned an empty response.';
   }
 
-  if (typeof response === "string") {
+  if (typeof response === 'string') {
     const trimmed = response.trim();
 
     if (!trimmed) {
-      return "Qortal request returned an empty response.";
+      return 'Qortal request returned an empty response.';
     }
 
     if (
-      trimmed.toLowerCase() === "false" ||
-      trimmed.toLowerCase().startsWith("error")
+      trimmed.toLowerCase() === 'false' ||
+      trimmed.toLowerCase().startsWith('error')
     ) {
       return trimmed;
     }
@@ -36,34 +36,34 @@ const parseRequestError = (response: unknown): string | null => {
     return null;
   }
 
-  if (typeof response.error === "string" && response.error.trim()) {
+  if (typeof response.error === 'string' && response.error.trim()) {
     return response.error;
   }
 
-  if (typeof response.message === "string" && response.message.trim()) {
+  if (typeof response.message === 'string' && response.message.trim()) {
     return response.message;
   }
 
   if (response.error === true || response.success === false) {
-    return "Qortal request failed.";
+    return 'Qortal request failed.';
   }
 
   return null;
 };
 
 const getQortalRequest = () => {
-  if (typeof qortalRequest === "function") {
+  if (typeof qortalRequest === 'function') {
     return qortalRequest;
   }
 
   const globalRequest = (
     globalThis as typeof globalThis & { qortalRequest?: unknown }
   ).qortalRequest;
-  if (typeof globalRequest === "function") {
+  if (typeof globalRequest === 'function') {
     return globalRequest;
   }
 
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
 
@@ -76,24 +76,24 @@ const getQortalRequest = () => {
     parentRequest = null;
   }
 
-  if (typeof parentRequest === "function") {
+  if (typeof parentRequest === 'function') {
     return parentRequest;
   }
 
-  const localRequest = (window as Window & { qortalRequest?: unknown }).qortalRequest;
-  if (typeof localRequest === "function") {
+  const localRequest = (window as Window & { qortalRequest?: unknown })
+    .qortalRequest;
+  if (typeof localRequest === 'function') {
     return localRequest;
   }
 
   let topRequest: unknown = null;
   try {
-    topRequest = (
-      window as Window & { top?: { qortalRequest?: unknown } }
-    ).top?.qortalRequest;
+    topRequest = (window as Window & { top?: { qortalRequest?: unknown } }).top
+      ?.qortalRequest;
   } catch {
     topRequest = null;
   }
-  if (typeof topRequest === "function") {
+  if (typeof topRequest === 'function') {
     return topRequest;
   }
 
@@ -101,7 +101,7 @@ const getQortalRequest = () => {
 };
 
 export const isQortalRequestAvailable = () => {
-  return typeof getQortalRequest() === "function";
+  return typeof getQortalRequest() === 'function';
 };
 
 export const requestQortal = async <TResponse>(
@@ -111,16 +111,18 @@ export const requestQortal = async <TResponse>(
   const qortalRequest = getQortalRequest();
 
   if (!qortalRequest) {
-    throw new Error("Qortal request interface is not available in this environment.");
+    throw new Error(
+      'Qortal request interface is not available in this environment.'
+    );
   }
 
   const action =
-    typeof payload.action === "string" ? payload.action : "UNKNOWN_ACTION";
+    typeof payload.action === 'string' ? payload.action : 'UNKNOWN_ACTION';
   const service =
-    typeof payload.service === "string" ? payload.service : undefined;
+    typeof payload.service === 'string' ? payload.service : undefined;
   const identifier =
-    typeof payload.identifier === "string" ? payload.identifier : undefined;
-  const label = [action, service, identifier].filter(Boolean).join(":");
+    typeof payload.identifier === 'string' ? payload.identifier : undefined;
+  const label = [action, service, identifier].filter(Boolean).join(':');
   const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
   let didTimeout = false;

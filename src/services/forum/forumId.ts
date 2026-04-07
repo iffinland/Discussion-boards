@@ -2,7 +2,7 @@ const TIME_PART_LENGTH = 10;
 const RANDOM_PART_LENGTH = 16;
 const OWNER_HASH_LENGTH = 4;
 
-const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 const hashString = (value: string): number => {
   let hash = 2166136261;
@@ -15,7 +15,10 @@ const hashString = (value: string): number => {
 };
 
 const randomBytes = (length: number): Uint8Array => {
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.getRandomValues === 'function'
+  ) {
     return crypto.getRandomValues(new Uint8Array(length));
   }
 
@@ -28,7 +31,7 @@ const randomBytes = (length: number): Uint8Array => {
 
 const encodeTime = (value: number, length: number) => {
   let input = value;
-  let output = "";
+  let output = '';
 
   while (output.length < length) {
     output = ALPHABET[input % 32] + output;
@@ -40,7 +43,7 @@ const encodeTime = (value: number, length: number) => {
 
 const encodeRandom = (length: number) => {
   const bytes = randomBytes(length);
-  let output = "";
+  let output = '';
 
   for (let index = 0; index < length; index += 1) {
     output += ALPHABET[bytes[index] % 32];
@@ -51,15 +54,18 @@ const encodeRandom = (length: number) => {
 
 export const toPartitionKey = (input: string, length = 8): string => {
   const hashed = hashString(input);
-  return hashed.toString(36).padStart(length, "0").slice(0, length);
+  return hashed.toString(36).padStart(length, '0').slice(0, length);
 };
 
 export const generateForumEntityId = (
-  entity: "topic" | "subtopic" | "post" | "image",
+  entity: 'topic' | 'subtopic' | 'post' | 'image',
   ownerHint?: string
 ): string => {
   const timePart = encodeTime(Date.now(), TIME_PART_LENGTH);
-  const ownerPart = toPartitionKey(ownerHint?.toLowerCase() ?? "", OWNER_HASH_LENGTH);
+  const ownerPart = toPartitionKey(
+    ownerHint?.toLowerCase() ?? '',
+    OWNER_HASH_LENGTH
+  );
   const randomPart = encodeRandom(RANDOM_PART_LENGTH);
   return `${entity}_${timePart}${ownerPart}_${randomPart}`;
 };

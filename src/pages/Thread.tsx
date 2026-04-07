@@ -1,1 +1,1 @@
-export { default } from "./ThreadPage";
+export { default } from './ThreadPage';

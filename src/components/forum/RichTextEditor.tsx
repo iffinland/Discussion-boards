@@ -1,12 +1,18 @@
-import { type ChangeEvent, type FormEvent, useId, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   applyWrapFormat,
   formatToTags,
   RICH_TEXT_IMAGE_LIMITS,
   type RichTextFormatType,
-} from "../../services/forum/richText";
-import RichTextToolsModal from "./RichTextToolsModal";
+} from '../../services/forum/richText';
+import RichTextToolsModal from './RichTextToolsModal';
 
 type RichTextEditorProps = {
   value: string;
@@ -21,7 +27,7 @@ const RichTextEditor = ({
   onChange,
   onSubmit,
   onUploadImage,
-  placeholder = "Write your reply...",
+  placeholder = 'Write your reply...',
 }: RichTextEditorProps) => {
   const editorId = useId();
   const fileInputId = useId();
@@ -70,7 +76,7 @@ const RichTextEditor = ({
   };
 
   const handleColor = (color: string) => {
-    applyFormatting(`[color=${color}]`, "[/color]");
+    applyFormatting(`[color=${color}]`, '[/color]');
   };
 
   const insertImageTag = (imageSource: string) => {
@@ -84,8 +90,8 @@ const RichTextEditor = ({
       value,
       selectionStart: cursor,
       selectionEnd: cursor,
-      openTag: "[img]",
-      closeTag: "[/img]",
+      openTag: '[img]',
+      closeTag: '[/img]',
       placeholder: imageSource,
     });
 
@@ -122,15 +128,15 @@ const RichTextEditor = ({
   const loadImageDimensions = async (file: File) => {
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error("Failed to read image file."));
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(new Error('Failed to read image file.'));
       reader.readAsDataURL(file);
     });
 
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Failed to decode image."));
+      img.onerror = () => reject(new Error('Failed to decode image.'));
       img.src = dataUrl;
     });
 
@@ -139,7 +145,7 @@ const RichTextEditor = ({
 
   const handleImageSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    event.target.value = "";
+    event.target.value = '';
 
     if (!file) {
       return;
@@ -150,12 +156,12 @@ const RichTextEditor = ({
         file.type as (typeof RICH_TEXT_IMAGE_LIMITS.acceptedTypes)[number]
       )
     ) {
-      setEditorInfo("Unsupported image type. Use JPG, PNG, WEBP or GIF.");
+      setEditorInfo('Unsupported image type. Use JPG, PNG, WEBP or GIF.');
       return;
     }
 
     if (file.size > RICH_TEXT_IMAGE_LIMITS.maxBytes) {
-      setEditorInfo("Image is too large. Maximum allowed size is 2 MB.");
+      setEditorInfo('Image is too large. Maximum allowed size is 2 MB.');
       return;
     }
 
@@ -165,12 +171,12 @@ const RichTextEditor = ({
         loaded.width > RICH_TEXT_IMAGE_LIMITS.maxWidth ||
         loaded.height > RICH_TEXT_IMAGE_LIMITS.maxHeight
       ) {
-        setEditorInfo("Image dimensions exceed 1920x1080 limit.");
+        setEditorInfo('Image dimensions exceed 1920x1080 limit.');
         return;
       }
 
       if (onUploadImage) {
-        setEditorInfo("Uploading image to QDN...");
+        setEditorInfo('Uploading image to QDN...');
         const imageTag = await onUploadImage(file);
         insertRawAtCursor(imageTag);
       } else {
@@ -181,7 +187,9 @@ const RichTextEditor = ({
       );
     } catch (error) {
       setEditorInfo(
-        error instanceof Error ? error.message : "Unable to insert selected image."
+        error instanceof Error
+          ? error.message
+          : 'Unable to insert selected image.'
       );
     }
   };
@@ -192,28 +200,28 @@ const RichTextEditor = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => handleFormat("bold")}
+            onClick={() => handleFormat('bold')}
             className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
             Bold
           </button>
           <button
             type="button"
-            onClick={() => handleFormat("italic")}
+            onClick={() => handleFormat('italic')}
             className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
             Italic
           </button>
           <button
             type="button"
-            onClick={() => handleFormat("underline")}
+            onClick={() => handleFormat('underline')}
             className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
             Underline
           </button>
           <button
             type="button"
-            onClick={() => handleFormat("quote")}
+            onClick={() => handleFormat('quote')}
             className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
             Quote
@@ -228,10 +236,10 @@ const RichTextEditor = ({
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {[
-            { label: "Black", value: "#111827" },
-            { label: "Blue", value: "#2563EB" },
-            { label: "Green", value: "#16A34A" },
-            { label: "Red", value: "#DC2626" },
+            { label: 'Black', value: '#111827' },
+            { label: 'Blue', value: '#2563EB' },
+            { label: 'Green', value: '#16A34A' },
+            { label: 'Red', value: '#DC2626' },
           ].map((color) => (
             <button
               key={color.value}
@@ -251,7 +259,7 @@ const RichTextEditor = ({
             ref={imageInputRef}
             id={fileInputId}
             type="file"
-            accept={RICH_TEXT_IMAGE_LIMITS.acceptedTypes.join(",")}
+            accept={RICH_TEXT_IMAGE_LIMITS.acceptedTypes.join(',')}
             className="hidden"
             onChange={handleImageSelected}
           />

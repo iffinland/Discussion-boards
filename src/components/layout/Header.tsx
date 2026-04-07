@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 
-import { useForumData } from "../../hooks/useForumData";
+import { useForumData } from '../../hooks/useForumData';
 
-type ThemeMode = "light-cyan" | "soft-cyan";
+type ThemeMode = 'light-cyan' | 'soft-cyan';
 
 type HeaderProps = {
   themeMode: ThemeMode;
@@ -14,9 +20,9 @@ const SunIcon = ({ active }: { active: boolean }) => (
     viewBox="0 0 24 24"
     aria-hidden="true"
     className={[
-      "h-4 w-4 transition",
-      active ? "text-brand-accent-strong" : "text-ui-muted",
-    ].join(" ")}
+      'h-4 w-4 transition',
+      active ? 'text-brand-accent-strong' : 'text-ui-muted',
+    ].join(' ')}
     fill="none"
     stroke="currentColor"
     strokeWidth="1.8"
@@ -33,9 +39,9 @@ const MoonIcon = ({ active }: { active: boolean }) => (
     viewBox="0 0 24 24"
     aria-hidden="true"
     className={[
-      "h-4 w-4 transition",
-      active ? "text-brand-primary-strong" : "text-ui-muted",
-    ].join(" ")}
+      'h-4 w-4 transition',
+      active ? 'text-brand-primary-strong' : 'text-ui-muted',
+    ].join(' ')}
     fill="none"
     stroke="currentColor"
     strokeWidth="1.8"
@@ -48,14 +54,14 @@ const MoonIcon = ({ active }: { active: boolean }) => (
 
 const initialsFromName = (name: string | null) => {
   if (!name) {
-    return "Q";
+    return 'Q';
   }
 
   return name
-    .split(" ")
+    .split(' ')
     .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
     .slice(0, 2);
 };
 
@@ -86,14 +92,17 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
       }
 
       const target = event.target;
-      if (target instanceof Node && !nameMenuContainerRef.current.contains(target)) {
+      if (
+        target instanceof Node &&
+        !nameMenuContainerRef.current.contains(target)
+      ) {
         setIsNameMenuOpen(false);
       }
     };
 
-    window.addEventListener("click", closeIfOutside);
+    window.addEventListener('click', closeIfOutside);
     return () => {
-      window.removeEventListener("click", closeIfOutside);
+      window.removeEventListener('click', closeIfOutside);
     };
   }, []);
 
@@ -102,7 +111,9 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
       return;
     }
 
-    const activeIndex = availableAuthNames.findIndex((name) => name === activeAuthName);
+    const activeIndex = availableAuthNames.findIndex(
+      (name) => name === activeAuthName
+    );
     const nextIndex = activeIndex >= 0 ? activeIndex : 0;
     setHighlightedNameIndex(nextIndex);
   }, [activeAuthName, availableAuthNames, isNameMenuOpen]);
@@ -131,12 +142,12 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
     }
 
     switch (event.key) {
-      case "Escape":
+      case 'Escape':
         event.preventDefault();
         setIsNameMenuOpen(false);
         nameMenuTriggerRef.current?.focus();
         return;
-      case "Tab": {
+      case 'Tab': {
         event.preventDefault();
         if (event.shiftKey) {
           setHighlightedNameIndex((current) =>
@@ -149,26 +160,26 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
         }
         return;
       }
-      case "ArrowDown":
+      case 'ArrowDown':
         event.preventDefault();
         setHighlightedNameIndex((current) =>
           Math.min(current + 1, availableAuthNames.length - 1)
         );
         return;
-      case "ArrowUp":
+      case 'ArrowUp':
         event.preventDefault();
         setHighlightedNameIndex((current) => Math.max(current - 1, 0));
         return;
-      case "Home":
+      case 'Home':
         event.preventDefault();
         setHighlightedNameIndex(0);
         return;
-      case "End":
+      case 'End':
         event.preventDefault();
         setHighlightedNameIndex(availableAuthNames.length - 1);
         return;
-      case "Enter":
-      case " ":
+      case 'Enter':
+      case ' ':
         event.preventDefault();
         selectHighlightedName();
         return;
@@ -182,7 +193,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
       return;
     }
 
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setIsNameMenuOpen(true);
     }
@@ -192,8 +203,8 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
     <header className="bg-forum-header border-brand-primary sticky top-0 z-20 border-b backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <h1 className="text-xl tracking-tight">
-          <span className="text-brand-primary font-bold">Qortal</span>{" "}
-          <span className="text-ui-strong font-semibold">Discussion</span>{" "}
+          <span className="text-brand-primary font-bold">Qortal</span>{' '}
+          <span className="text-ui-strong font-semibold">Discussion</span>{' '}
           <span className="text-brand-accent font-bold">Boards</span>
         </h1>
 
@@ -202,22 +213,25 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
             type="button"
             onClick={onToggleTheme}
             aria-label={
-              themeMode === "light-cyan"
-                ? "Switch to Soft Cyan theme"
-                : "Switch to Light Cyan theme"
+              themeMode === 'light-cyan'
+                ? 'Switch to Soft Cyan theme'
+                : 'Switch to Light Cyan theme'
             }
             title={
-              themeMode === "light-cyan"
-                ? "Switch to Soft Cyan"
-                : "Switch to Light Cyan"
+              themeMode === 'light-cyan'
+                ? 'Switch to Soft Cyan'
+                : 'Switch to Light Cyan'
             }
             className="forum-pill-primary flex items-center gap-2 rounded-md px-3 py-2"
           >
-            <SunIcon active={themeMode === "light-cyan"} />
-            <MoonIcon active={themeMode === "soft-cyan"} />
+            <SunIcon active={themeMode === 'light-cyan'} />
+            <MoonIcon active={themeMode === 'soft-cyan'} />
           </button>
 
-          <div className="forum-card border-brand-primary relative px-2 py-2" ref={nameMenuContainerRef}>
+          <div
+            className="forum-card border-brand-primary relative px-2 py-2"
+            ref={nameMenuContainerRef}
+          >
             <button
               type="button"
               ref={nameMenuTriggerRef}
@@ -244,9 +258,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                 <p className="text-ui-strong text-sm font-semibold">
                   {activeAuthName ?? currentUser.displayName}
                 </p>
-                <p className="text-ui-muted text-xs">
-                  {currentUser.role}
-                </p>
+                <p className="text-ui-muted text-xs">{currentUser.role}</p>
                 {authenticatedAddress ? (
                   <p className="text-ui-muted max-w-48 truncate text-[11px]">
                     {authenticatedAddress}
@@ -255,7 +267,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
               </div>
               {canOpenNameMenu ? (
                 <span className="text-ui-muted text-xs">
-                  {isNameMenuOpen ? "▴" : "▾"}
+                  {isNameMenuOpen ? '▴' : '▾'}
                 </span>
               ) : null}
             </button>
@@ -263,11 +275,11 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
             {canOpenNameMenu ? (
               <div
                 className={[
-                  "bg-surface-card absolute right-0 top-[calc(100%+6px)] z-30 min-w-44 rounded-md border border-slate-200 p-1 shadow-lg transition-all duration-150 ease-out",
+                  'bg-surface-card absolute right-0 top-[calc(100%+6px)] z-30 min-w-44 rounded-md border border-slate-200 p-1 shadow-lg transition-all duration-150 ease-out',
                   isNameMenuOpen
-                    ? "pointer-events-auto translate-y-0 opacity-100"
-                    : "pointer-events-none -translate-y-1 opacity-0",
-                ].join(" ")}
+                    ? 'pointer-events-auto translate-y-0 opacity-100'
+                    : 'pointer-events-none -translate-y-1 opacity-0',
+                ].join(' ')}
                 role="menu"
                 aria-hidden={!isNameMenuOpen}
                 onKeyDown={handleNameMenuKeyDown}
@@ -288,11 +300,11 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                       setIsNameMenuOpen(false);
                     }}
                     className={[
-                      "block w-full rounded-md px-3 py-2 text-left text-xs font-medium transition",
+                      'block w-full rounded-md px-3 py-2 text-left text-xs font-medium transition',
                       index === highlightedNameIndex || name === activeAuthName
-                        ? "bg-cyan-50 text-cyan-700"
-                        : "text-slate-700 hover:bg-slate-100",
-                    ].join(" ")}
+                        ? 'bg-cyan-50 text-cyan-700'
+                        : 'text-slate-700 hover:bg-slate-100',
+                    ].join(' ')}
                   >
                     {name}
                   </button>

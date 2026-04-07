@@ -1,7 +1,7 @@
-import type { Post } from "../../types";
+import type { Post } from '../../types';
 
-const STORAGE_PREFIX = "forum-thread-posts:";
-const INDEX_KEY = "forum-thread-posts:index";
+const STORAGE_PREFIX = 'forum-thread-posts:';
+const INDEX_KEY = 'forum-thread-posts:index';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 type ThreadPostCacheEntry = {
@@ -15,25 +15,25 @@ type ThreadIndexEntry = {
 };
 
 const isValidPost = (value: unknown): value is Post => {
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== 'object' || value === null) {
     return false;
   }
 
   const maybePost = value as Record<string, unknown>;
   return (
-    typeof maybePost.id === "string" &&
-    typeof maybePost.subTopicId === "string" &&
-    typeof maybePost.authorUserId === "string" &&
-    typeof maybePost.content === "string" &&
-    typeof maybePost.createdAt === "string" &&
-    typeof maybePost.likes === "number"
+    typeof maybePost.id === 'string' &&
+    typeof maybePost.subTopicId === 'string' &&
+    typeof maybePost.authorUserId === 'string' &&
+    typeof maybePost.content === 'string' &&
+    typeof maybePost.createdAt === 'string' &&
+    typeof maybePost.likes === 'number'
   );
 };
 
 const getStorageKey = (subTopicId: string) => `${STORAGE_PREFIX}${subTopicId}`;
 
 const readIndex = (): ThreadIndexEntry[] => {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return [];
   }
 
@@ -49,11 +49,12 @@ const readIndex = (): ThreadIndexEntry[] => {
     }
 
     return parsed
-      .filter((entry) => typeof entry === "object" && entry !== null)
+      .filter((entry) => typeof entry === 'object' && entry !== null)
       .map((entry) => entry as Partial<ThreadIndexEntry>)
       .filter(
         (entry): entry is ThreadIndexEntry =>
-          typeof entry.subTopicId === "string" && typeof entry.updatedAt === "number"
+          typeof entry.subTopicId === 'string' &&
+          typeof entry.updatedAt === 'number'
       );
   } catch {
     return [];
@@ -61,7 +62,7 @@ const readIndex = (): ThreadIndexEntry[] => {
 };
 
 const writeIndex = (entries: ThreadIndexEntry[]) => {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -79,7 +80,7 @@ const updateIndex = (subTopicId: string) => {
 };
 
 const readCacheEntry = (subTopicId: string): ThreadPostCacheEntry | null => {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
 
@@ -90,7 +91,7 @@ const readCacheEntry = (subTopicId: string): ThreadPostCacheEntry | null => {
 
   try {
     const parsed = JSON.parse(raw) as Partial<ThreadPostCacheEntry>;
-    if (typeof parsed.cachedAt !== "number" || !Array.isArray(parsed.posts)) {
+    if (typeof parsed.cachedAt !== 'number' || !Array.isArray(parsed.posts)) {
       return null;
     }
 
@@ -105,7 +106,7 @@ const readCacheEntry = (subTopicId: string): ThreadPostCacheEntry | null => {
 };
 
 const writeCacheEntry = (subTopicId: string, posts: Post[]) => {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -114,7 +115,10 @@ const writeCacheEntry = (subTopicId: string, posts: Post[]) => {
     posts,
   };
 
-  window.localStorage.setItem(getStorageKey(subTopicId), JSON.stringify(payload));
+  window.localStorage.setItem(
+    getStorageKey(subTopicId),
+    JSON.stringify(payload)
+  );
   updateIndex(subTopicId);
 };
 

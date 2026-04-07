@@ -1,29 +1,32 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
-import ThreadComposer from "../features/forum/components/ThreadComposer";
-import ThreadSkeleton from "../features/forum/components/ThreadSkeleton";
-import ThreadPostCard from "../features/forum/components/ThreadPostCard";
-import { useThreadActions } from "../features/forum/hooks/useThreadActions";
-import { useThreadDataQuery } from "../features/forum/hooks/useThreadDataQuery";
-import { useForumData } from "../hooks/useForumData";
+import ThreadComposer from '../features/forum/components/ThreadComposer';
+import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
+import ThreadPostCard from '../features/forum/components/ThreadPostCard';
+import { useThreadActions } from '../features/forum/hooks/useThreadActions';
+import { useThreadDataQuery } from '../features/forum/hooks/useThreadDataQuery';
+import { useForumData } from '../hooks/useForumData';
 import {
   buildThreadPostSearchIndex,
   createSearchHaystack,
   searchThreadPosts,
   tokenizeSearchQuery,
-} from "../services/forum/forumSearch";
+} from '../services/forum/forumSearch';
 
 const THREAD_BATCH_SIZE = 12;
 
-const ThreadPage = () => {
+type ThreadPageProps = {
+  searchQuery: string;
+};
+
+const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   const { id } = useParams<{ id: string }>();
   const {
     users,
     currentUser,
     subTopics,
     posts,
-    searchQuery,
     threadSearchIndexes,
     updateSubTopicSettings,
     createPost,
@@ -36,7 +39,9 @@ const ThreadPage = () => {
     isAuthReady,
   } = useForumData();
   const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
-  const [moderationFeedback, setModerationFeedback] = useState<string | null>(null);
+  const [moderationFeedback, setModerationFeedback] = useState<string | null>(
+    null
+  );
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -92,15 +97,15 @@ const ThreadPage = () => {
   );
 
   const canLoadMore = visibleCount < filteredThreadPosts.length;
-  const canModerate = currentUser.role !== "Member";
+  const canModerate = currentUser.role !== 'Member';
   const hasActiveSearch = tokenizeSearchQuery(deferredSearchQuery).length > 0;
   const isComposerDisabled =
-    subTopic?.status === "locked" || subTopic?.visibility === "hidden";
+    subTopic?.status === 'locked' || subTopic?.visibility === 'hidden';
   const composerHelperText =
-    subTopic?.visibility === "hidden"
-      ? "This sub-topic is hidden."
-      : subTopic?.status === "locked"
-        ? "This sub-topic is locked."
+    subTopic?.visibility === 'hidden'
+      ? 'This sub-topic is hidden.'
+      : subTopic?.status === 'locked'
+        ? 'This sub-topic is locked.'
         : null;
 
   const handleToggleSubTopicStatus = async () => {
@@ -110,12 +115,15 @@ const ThreadPage = () => {
 
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
-      status: subTopic.status === "locked" ? "open" : "locked",
+      status: subTopic.status === 'locked' ? 'open' : 'locked',
       visibility: subTopic.visibility,
+      isPinned: subTopic.isPinned,
     });
 
     setModerationFeedback(
-      result.ok ? "Sub-topic status updated." : result.error ?? "Unable to update sub-topic."
+      result.ok
+        ? 'Sub-topic status updated.'
+        : (result.error ?? 'Unable to update sub-topic.')
     );
   };
 
@@ -127,11 +135,35 @@ const ThreadPage = () => {
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       status: subTopic.status,
-      visibility: subTopic.visibility === "hidden" ? "visible" : "hidden",
+      visibility: subTopic.visibility === 'hidden' ? 'visible' : 'hidden',
+      isPinned: subTopic.isPinned,
     });
 
     setModerationFeedback(
-      result.ok ? "Sub-topic visibility updated." : result.error ?? "Unable to update sub-topic."
+      result.ok
+        ? 'Sub-topic visibility updated.'
+        : (result.error ?? 'Unable to update sub-topic.')
+    );
+  };
+
+  const handleToggleSubTopicPin = async () => {
+    if (!subTopic) {
+      return;
+    }
+
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      status: subTopic.status,
+      visibility: subTopic.visibility,
+      isPinned: !subTopic.isPinned,
+    });
+
+    setModerationFeedback(
+      result.ok
+        ? subTopic.isPinned
+          ? 'Sub-topic unpinned.'
+          : 'Sub-topic pinned to the top.'
+        : (result.error ?? 'Unable to update sub-topic.')
     );
   };
 
@@ -145,7 +177,9 @@ const ThreadPage = () => {
       if (!active) {
         return;
       }
-      setThreadLoadError(result.ok ? null : result.error ?? "Unable to load thread posts.");
+      setThreadLoadError(
+        result.ok ? null : (result.error ?? 'Unable to load thread posts.')
+      );
     });
 
     return () => {
@@ -175,7 +209,7 @@ const ThreadPage = () => {
       },
       {
         root: null,
-        rootMargin: "280px 0px",
+        rootMargin: '280px 0px',
         threshold: 0.1,
       }
     );
@@ -193,7 +227,9 @@ const ThreadPage = () => {
   if (!subTopic) {
     return (
       <div className="space-y-4">
-        <h2 className="text-ui-strong text-lg font-semibold">Thread not found</h2>
+        <h2 className="text-ui-strong text-lg font-semibold">
+          Thread not found
+        </h2>
         <Link to="/" className="forum-link text-sm font-medium">
           Back to topics
         </Link>
@@ -201,10 +237,12 @@ const ThreadPage = () => {
     );
   }
 
-  if (subTopic.visibility === "hidden" && !canModerate) {
+  if (subTopic.visibility === 'hidden' && !canModerate) {
     return (
       <div className="space-y-4">
-        <h2 className="text-ui-strong text-lg font-semibold">Thread not available</h2>
+        <h2 className="text-ui-strong text-lg font-semibold">
+          Thread not available
+        </h2>
         <p className="text-ui-muted text-sm">This sub-topic is hidden.</p>
         <Link to="/" className="forum-link text-sm font-medium">
           Back to topics
@@ -216,7 +254,14 @@ const ThreadPage = () => {
   return (
     <div className="space-y-6">
       <section className="forum-card-primary p-5">
-        <h2 className="text-ui-strong text-2xl font-semibold">{subTopic.title}</h2>
+        <h2 className="text-ui-strong text-2xl font-semibold">
+          {subTopic.isPinned ? (
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent mr-3 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold align-middle">
+              Pinned
+            </span>
+          ) : null}
+          {subTopic.title}
+        </h2>
         <p className="text-ui-muted mt-1 text-sm">{subTopic.description}</p>
         <p className="text-ui-muted mt-2 text-xs">
           {hasActiveSearch
@@ -225,9 +270,14 @@ const ThreadPage = () => {
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
-            {subTopic.status === "locked" ? "Locked" : "Open"}
+            {subTopic.status === 'locked' ? 'Locked' : 'Open'}
           </span>
-          {subTopic.visibility === "hidden" ? (
+          {subTopic.isPinned ? (
+            <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
+              Pinned
+            </span>
+          ) : null}
+          {subTopic.visibility === 'hidden' ? (
             <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
               Hidden
             </span>
@@ -236,17 +286,28 @@ const ThreadPage = () => {
             <>
               <button
                 type="button"
+                onClick={handleToggleSubTopicPin}
+                className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+              >
+                {subTopic.isPinned ? 'Unpin Sub-Topic' : 'Pin Sub-Topic'}
+              </button>
+              <button
+                type="button"
                 onClick={handleToggleSubTopicStatus}
                 className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
               >
-                {subTopic.status === "locked" ? "Unlock Sub-Topic" : "Lock Sub-Topic"}
+                {subTopic.status === 'locked'
+                  ? 'Unlock Sub-Topic'
+                  : 'Lock Sub-Topic'}
               </button>
               <button
                 type="button"
                 onClick={handleToggleSubTopicVisibility}
                 className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
               >
-                {subTopic.visibility === "hidden" ? "Show Sub-Topic" : "Hide Sub-Topic"}
+                {subTopic.visibility === 'hidden'
+                  ? 'Show Sub-Topic'
+                  : 'Hide Sub-Topic'}
               </button>
             </>
           ) : null}
@@ -257,7 +318,9 @@ const ThreadPage = () => {
       {moderationFeedback ? (
         <p className="text-ui-muted text-xs">{moderationFeedback}</p>
       ) : null}
-      {threadLoadError ? <p className="text-ui-muted text-xs">{threadLoadError}</p> : null}
+      {threadLoadError ? (
+        <p className="text-ui-muted text-xs">{threadLoadError}</p>
+      ) : null}
       {isThreadPostsLoading ? (
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
       ) : null}
@@ -284,7 +347,9 @@ const ThreadPage = () => {
         ) : null}
         {visiblePosts.length === 0 ? (
           <div className="forum-card p-5">
-            <p className="text-ui-strong text-sm font-semibold">No matching posts</p>
+            <p className="text-ui-strong text-sm font-semibold">
+              No matching posts
+            </p>
             <p className="text-ui-muted mt-1 text-sm">
               Adjust the forum search field to search this thread differently.
             </p>

@@ -1,13 +1,13 @@
-import type { ForumRoleRegistry, UserRole } from "../../types";
-import { fetchWithQdnReadyFallback } from "./qdnReadiness";
-import { requestQortal } from "../qortal/qortalClient";
-import { getAccountNames, getUserAccount } from "../qortal/walletService";
+import type { ForumRoleRegistry, UserRole } from '../../types';
+import { fetchWithQdnReadyFallback } from './qdnReadiness';
+import { requestQortal } from '../qortal/qortalClient';
+import { getAccountNames, getUserAccount } from '../qortal/walletService';
 
-const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? "DOCUMENT";
+const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || "qdb";
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdb';
 
-export const SUPER_ADMIN_ADDRESS = "QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE";
+export const SUPER_ADMIN_ADDRESS = 'QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE';
 
 const ROLE_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-roles-`;
 const PRIMARY_ROLE_IDENTIFIER = `${ROLE_IDENTIFIER_PREFIX}default`;
@@ -21,7 +21,7 @@ type SearchQdnResourceResult = {
 
 type RoleRegistryPayload = {
   version: 1;
-  type: "role-registry";
+  type: 'role-registry';
   updatedAt: number;
   registry: {
     superAdminAddress: string;
@@ -31,7 +31,7 @@ type RoleRegistryPayload = {
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 };
 
 const sleep = async (durationMs: number) => {
@@ -43,7 +43,7 @@ const sleep = async (durationMs: number) => {
 const encodeBase64Json = (value: unknown): string => {
   const json = JSON.stringify(value);
   const bytes = new TextEncoder().encode(json);
-  let binary = "";
+  let binary = '';
 
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
@@ -60,7 +60,7 @@ const decodeBase64Json = (value: string): unknown => {
 };
 
 const parseJsonLike = (raw: unknown): unknown => {
-  if (typeof raw !== "string") {
+  if (typeof raw !== 'string') {
     return raw;
   }
 
@@ -82,12 +82,16 @@ const normalizeAddressList = (input: unknown) => {
   const next: string[] = [];
 
   input.forEach((value) => {
-    if (typeof value !== "string") {
+    if (typeof value !== 'string') {
       return;
     }
 
     const normalized = value.trim();
-    if (!normalized || normalized === SUPER_ADMIN_ADDRESS || seen.has(normalized)) {
+    if (
+      !normalized ||
+      normalized === SUPER_ADMIN_ADDRESS ||
+      seen.has(normalized)
+    ) {
       return;
     }
 
@@ -106,17 +110,21 @@ export const createDefaultRoleRegistry = (): ForumRoleRegistry => ({
 });
 
 const parseRoleRegistryPayload = (raw: unknown): RoleRegistryPayload | null => {
-  if (!isObject(raw) || raw.type !== "role-registry" || !isObject(raw.registry)) {
+  if (
+    !isObject(raw) ||
+    raw.type !== 'role-registry' ||
+    !isObject(raw.registry)
+  ) {
     return null;
   }
 
   return {
     version: 1,
-    type: "role-registry",
-    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    type: 'role-registry',
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     registry: {
       superAdminAddress:
-        typeof raw.registry.superAdminAddress === "string" &&
+        typeof raw.registry.superAdminAddress === 'string' &&
         raw.registry.superAdminAddress.trim()
           ? raw.registry.superAdminAddress.trim()
           : SUPER_ADMIN_ADDRESS,
@@ -126,7 +134,9 @@ const parseRoleRegistryPayload = (raw: unknown): RoleRegistryPayload | null => {
   };
 };
 
-const toForumRoleRegistry = (payload: RoleRegistryPayload): ForumRoleRegistry => ({
+const toForumRoleRegistry = (
+  payload: RoleRegistryPayload
+): ForumRoleRegistry => ({
   superAdminAddress: payload.registry.superAdminAddress,
   admins: payload.registry.admins.filter(
     (address) => !payload.registry.moderators.includes(address)
@@ -137,13 +147,15 @@ const toForumRoleRegistry = (payload: RoleRegistryPayload): ForumRoleRegistry =>
   updatedAt: payload.updatedAt,
 });
 
-const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]> => {
+const searchByPrefix = async (
+  prefix: string
+): Promise<SearchQdnResourceResult[]> => {
   const search = await requestQortal<SearchQdnResourceResult[]>({
-    action: "SEARCH_QDN_RESOURCES",
+    action: 'SEARCH_QDN_RESOURCES',
     service: FORUM_SERVICE,
     identifier: prefix,
     prefix: true,
-    mode: "ALL",
+    mode: 'ALL',
     reverse: true,
     limit: 100,
     offset: 0,
@@ -152,16 +164,24 @@ const searchByPrefix = async (prefix: string): Promise<SearchQdnResourceResult[]
   return Array.isArray(search) ? search : [];
 };
 
-const fetchResource = async (name: string, identifier: string): Promise<unknown> => {
+const fetchResource = async (
+  name: string,
+  identifier: string
+): Promise<unknown> => {
   const fetcher = () =>
     requestQortal<unknown>({
-      action: "FETCH_QDN_RESOURCE",
+      action: 'FETCH_QDN_RESOURCE',
       service: FORUM_SERVICE,
       name,
       identifier,
     });
 
-  const raw = await fetchWithQdnReadyFallback(FORUM_SERVICE, name, identifier, fetcher);
+  const raw = await fetchWithQdnReadyFallback(
+    FORUM_SERVICE,
+    name,
+    identifier,
+    fetcher
+  );
   return parseJsonLike(raw);
 };
 
@@ -169,7 +189,7 @@ const verifyPublication = async (ownerName: string, identifier: string) => {
   for (let attempt = 1; attempt <= VERIFY_RETRIES; attempt += 1) {
     try {
       const raw = await requestQortal<unknown>({
-        action: "FETCH_QDN_RESOURCE",
+        action: 'FETCH_QDN_RESOURCE',
         service: FORUM_SERVICE,
         name: ownerName,
         identifier,
@@ -188,7 +208,7 @@ const verifyPublication = async (ownerName: string, identifier: string) => {
     }
   }
 
-  throw new Error("Role registry was submitted but could not be verified yet.");
+  throw new Error('Role registry was submitted but could not be verified yet.');
 };
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
@@ -202,7 +222,7 @@ const resolveOwnerName = async (providedName?: string): Promise<string> => {
     return account.name.trim();
   }
 
-  throw new Error("Authenticated account has no Qortal name.");
+  throw new Error('Authenticated account has no Qortal name.');
 };
 
 export const resolveRoleForAddress = (
@@ -210,24 +230,24 @@ export const resolveRoleForAddress = (
   registry: ForumRoleRegistry
 ): UserRole => {
   if (!address?.trim()) {
-    return "Member";
+    return 'Member';
   }
 
   const normalized = address.trim();
 
   if (normalized === registry.superAdminAddress) {
-    return "SuperAdmin";
+    return 'SuperAdmin';
   }
 
   if (registry.admins.includes(normalized)) {
-    return "Admin";
+    return 'Admin';
   }
 
   if (registry.moderators.includes(normalized)) {
-    return "Moderator";
+    return 'Moderator';
   }
 
-  return "Member";
+  return 'Member';
 };
 
 export const forumRolesService = {
@@ -244,9 +264,11 @@ export const forumRolesService = {
       return createDefaultRoleRegistry();
     }
 
-    const trustedNameSet = new Set(trustedNames.map((name) => name.trim().toLowerCase()));
-    const results = (await searchByPrefix(ROLE_IDENTIFIER_PREFIX)).filter((item) =>
-      trustedNameSet.has(item.name.trim().toLowerCase())
+    const trustedNameSet = new Set(
+      trustedNames.map((name) => name.trim().toLowerCase())
+    );
+    const results = (await searchByPrefix(ROLE_IDENTIFIER_PREFIX)).filter(
+      (item) => trustedNameSet.has(item.name.trim().toLowerCase())
     );
 
     for (const item of results) {
@@ -279,7 +301,7 @@ export const forumRolesService = {
 
     const payload: RoleRegistryPayload = {
       version: 1,
-      type: "role-registry",
+      type: 'role-registry',
       updatedAt,
       registry: {
         superAdminAddress: sanitizedRegistry.superAdminAddress,
@@ -289,13 +311,13 @@ export const forumRolesService = {
     };
 
     await requestQortal<unknown>({
-      action: "PUBLISH_QDN_RESOURCE",
+      action: 'PUBLISH_QDN_RESOURCE',
       service: FORUM_SERVICE,
       name: resolvedOwner,
       identifier: PRIMARY_ROLE_IDENTIFIER,
-      title: "Forum role registry",
-      description: "Qortal discussion board role registry",
-      tags: ["forum", "roles", "qforum"],
+      title: 'Forum role registry',
+      description: 'Qortal discussion board role registry',
+      tags: ['forum', 'roles', 'qforum'],
       data64: encodeBase64Json(payload),
     });
 

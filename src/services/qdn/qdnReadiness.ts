@@ -1,11 +1,11 @@
-import { requestQortal } from "../qortal/qortalClient";
+import { requestQortal } from '../qortal/qortalClient';
 
-const READY_STATUS = "READY";
+const READY_STATUS = 'READY';
 const BUILDABLE_STATUSES = new Set([
-  "PUBLISHED",
-  "DOWNLOADING",
-  "DOWNLOADED",
-  "BUILDING",
+  'PUBLISHED',
+  'DOWNLOADING',
+  'DOWNLOADED',
+  'BUILDING',
 ]);
 const STATUS_POLL_RETRIES = 8;
 const STATUS_POLL_DELAY_MS = 1200;
@@ -26,15 +26,15 @@ const sleep = async (durationMs: number) => {
 };
 
 const normalizeStatus = (value: QdnStatusResponse): string => {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value.toUpperCase();
   }
 
-  if (typeof value?.status === "string") {
+  if (typeof value?.status === 'string') {
     return value.status.toUpperCase();
   }
 
-  return "";
+  return '';
 };
 
 const getQdnResourceStatus = async (
@@ -44,7 +44,7 @@ const getQdnResourceStatus = async (
   build?: boolean
 ) => {
   return requestQortal<QdnStatusResponse>({
-    action: "GET_QDN_RESOURCE_STATUS",
+    action: 'GET_QDN_RESOURCE_STATUS',
     service,
     name,
     identifier,

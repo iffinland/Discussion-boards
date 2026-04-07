@@ -1,5 +1,5 @@
-import AppModal from "../common/AppModal";
-import type { RichTextFormatType } from "../../services/forum/richText";
+import AppModal from '../common/AppModal';
+import type { RichTextFormatType } from '../../services/forum/richText';
 
 type RichTextToolsModalProps = {
   isOpen: boolean;
@@ -9,20 +9,20 @@ type RichTextToolsModalProps = {
 };
 
 const actionButtonClass =
-  "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50";
+  'w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50';
 
 const baseColors = [
-  { label: "Black", value: "#111827" },
-  { label: "Blue", value: "#2563EB" },
-  { label: "Green", value: "#16A34A" },
-  { label: "Red", value: "#DC2626" },
+  { label: 'Black', value: '#111827' },
+  { label: 'Blue', value: '#2563EB' },
+  { label: 'Green', value: '#16A34A' },
+  { label: 'Red', value: '#DC2626' },
 ];
 
 const formatActions: Array<{ label: string; value: RichTextFormatType }> = [
-  { label: "Bold", value: "bold" },
-  { label: "Italic", value: "italic" },
-  { label: "Underline", value: "underline" },
-  { label: "Quote", value: "quote" },
+  { label: 'Bold', value: 'bold' },
+  { label: 'Italic', value: 'italic' },
+  { label: 'Underline', value: 'underline' },
+  { label: 'Quote', value: 'quote' },
 ];
 
 const RichTextToolsModal = ({

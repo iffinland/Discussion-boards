@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 type AppModalProps = {
   isOpen: boolean;
@@ -14,7 +14,7 @@ const AppModal = ({
   onClose,
   ariaLabel,
   title,
-  maxWidthClassName = "max-w-sm",
+  maxWidthClassName = 'max-w-sm',
   children,
 }: AppModalProps) => {
   if (!isOpen) {
@@ -34,7 +34,9 @@ const AppModal = ({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-slate-800">{title ?? ariaLabel}</h4>
+          <h4 className="text-sm font-semibold text-slate-800">
+            {title ?? ariaLabel}
+          </h4>
           <button
             type="button"
             onClick={onClose}

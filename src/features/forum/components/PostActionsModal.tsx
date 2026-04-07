@@ -1,4 +1,4 @@
-import AppModal from "../../../components/common/AppModal";
+import AppModal from '../../../components/common/AppModal';
 
 type PostActionsModalProps = {
   isOpen: boolean;
@@ -16,10 +16,10 @@ type PostActionsModalProps = {
 };
 
 const actionButtonClass =
-  "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50";
+  'w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50';
 
 const dangerButtonClass =
-  "w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-left text-sm font-semibold text-orange-700 transition hover:bg-orange-100";
+  'w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-left text-sm font-semibold text-orange-700 transition hover:bg-orange-100';
 
 const PostActionsModal = ({
   isOpen,

@@ -7,24 +7,31 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
+} from 'react';
 
-import { useForumCommands } from "../features/forum/hooks/useForumCommands";
-import { useForumDataQuery } from "../features/forum/hooks/useForumDataQuery";
+import { useForumCommands } from '../features/forum/hooks/useForumCommands';
+import { useForumDataQuery } from '../features/forum/hooks/useForumDataQuery';
 import type {
   ForumMutationResult,
   ForumUploadImageResult,
-} from "../features/forum/types";
+} from '../features/forum/types';
 import type {
   ThreadSearchSnapshot,
   TopicDirectorySnapshot,
-} from "../services/qdn/forumSearchIndexService";
-import { threadPostCache } from "../services/forum/threadPostCache";
-import { forumSearchIndexService } from "../services/qdn/forumSearchIndexService";
-import { forumQdnService } from "../services/qdn/forumQdnService";
-import type { ForumRoleRegistry, Post, SubTopic, Topic, TopicAccess, User } from "../types";
+} from '../services/qdn/forumSearchIndexService';
+import { threadPostCache } from '../services/forum/threadPostCache';
+import { forumSearchIndexService } from '../services/qdn/forumSearchIndexService';
+import { forumQdnService } from '../services/qdn/forumQdnService';
+import type {
+  ForumRoleRegistry,
+  Post,
+  SubTopic,
+  Topic,
+  TopicAccess,
+  User,
+} from '../types';
 
-type ForumAuthMode = "qortal";
+type ForumAuthMode = 'qortal';
 
 type ForumContextValue = {
   users: User[];
@@ -33,7 +40,6 @@ type ForumContextValue = {
   roleRegistry: ForumRoleRegistry;
   availableAuthNames: string[];
   activeAuthName: string | null;
-  searchQuery: string;
   topicDirectoryIndex: TopicDirectorySnapshot | null;
   threadSearchIndexes: Record<string, ThreadSearchSnapshot>;
   topics: Topic[];
@@ -45,14 +51,14 @@ type ForumContextValue = {
   canSwitchUser: boolean;
   authenticate: () => Promise<void>;
   setCurrentUser: (userId: string) => void;
-  setSearchQuery: (value: string) => void;
   createTopic: (input: {
     title: string;
     description: string;
-    status: Topic["status"];
+    status: Topic['status'];
     subTopicAccess: TopicAccess;
     allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
+  reorderTopics: (orderedTopicIds: string[]) => Promise<ForumMutationResult>;
   createSubTopic: (input: {
     topicId: string;
     title: string;
@@ -60,20 +66,24 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   updateTopicSettings: (input: {
     topicId: string;
-    status: Topic["status"];
-    visibility: Topic["visibility"];
+    status: Topic['status'];
+    visibility: Topic['visibility'];
     subTopicAccess: TopicAccess;
     allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
   updateSubTopicSettings: (input: {
     subTopicId: string;
-    status: SubTopic["status"];
-    visibility: SubTopic["visibility"];
+    status: SubTopic['status'];
+    visibility: SubTopic['visibility'];
+    isPinned: boolean;
   }) => Promise<ForumMutationResult>;
-  createPost: (input: { subTopicId: string; content: string }) => Promise<ForumMutationResult>;
+  createPost: (input: {
+    subTopicId: string;
+    content: string;
+  }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
-    role: "Admin" | "Moderator";
+    role: 'Admin' | 'Moderator';
   }) => Promise<ForumMutationResult>;
   removeRoleAssignment: (address: string) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
@@ -89,7 +99,10 @@ type ForumContextValue = {
 
 const ForumContext = createContext<ForumContextValue | null>(null);
 
-const mergePostsByLatestCreatedAt = (currentPosts: Post[], nextPosts: Post[]) => {
+const mergePostsByLatestCreatedAt = (
+  currentPosts: Post[],
+  nextPosts: Post[]
+) => {
   const merged = new Map(currentPosts.map((post) => [post.id, post]));
   nextPosts.forEach((post) => {
     const existing = merged.get(post.id);
@@ -98,6 +111,17 @@ const mergePostsByLatestCreatedAt = (currentPosts: Post[], nextPosts: Post[]) =>
     }
   });
   return [...merged.values()];
+};
+
+const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
+  return snapshot.posts.map((post) => ({
+    id: post.postId,
+    subTopicId: snapshot.subTopicId,
+    authorUserId: post.authorUserId,
+    content: post.content,
+    createdAt: post.createdAt,
+    likes: 0,
+  }));
 };
 
 export const ForumProvider = ({ children }: { children: ReactNode }) => {
@@ -128,6 +152,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   } = useForumDataQuery();
   const {
     createTopic,
+    reorderTopics,
     createSubTopic,
     updateTopicSettings,
     updateSubTopicSettings,
@@ -157,7 +182,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   const loadedThreadsRef = useRef<Set<string>>(new Set());
   const isBackgroundSyncingRef = useRef(false);
   const [isThreadPostsLoading, setIsThreadPostsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const threadLoadStateKey = `${authenticatedAddress ?? 'guest'}:${activeAuthName ?? currentUser.id}`;
 
   const setCurrentUser = useCallback(
     (name: string) => {
@@ -173,7 +198,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     async (subTopicId: string): Promise<ForumMutationResult> => {
       const normalizedId = subTopicId.trim();
       if (!normalizedId) {
-        return { ok: false, error: "Sub-topic id is required." };
+        return { ok: false, error: 'Sub-topic id is required.' };
       }
 
       if (loadedThreadsRef.current.has(normalizedId)) {
@@ -182,7 +207,9 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
 
       const cached = threadPostCache.read(normalizedId);
       if (cached?.posts.length) {
-        setPosts((current) => mergePostsByLatestCreatedAt(current, cached.posts));
+        setPosts((current) =>
+          mergePostsByLatestCreatedAt(current, cached.posts)
+        );
         if (!cached.isStale) {
           loadedThreadsRef.current.add(normalizedId);
           return { ok: true };
@@ -191,21 +218,29 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
 
       setIsThreadPostsLoading(true);
       try {
-        const loadedPosts = await forumQdnService.loadPostsBySubTopic(normalizedId);
+        let loadedPosts: Post[] | null = null;
+
         try {
-          const loadedThreadIndex = await forumSearchIndexService.loadThreadIndex(
-            normalizedId
-          );
+          const loadedThreadIndex =
+            await forumSearchIndexService.loadThreadIndex(normalizedId);
           if (loadedThreadIndex) {
             setThreadSearchIndexes((current) => ({
               ...current,
               [normalizedId]: loadedThreadIndex,
             }));
+            loadedPosts = postsFromThreadIndex(loadedThreadIndex);
           }
         } catch {
-          // Keep thread loading successful even if the persistent search index is unavailable.
+          // Fall back to direct QDN post loading when the thread index is unavailable.
         }
-        setPosts((current) => mergePostsByLatestCreatedAt(current, loadedPosts));
+
+        if (!loadedPosts) {
+          loadedPosts = await forumQdnService.loadPostsBySubTopic(normalizedId);
+        }
+
+        setPosts((current) =>
+          mergePostsByLatestCreatedAt(current, loadedPosts)
+        );
         threadPostCache.write(normalizedId, loadedPosts);
         loadedThreadsRef.current.add(normalizedId);
         return { ok: true };
@@ -217,7 +252,10 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
 
         return {
           ok: false,
-          error: error instanceof Error ? error.message : "Failed to load thread posts.",
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to load thread posts.',
         };
       } finally {
         setIsThreadPostsLoading(false);
@@ -234,7 +272,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       roleRegistry,
       availableAuthNames,
       activeAuthName,
-      searchQuery,
       topicDirectoryIndex,
       threadSearchIndexes,
       topics,
@@ -246,8 +283,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       authenticate,
       canSwitchUser: availableAuthNames.length > 1,
       setCurrentUser,
-      setSearchQuery,
       createTopic,
+      reorderTopics,
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
@@ -270,7 +307,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       threadSearchIndexes,
       availableAuthNames,
       activeAuthName,
-      searchQuery,
       topics,
       subTopics,
       posts,
@@ -279,8 +315,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthReady,
       authenticate,
       setCurrentUser,
-      setSearchQuery,
       createTopic,
+      reorderTopics,
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
@@ -295,6 +331,16 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       loadThreadPosts,
     ]
   );
+
+  useEffect(() => {
+    loadedThreadsRef.current.clear();
+  }, [threadLoadStateKey]);
+
+  useEffect(() => {
+    if (subTopics.length === 0 && posts.length === 0) {
+      loadedThreadsRef.current.clear();
+    }
+  }, [posts.length, subTopics.length]);
 
   useEffect(() => {
     if (!isAuthReady || !isAuthenticated || subTopics.length === 0) {
@@ -312,7 +358,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
         const recentActiveSubTopics = [...subTopics]
           .sort(
             (a, b) =>
-              new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
+              new Date(b.lastPostAt).getTime() -
+              new Date(a.lastPostAt).getTime()
           )
           .slice(0, 2)
           .map((subTopic) => subTopic.id);
@@ -322,8 +369,20 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
         );
 
         for (const subTopicId of targets) {
+          const cached = threadPostCache.read(subTopicId);
+          if (
+            loadedThreadsRef.current.has(subTopicId) ||
+            (cached && !cached.isStale)
+          ) {
+            continue;
+          }
+
           try {
-            const postsForThread = await forumQdnService.loadPostsBySubTopic(subTopicId);
+            const threadIndex =
+              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            const postsForThread = threadIndex
+              ? postsFromThreadIndex(threadIndex)
+              : await forumQdnService.loadPostsBySubTopic(subTopicId);
             threadPostCache.write(subTopicId, postsForThread);
           } catch {
             // Ignore background sync errors.
@@ -342,14 +401,17 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       cancelIdleCallback?: (id: number) => void;
     };
 
-    if (typeof maybeWindow.requestIdleCallback === "function") {
+    if (typeof maybeWindow.requestIdleCallback === 'function') {
       const requestIdle = maybeWindow.requestIdleCallback;
-      const idleId = requestIdle(() => {
-        void runBackgroundSync();
-      }, { timeout: 2000 });
+      const idleId = requestIdle(
+        () => {
+          void runBackgroundSync();
+        },
+        { timeout: 2000 }
+      );
 
       return () => {
-        if (typeof maybeWindow.cancelIdleCallback === "function") {
+        if (typeof maybeWindow.cancelIdleCallback === 'function') {
           maybeWindow.cancelIdleCallback(idleId);
         }
       };
@@ -364,14 +426,17 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isAuthReady, isAuthenticated, subTopics]);
 
-  return <ForumContext.Provider value={value}>{children}</ForumContext.Provider>;
+  return (
+    <ForumContext.Provider value={value}>{children}</ForumContext.Provider>
+  );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useForumContext = () => {
   const context = useContext(ForumContext);
 
   if (!context) {
-    throw new Error("useForumContext must be used within ForumProvider");
+    throw new Error('useForumContext must be used within ForumProvider');
   }
 
   return context;

@@ -1,4 +1,4 @@
-import AppModal from "../common/AppModal";
+import AppModal from '../common/AppModal';
 
 type ImagePreviewModalProps = {
   isOpen: boolean;
@@ -6,7 +6,11 @@ type ImagePreviewModalProps = {
   onClose: () => void;
 };
 
-const ImagePreviewModal = ({ isOpen, imageSrc, onClose }: ImagePreviewModalProps) => {
+const ImagePreviewModal = ({
+  isOpen,
+  imageSrc,
+  onClose,
+}: ImagePreviewModalProps) => {
   if (!imageSrc) {
     return null;
   }
