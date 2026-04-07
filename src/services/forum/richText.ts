@@ -312,7 +312,7 @@ export const toRichTextHtml = (value: string): string => {
         return '';
       }
 
-      return `<img src="${safeSource}" alt="Post image" loading="lazy" class="mt-2 max-h-48 w-auto max-w-full cursor-zoom-in rounded-md border border-slate-200 object-cover" data-preview-image="true" data-full-src="${safeSource}" />`;
+      return `<figure class="my-3"><img src="${safeSource}" alt="Post image thumbnail" loading="lazy" class="h-32 w-auto max-w-[min(100%,18rem)] cursor-zoom-in rounded-lg border border-slate-200 bg-slate-100 object-cover shadow-sm transition hover:scale-[1.01] hover:shadow-md" data-preview-image="true" data-full-src="${safeSource}" /><figcaption class="mt-1 text-xs text-slate-500">Click image to enlarge</figcaption></figure>`;
     }
   );
   html = replacePatternRecursively(html, QDN_IMAGE_TAG_PATTERN, () => '');

@@ -21,13 +21,13 @@ const ImagePreviewModal = ({
       onClose={onClose}
       ariaLabel="Image preview"
       title="Image Preview"
-      maxWidthClassName="max-w-4xl"
+      maxWidthClassName="max-w-[80vw]"
     >
-      <div className="max-h-[75vh] overflow-auto">
+      <div className="flex max-h-[80vh] items-center justify-center overflow-auto">
         <img
           src={imageSrc}
           alt="Full size post image"
-          className="h-auto max-h-[70vh] w-full rounded-md object-contain"
+          className="h-auto max-h-[80vh] w-auto max-w-full rounded-md object-contain"
           loading="eager"
         />
       </div>

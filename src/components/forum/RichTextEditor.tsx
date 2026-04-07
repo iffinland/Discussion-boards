@@ -208,7 +208,7 @@ const RichTextEditor = ({
         insertImageTag(loaded.dataUrl);
       }
       setEditorInfo(
-        `Image inserted (${loaded.width}x${loaded.height}, ${(file.size / (1024 * 1024)).toFixed(2)} MB).`
+        `Image inserted as a clickable thumbnail (${loaded.width}x${loaded.height}, ${(file.size / (1024 * 1024)).toFixed(2)} MB).`
       );
     } catch (error) {
       setEditorInfo(
