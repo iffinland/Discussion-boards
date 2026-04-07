@@ -380,6 +380,7 @@ const isPost = (value: unknown): value is Post => {
     typeof value.id === 'string' &&
     typeof value.subTopicId === 'string' &&
     typeof value.authorUserId === 'string' &&
+    (typeof value.parentPostId === 'string' || value.parentPostId === null) &&
     typeof value.content === 'string' &&
     typeof value.createdAt === 'string' &&
     typeof value.likes === 'number'

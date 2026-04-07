@@ -13,6 +13,8 @@ import PostActionsModal from './PostActionsModal';
 type ThreadPostCardProps = {
   post: Post;
   author: User | undefined;
+  repliedPost?: Post | null;
+  repliedAuthorName?: string | null;
   isOwner: boolean;
   canModerate: boolean;
   tipCount: number;
@@ -44,6 +46,8 @@ const getInitials = (name: string) =>
 const ThreadPostCard = ({
   post,
   author,
+  repliedPost = null,
+  repliedAuthorName = null,
   isOwner,
   canModerate,
   tipCount,
@@ -184,10 +188,23 @@ const ThreadPostCard = ({
           />
         </div>
       ) : (
-        <RichTextContent
-          value={post.content}
-          className="text-ui-strong mt-3 text-sm leading-relaxed"
-        />
+        <>
+          {repliedPost ? (
+            <div className="mt-3 rounded-lg border-l-4 border-slate-300 bg-slate-50 px-3 py-2">
+              <p className="text-ui-strong text-xs font-semibold">
+                Replying to {repliedAuthorName ?? 'Member'}
+              </p>
+              <RichTextContent
+                value={repliedPost.content}
+                className="text-ui-muted mt-1 text-xs leading-relaxed"
+              />
+            </div>
+          ) : null}
+          <RichTextContent
+            value={post.content}
+            className="text-ui-strong mt-3 text-sm leading-relaxed"
+          />
+        </>
       )}
 
       <div className="mt-4 flex items-center gap-4 text-xs text-slate-600">

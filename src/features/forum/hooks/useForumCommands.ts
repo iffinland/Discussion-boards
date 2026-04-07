@@ -705,6 +705,7 @@ export const useForumCommands = ({
     async (input: {
       subTopicId: string;
       content: string;
+      parentPostId?: string | null;
     }): Promise<ForumMutationResult> => {
       const content = input.content.trim();
 
@@ -747,11 +748,22 @@ export const useForumCommands = ({
         };
       }
 
+      if (input.parentPostId) {
+        const parentPost = posts.find((post) => post.id === input.parentPostId);
+        if (!parentPost || parentPost.subTopicId !== input.subTopicId) {
+          return {
+            ok: false,
+            error: 'The reply target post was not found in this thread.',
+          };
+        }
+      }
+
       const createdAt = new Date().toISOString();
       const newPost: Post = {
         id: generateForumEntityId('post', currentUser.username),
         subTopicId: input.subTopicId,
         authorUserId: currentUser.id,
+        parentPostId: input.parentPostId ?? null,
         content,
         createdAt,
         likes: 0,

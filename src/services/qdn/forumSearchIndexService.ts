@@ -51,6 +51,7 @@ export type ThreadSearchSnapshot = {
   posts: Array<{
     postId: string;
     authorUserId: string;
+    parentPostId: string | null;
     content: string;
     createdAt: string;
   }>;
@@ -304,6 +305,8 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
           postId: typeof item.postId === 'string' ? item.postId : '',
           authorUserId:
             typeof item.authorUserId === 'string' ? item.authorUserId : '',
+          parentPostId:
+            typeof item.parentPostId === 'string' ? item.parentPostId : null,
           content: typeof item.content === 'string' ? item.content : '',
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
         }))
@@ -485,6 +488,7 @@ export const forumSearchIndexService = {
           .map((post) => ({
             postId: post.id,
             authorUserId: post.authorUserId,
+            parentPostId: post.parentPostId,
             content: post.content,
             createdAt: post.createdAt,
           })),

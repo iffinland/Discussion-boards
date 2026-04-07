@@ -84,6 +84,7 @@ type ForumContextValue = {
   createPost: (input: {
     subTopicId: string;
     content: string;
+    parentPostId?: string | null;
   }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
@@ -122,6 +123,7 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     id: post.postId,
     subTopicId: snapshot.subTopicId,
     authorUserId: post.authorUserId,
+    parentPostId: post.parentPostId,
     content: post.content,
     createdAt: post.createdAt,
     likes: 0,

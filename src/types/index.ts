@@ -48,6 +48,7 @@ export interface Post {
   id: string;
   subTopicId: string;
   authorUserId: string;
+  parentPostId: string | null;
   content: string;
   createdAt: string;
   likes: number;

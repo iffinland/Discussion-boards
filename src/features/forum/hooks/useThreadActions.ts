@@ -8,6 +8,7 @@ type UseThreadActionsParams = {
   createPost: (input: {
     subTopicId: string;
     content: string;
+    parentPostId?: string | null;
   }) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
   updatePost: (input: {
@@ -27,6 +28,7 @@ export const useThreadActions = ({
   resolveAuthorDisplayName,
 }: UseThreadActionsParams) => {
   const [replyText, setReplyText] = useState('');
+  const [replyTarget, setReplyTarget] = useState<Post | null>(null);
   const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -38,6 +40,7 @@ export const useThreadActions = ({
     const result = await createPost({
       subTopicId: threadId,
       content: replyText,
+      parentPostId: replyTarget?.id ?? null,
     });
 
     if (!result.ok) {
@@ -46,16 +49,22 @@ export const useThreadActions = ({
     }
 
     setReplyText('');
+    setReplyTarget(null);
     setFeedback('Reply published.');
-  }, [createPost, replyText, threadId]);
+  }, [createPost, replyTarget, replyText, threadId]);
 
   const handleReplyToPost = useCallback(
     (post: Post) => {
       const authorName = resolveAuthorDisplayName(post.authorUserId);
-      setReplyText(`@${authorName} `);
+      setReplyTarget(post);
+      setReplyText((current) => (current.trim() ? current : `@${authorName} `));
     },
     [resolveAuthorDisplayName]
   );
+
+  const handleCancelReplyTarget = useCallback(() => {
+    setReplyTarget(null);
+  }, []);
 
   const handleEditPost = useCallback(
     async (postId: string, content: string) => {
@@ -121,11 +130,13 @@ export const useThreadActions = ({
 
   return {
     replyText,
+    replyTarget,
     setReplyText,
     feedback,
     tipsByPostId,
     handleSubmitReply,
     handleReplyToPost,
+    handleCancelReplyTarget,
     handleEditPost,
     handleDeletePost,
     handleSharePost,

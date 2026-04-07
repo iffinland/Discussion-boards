@@ -61,11 +61,13 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
   const {
     replyText,
+    replyTarget,
     setReplyText,
     feedback,
     tipsByPostId,
     handleSubmitReply,
     handleReplyToPost,
+    handleCancelReplyTarget,
     handleEditPost,
     handleDeletePost,
     handleSharePost,
@@ -95,6 +97,10 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   const filteredThreadPosts = useMemo(
     () => searchThreadPosts(postSearchIndex, threadPosts, deferredSearchQuery),
     [deferredSearchQuery, postSearchIndex, threadPosts]
+  );
+  const threadPostMap = useMemo(
+    () => new Map(threadPosts.map((post) => [post.id, post])),
+    [threadPosts]
   );
   const visiblePosts = useMemo(
     () => filteredThreadPosts.slice(0, visibleCount),
@@ -369,6 +375,18 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
             key={post.id}
             post={post}
             author={userMap.get(post.authorUserId)}
+            repliedPost={
+              post.parentPostId
+                ? (threadPostMap.get(post.parentPostId) ?? null)
+                : null
+            }
+            repliedAuthorName={
+              post.parentPostId
+                ? resolveAuthorDisplayName(
+                    threadPostMap.get(post.parentPostId)?.authorUserId ?? ''
+                  )
+                : null
+            }
             isOwner={post.authorUserId === currentUser.id}
             canModerate={canModerate}
             tipCount={tipsByPostId[post.id] ?? 0}
@@ -397,9 +415,16 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
       <ThreadComposer
         replyText={replyText}
+        replyTargetAuthorName={
+          replyTarget
+            ? resolveAuthorDisplayName(replyTarget.authorUserId)
+            : null
+        }
+        replyTargetContent={replyTarget?.content ?? null}
         onReplyTextChange={setReplyText}
         onSubmit={handleSubmitReply}
         onUploadImage={uploadImageForReply}
+        onCancelReplyTarget={handleCancelReplyTarget}
         disabled={isComposerDisabled}
         helperText={composerHelperText}
       />
