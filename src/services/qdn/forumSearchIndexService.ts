@@ -5,7 +5,7 @@ import { getUserAccount } from '../qortal/walletService';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdb';
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdbm';
 const TOPIC_DIRECTORY_IDENTIFIER = `${FORUM_NAMESPACE}-index-topics`;
 const THREAD_INDEX_PREFIX = `${FORUM_NAMESPACE}-index-thread-`;
 const VERIFY_RETRIES = 5;

@@ -5,7 +5,7 @@ import { getAccountNames, getUserAccount } from '../qortal/walletService';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdb';
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdbm';
 
 export const SUPER_ADMIN_ADDRESS = 'QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE';
 

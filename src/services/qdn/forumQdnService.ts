@@ -12,7 +12,7 @@ const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_IMAGE_SERVICE =
   import.meta.env.VITE_QORTAL_QDN_IMAGE_SERVICE ?? 'IMAGE';
 const FORUM_NAMESPACE =
-  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdb';
+  import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdbm';
 const FORUM_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-`;
 const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
 const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}sub-`;
