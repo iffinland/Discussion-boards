@@ -10,6 +10,19 @@ interface QortalRequestOptions {
   timeoutMs?: number;
 }
 
+export type QortalResourceToPublish = {
+  service: string;
+  identifier: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  data64: string;
+  filename?: string;
+  disableEncrypt?: boolean;
+};
+
 const parseRequestError = (response: unknown): string | null => {
   if (response === null || response === undefined) {
     return 'Qortal request returned an empty response.';
@@ -163,4 +176,21 @@ export const requestQortal = async <TResponse>(
       clearTimeout(timeoutHandle);
     }
   }
+};
+
+export const publishMultipleQortalResources = async (
+  resources: QortalResourceToPublish[],
+  options?: QortalRequestOptions
+) => {
+  if (resources.length === 0) {
+    return [];
+  }
+
+  return requestQortal<unknown[]>(
+    {
+      action: 'PUBLISH_MULTIPLE_QDN_RESOURCES',
+      resources,
+    },
+    options
+  );
 };

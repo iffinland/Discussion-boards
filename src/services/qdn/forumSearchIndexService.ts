@@ -1,6 +1,9 @@
 import type { Post, SubTopic, Topic } from '../../types';
 import { fetchWithQdnReadyFallback, mapWithConcurrency } from './qdnReadiness';
-import { requestQortal } from '../qortal/qortalClient';
+import {
+  requestQortal,
+  type QortalResourceToPublish,
+} from '../qortal/qortalClient';
 import { getUserAccount } from '../qortal/walletService';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
@@ -337,6 +340,27 @@ const publishPayload = async (
   });
 };
 
+const toPublishResource = (
+  ownerName: string,
+  identifier: string,
+  payload: TopicDirectoryPayload | ThreadIndexPayload,
+  title: string,
+  description: string,
+  tags: string[]
+): QortalResourceToPublish => {
+  assertIdentifierLength(identifier);
+
+  return {
+    service: FORUM_SERVICE,
+    name: ownerName,
+    identifier,
+    title,
+    description,
+    tags,
+    data64: encodeBase64Json(payload),
+  };
+};
+
 const verifyPublication = async (
   ownerName: string,
   identifier: string,
@@ -377,26 +401,11 @@ const pickLatest = <TPayload extends { updatedAt: number }>(
 };
 
 export const forumSearchIndexService = {
-  async loadTopicDirectoryIndex(): Promise<TopicDirectorySnapshot | null> {
-    const resources = await searchByPrefix(TOPIC_DIRECTORY_IDENTIFIER);
-    const payloads = await mapWithConcurrency(resources, async (item) => {
-      try {
-        const raw = await fetchResource(item.name, item.identifier);
-        return parseTopicDirectoryPayload(raw);
-      } catch {
-        return null;
-      }
-    });
-
-    return pickLatest(payloads)?.snapshot ?? null;
-  },
-
-  async publishTopicDirectoryIndex(
+  buildTopicDirectoryIndexPublishResource(
     topics: Topic[],
     subTopics: SubTopic[],
-    ownerName?: string
+    ownerName: string
   ) {
-    const resolvedOwner = await resolveOwnerName(ownerName);
     const updatedAt = Date.now();
     const payload: TopicDirectoryPayload = {
       version: 1,
@@ -431,6 +440,53 @@ export const forumSearchIndexService = {
       },
     };
 
+    return {
+      identifier: TOPIC_DIRECTORY_IDENTIFIER,
+      snapshot: payload.snapshot,
+      resource: toPublishResource(
+        ownerName,
+        TOPIC_DIRECTORY_IDENTIFIER,
+        payload,
+        'Forum topic directory index',
+        'Persistent forum search index for topics and sub-topics',
+        ['forum', 'search', 'index', 'qdb']
+      ),
+    };
+  },
+
+  async loadTopicDirectoryIndex(): Promise<TopicDirectorySnapshot | null> {
+    const resources = await searchByPrefix(TOPIC_DIRECTORY_IDENTIFIER);
+    const payloads = await mapWithConcurrency(resources, async (item) => {
+      try {
+        const raw = await fetchResource(item.name, item.identifier);
+        return parseTopicDirectoryPayload(raw);
+      } catch {
+        return null;
+      }
+    });
+
+    return pickLatest(payloads)?.snapshot ?? null;
+  },
+
+  async publishTopicDirectoryIndex(
+    topics: Topic[],
+    subTopics: SubTopic[],
+    ownerName?: string
+  ) {
+    const resolvedOwner = await resolveOwnerName(ownerName);
+    const { snapshot } = this.buildTopicDirectoryIndexPublishResource(
+      topics,
+      subTopics,
+      resolvedOwner
+    );
+    const updatedAt = snapshot.updatedAt;
+    const payload: TopicDirectoryPayload = {
+      version: 1,
+      type: 'topic-directory-index',
+      updatedAt,
+      snapshot,
+    };
+
     await publishPayload(
       resolvedOwner,
       TOPIC_DIRECTORY_IDENTIFIER,
@@ -444,7 +500,47 @@ export const forumSearchIndexService = {
       TOPIC_DIRECTORY_IDENTIFIER,
       'topic-directory-index'
     );
-    return payload.snapshot;
+    return snapshot;
+  },
+
+  buildThreadIndexPublishResource(
+    subTopicId: string,
+    posts: Post[],
+    ownerName: string
+  ) {
+    const updatedAt = Date.now();
+    const identifier = `${THREAD_INDEX_PREFIX}${subTopicId}`;
+    const payload: ThreadIndexPayload = {
+      version: 1,
+      type: 'thread-search-index',
+      updatedAt,
+      snapshot: {
+        subTopicId,
+        updatedAt,
+        posts: posts
+          .filter((post) => post.subTopicId === subTopicId)
+          .map((post) => ({
+            postId: post.id,
+            authorUserId: post.authorUserId,
+            parentPostId: post.parentPostId,
+            content: post.content,
+            createdAt: post.createdAt,
+          })),
+      },
+    };
+
+    return {
+      identifier,
+      snapshot: payload.snapshot,
+      resource: toPublishResource(
+        ownerName,
+        identifier,
+        payload,
+        `Forum thread index ${subTopicId}`,
+        'Persistent forum search index for a thread',
+        ['forum', 'search', 'thread', 'index', 'qdb']
+      ),
+    };
   },
 
   async loadThreadIndex(
@@ -474,25 +570,16 @@ export const forumSearchIndexService = {
     ownerName?: string
   ) {
     const resolvedOwner = await resolveOwnerName(ownerName);
-    const updatedAt = Date.now();
-    const identifier = `${THREAD_INDEX_PREFIX}${subTopicId}`;
+    const { identifier, snapshot } = this.buildThreadIndexPublishResource(
+      subTopicId,
+      posts,
+      resolvedOwner
+    );
     const payload: ThreadIndexPayload = {
       version: 1,
       type: 'thread-search-index',
-      updatedAt,
-      snapshot: {
-        subTopicId,
-        updatedAt,
-        posts: posts
-          .filter((post) => post.subTopicId === subTopicId)
-          .map((post) => ({
-            postId: post.id,
-            authorUserId: post.authorUserId,
-            parentPostId: post.parentPostId,
-            content: post.content,
-            createdAt: post.createdAt,
-          })),
-      },
+      updatedAt: snapshot.updatedAt,
+      snapshot,
     };
 
     await publishPayload(
@@ -504,6 +591,6 @@ export const forumSearchIndexService = {
       ['forum', 'search', 'thread', 'index', 'qdb']
     );
     await verifyPublication(resolvedOwner, identifier, 'thread-search-index');
-    return payload.snapshot;
+    return snapshot;
   },
 };

@@ -5,6 +5,7 @@ import { generateForumEntityId } from '../../../services/forum/forumId';
 import { canAccessSubTopic } from '../../../services/forum/forumAccess';
 import { encodeQdnImageTag } from '../../../services/forum/richText';
 import { threadPostCache } from '../../../services/forum/threadPostCache';
+import { publishMultipleQortalResources } from '../../../services/qortal/qortalClient';
 import { forumQdnService } from '../../../services/qdn/forumQdnService';
 import type {
   ThreadSearchSnapshot,
@@ -117,23 +118,6 @@ export const useForumCommands = ({
   setSubTopics,
   setPosts,
 }: UseForumCommandsParams) => {
-  const syncTopicDirectoryIndex = useCallback(
-    async (nextTopics: Topic[], nextSubTopics: SubTopic[]) => {
-      try {
-        const snapshot =
-          await forumSearchIndexService.publishTopicDirectoryIndex(
-            nextTopics,
-            nextSubTopics,
-            currentUser.username
-          );
-        setTopicDirectoryIndex(snapshot);
-      } catch {
-        // Keep forum mutations successful even if index publish lags behind.
-      }
-    },
-    [currentUser.username, setTopicDirectoryIndex]
-  );
-
   const syncThreadSearchIndex = useCallback(
     async (subTopicId: string, nextPosts: Post[]) => {
       try {
@@ -151,6 +135,26 @@ export const useForumCommands = ({
       }
     },
     [currentUser.username, setThreadSearchIndexes]
+  );
+
+  const buildTopicDirectoryIndexResource = useCallback(
+    (nextTopics: Topic[], nextSubTopics: SubTopic[]) =>
+      forumSearchIndexService.buildTopicDirectoryIndexPublishResource(
+        nextTopics,
+        nextSubTopics,
+        currentUser.username
+      ),
+    [currentUser.username]
+  );
+
+  const buildThreadIndexResource = useCallback(
+    (subTopicId: string, nextPosts: Post[]) =>
+      forumSearchIndexService.buildThreadIndexPublishResource(
+        subTopicId,
+        nextPosts,
+        currentUser.username
+      ),
+    [currentUser.username]
   );
 
   const createTopic = useCallback(
@@ -212,11 +216,23 @@ export const useForumCommands = ({
       };
 
       try {
-        await forumQdnService.publishTopic(newTopic, currentUser.username);
         const nextTopics = [newTopic, ...topics];
+        const topicResource = forumQdnService.buildTopicPublishResource(
+          newTopic,
+          currentUser.username
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          nextTopics,
+          subTopics
+        );
+        await publishMultipleQortalResources([
+          topicResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
         setTopics((current) => [newTopic, ...current]);
         setUsers((current) => ensureCurrentUserPresent(current, currentUser));
-        void syncTopicDirectoryIndex(nextTopics, subTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -229,8 +245,9 @@ export const useForumCommands = ({
     [
       currentUser,
       isAuthenticated,
+      buildTopicDirectoryIndexResource,
       subTopics,
-      syncTopicDirectoryIndex,
+      setTopicDirectoryIndex,
       setTopics,
       setUsers,
       topics,
@@ -268,15 +285,21 @@ export const useForumCommands = ({
       });
 
       try {
-        await Promise.all(
-          reorderedTopics.map((topic) =>
-            forumQdnService.publishTopic(topic, currentUser.username)
-          )
+        const topicResources = reorderedTopics.map((topic) =>
+          forumQdnService.buildTopicPublishResource(topic, currentUser.username)
         );
-
         const nextTopics = sortTopicsByOrder(reorderedTopics);
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          nextTopics,
+          subTopics
+        );
+        await publishMultipleQortalResources([
+          ...topicResources.map((item) => item.resource),
+          topicDirectoryResource.resource,
+        ]);
+
         setTopics(nextTopics);
-        void syncTopicDirectoryIndex(nextTopics, subTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -291,10 +314,11 @@ export const useForumCommands = ({
     [
       currentUser.role,
       currentUser.username,
+      buildTopicDirectoryIndexResource,
       isAuthenticated,
+      setTopicDirectoryIndex,
       setTopics,
       subTopics,
-      syncTopicDirectoryIndex,
       topics,
     ]
   );
@@ -380,14 +404,23 @@ export const useForumCommands = ({
       };
 
       try {
-        await forumQdnService.publishSubTopic(
+        const nextSubTopics = [newSubTopic, ...subTopics];
+        const subTopicResource = forumQdnService.buildSubTopicPublishResource(
           newSubTopic,
           currentUser.username
         );
-        const nextSubTopics = [newSubTopic, ...subTopics];
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          topics,
+          nextSubTopics
+        );
+        await publishMultipleQortalResources([
+          subTopicResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
         setSubTopics((current) => [newSubTopic, ...current]);
         setUsers((current) => ensureCurrentUserPresent(current, currentUser));
-        void syncTopicDirectoryIndex(topics, nextSubTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -402,11 +435,12 @@ export const useForumCommands = ({
     [
       currentUser,
       authenticatedAddress,
+      buildTopicDirectoryIndexResource,
       isAuthenticated,
+      setTopicDirectoryIndex,
       setSubTopics,
       setUsers,
       subTopics,
-      syncTopicDirectoryIndex,
       topics,
     ]
   );
@@ -449,16 +483,28 @@ export const useForumCommands = ({
       };
 
       try {
-        await forumQdnService.publishTopic(updatedTopic, currentUser.username);
         const nextTopics = topics.map((topic) =>
           topic.id === target.id ? updatedTopic : topic
         );
+        const topicResource = forumQdnService.buildTopicPublishResource(
+          updatedTopic,
+          currentUser.username
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          nextTopics,
+          subTopics
+        );
+        await publishMultipleQortalResources([
+          topicResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
         setTopics((current) =>
           current.map((topic) =>
             topic.id === target.id ? updatedTopic : topic
           )
         );
-        void syncTopicDirectoryIndex(nextTopics, subTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -473,10 +519,11 @@ export const useForumCommands = ({
     [
       currentUser.role,
       currentUser.username,
+      buildTopicDirectoryIndexResource,
       isAuthenticated,
+      setTopicDirectoryIndex,
       setTopics,
       subTopics,
-      syncTopicDirectoryIndex,
       topics,
     ]
   );
@@ -530,19 +577,28 @@ export const useForumCommands = ({
       };
 
       try {
-        await forumQdnService.publishSubTopic(
-          updatedSubTopic,
-          currentUser.username
-        );
         const nextSubTopics = subTopics.map((subTopic) =>
           subTopic.id === target.id ? updatedSubTopic : subTopic
         );
+        const subTopicResource = forumQdnService.buildSubTopicPublishResource(
+          updatedSubTopic,
+          currentUser.username
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          topics,
+          nextSubTopics
+        );
+        await publishMultipleQortalResources([
+          subTopicResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
         setSubTopics((current) =>
           current.map((subTopic) =>
             subTopic.id === target.id ? updatedSubTopic : subTopic
           )
         );
-        void syncTopicDirectoryIndex(topics, nextSubTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -557,10 +613,11 @@ export const useForumCommands = ({
     [
       currentUser.role,
       currentUser.username,
+      buildTopicDirectoryIndexResource,
       isAuthenticated,
+      setTopicDirectoryIndex,
       setSubTopics,
       subTopics,
-      syncTopicDirectoryIndex,
       topics,
     ]
   );
@@ -770,13 +827,30 @@ export const useForumCommands = ({
       };
 
       try {
-        await forumQdnService.publishPost(newPost, currentUser.username);
         const nextPosts = [...posts, newPost];
         const nextSubTopics = subTopics.map((subTopic) =>
           subTopic.id === input.subTopicId
             ? { ...subTopic, lastPostAt: createdAt }
             : subTopic
         );
+        const postResource = forumQdnService.buildPostPublishResource(
+          newPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          input.subTopicId,
+          nextPosts
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          topics,
+          nextSubTopics
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
         setPosts((current) => {
           const next = [...current, newPost];
           threadPostCache.write(
@@ -793,8 +867,11 @@ export const useForumCommands = ({
           )
         );
         setUsers((current) => ensureCurrentUserPresent(current, currentUser));
-        await syncThreadSearchIndex(input.subTopicId, nextPosts);
-        void syncTopicDirectoryIndex(topics, nextSubTopics);
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [input.subTopicId]: threadIndexResource.snapshot,
+        }));
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
         return { ok: true };
       } catch (error) {
         return {
@@ -807,14 +884,16 @@ export const useForumCommands = ({
     [
       currentUser,
       authenticatedAddress,
+      buildThreadIndexResource,
+      buildTopicDirectoryIndexResource,
       isAuthenticated,
       posts,
       setPosts,
       setSubTopics,
+      setThreadSearchIndexes,
+      setTopicDirectoryIndex,
       setUsers,
       subTopics,
-      syncThreadSearchIndex,
-      syncTopicDirectoryIndex,
       topics,
     ]
   );
@@ -845,10 +924,22 @@ export const useForumCommands = ({
       const updatedPost: Post = { ...target, content };
 
       try {
-        await forumQdnService.publishPost(updatedPost, currentUser.username);
         const nextPosts = posts.map((post) =>
           post.id === input.postId ? updatedPost : post
         );
+        const postResource = forumQdnService.buildPostPublishResource(
+          updatedPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          updatedPost.subTopicId,
+          nextPosts
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+        ]);
+
         setPosts((current) => {
           const next = current.map((post) =>
             post.id === input.postId ? updatedPost : post
@@ -859,7 +950,10 @@ export const useForumCommands = ({
           );
           return next;
         });
-        await syncThreadSearchIndex(updatedPost.subTopicId, nextPosts);
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [updatedPost.subTopicId]: threadIndexResource.snapshot,
+        }));
         return { ok: true };
       } catch (error) {
         return {
@@ -869,7 +963,14 @@ export const useForumCommands = ({
         };
       }
     },
-    [currentUser, isAuthenticated, posts, setPosts, syncThreadSearchIndex]
+    [
+      currentUser,
+      buildThreadIndexResource,
+      isAuthenticated,
+      posts,
+      setPosts,
+      setThreadSearchIndexes,
+    ]
   );
 
   const deletePost = useCallback(

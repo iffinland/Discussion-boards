@@ -5,7 +5,10 @@ import {
   fetchWithQdnReadyFallback,
   mapWithConcurrency,
 } from './qdnReadiness';
-import { requestQortal } from '../qortal/qortalClient';
+import {
+  requestQortal,
+  type QortalResourceToPublish,
+} from '../qortal/qortalClient';
 import { getUserAccount } from '../qortal/walletService';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
@@ -464,6 +467,27 @@ const publishPayload = async (
   });
 };
 
+const toPublishResource = (
+  ownerName: string,
+  identifier: string,
+  payload: TopicPayload | SubTopicPayload | PostPayload,
+  title: string,
+  description: string,
+  tags: string[]
+): QortalResourceToPublish => {
+  assertIdentifierLength(identifier);
+
+  return {
+    service: FORUM_SERVICE,
+    name: ownerName,
+    identifier,
+    title,
+    description,
+    tags,
+    data64: encodeBase64Json(payload),
+  };
+};
+
 export const forumQdnService = {
   async loadForumStructure() {
     const [topicPayloads, subTopicPayloads] = await Promise.all([
@@ -518,6 +542,27 @@ export const forumQdnService = {
 
   async publishTopic(topic: Topic, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
+    const { identifier } = this.buildTopicPublishResource(topic, resolvedOwner);
+
+    await publishPayload(
+      resolvedOwner,
+      identifier,
+      {
+        version: 1,
+        type: 'topic',
+        status: 'active',
+        updatedAt: Date.now(),
+        topic,
+      },
+      topic.title,
+      topic.description,
+      ['forum', 'topic', 'qforum']
+    );
+
+    await verifyPublication(resolvedOwner, identifier, 'topic');
+  },
+
+  buildTopicPublishResource(topic: Topic, ownerName: string) {
     const identifier = toTopicIdentifier(topic.id);
     const payload: TopicPayload = {
       version: 1,
@@ -527,20 +572,45 @@ export const forumQdnService = {
       topic,
     };
 
-    await publishPayload(
-      resolvedOwner,
+    return {
       identifier,
-      payload,
-      topic.title,
-      topic.description,
-      ['forum', 'topic', 'qforum']
-    );
-
-    await verifyPublication(resolvedOwner, identifier, 'topic');
+      resource: toPublishResource(
+        ownerName,
+        identifier,
+        payload,
+        topic.title,
+        topic.description,
+        ['forum', 'topic', 'qforum']
+      ),
+    };
   },
 
   async publishSubTopic(subTopic: SubTopic, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
+    const { identifier } = this.buildSubTopicPublishResource(
+      subTopic,
+      resolvedOwner
+    );
+
+    await publishPayload(
+      resolvedOwner,
+      identifier,
+      {
+        version: 1,
+        type: 'subtopic',
+        status: 'active',
+        updatedAt: Date.now(),
+        subTopic,
+      },
+      subTopic.title,
+      subTopic.description,
+      ['forum', 'subtopic', 'qforum']
+    );
+
+    await verifyPublication(resolvedOwner, identifier, 'subtopic');
+  },
+
+  buildSubTopicPublishResource(subTopic: SubTopic, ownerName: string) {
     const identifier = toSubTopicIdentifier(subTopic.id);
     const payload: SubTopicPayload = {
       version: 1,
@@ -550,20 +620,42 @@ export const forumQdnService = {
       subTopic,
     };
 
-    await publishPayload(
-      resolvedOwner,
+    return {
       identifier,
-      payload,
-      subTopic.title,
-      subTopic.description,
-      ['forum', 'subtopic', 'qforum']
-    );
-
-    await verifyPublication(resolvedOwner, identifier, 'subtopic');
+      resource: toPublishResource(
+        ownerName,
+        identifier,
+        payload,
+        subTopic.title,
+        subTopic.description,
+        ['forum', 'subtopic', 'qforum']
+      ),
+    };
   },
 
   async publishPost(post: Post, ownerName?: string) {
     const resolvedOwner = await resolveOwnerName(ownerName);
+    const { identifier } = this.buildPostPublishResource(post, resolvedOwner);
+
+    await publishPayload(
+      resolvedOwner,
+      identifier,
+      {
+        version: 1,
+        type: 'post',
+        status: 'active',
+        updatedAt: Date.now(),
+        post,
+      },
+      `Forum post ${post.id}`,
+      'Qortal discussion board post',
+      ['forum', 'post', 'qforum']
+    );
+
+    await verifyPublication(resolvedOwner, identifier, 'post');
+  },
+
+  buildPostPublishResource(post: Post, ownerName: string) {
     const identifier = toPostIdentifier(post);
     const payload: PostPayload = {
       version: 1,
@@ -573,16 +665,17 @@ export const forumQdnService = {
       post,
     };
 
-    await publishPayload(
-      resolvedOwner,
+    return {
       identifier,
-      payload,
-      `Forum post ${post.id}`,
-      'Qortal discussion board post',
-      ['forum', 'post', 'qforum']
-    );
-
-    await verifyPublication(resolvedOwner, identifier, 'post');
+      resource: toPublishResource(
+        ownerName,
+        identifier,
+        payload,
+        `Forum post ${post.id}`,
+        'Qortal discussion board post',
+        ['forum', 'post', 'qforum']
+      ),
+    };
   },
 
   async deletePost(post: Post, ownerName?: string) {
