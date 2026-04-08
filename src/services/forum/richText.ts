@@ -105,13 +105,14 @@ const decodeQdnTagPart = (value: string) => {
 const parseQdnImageTagPayload = (
   payload: string
 ): QdnImageTagReference | null => {
-  const [rawName, rawIdentifier] = payload.split('|');
+  const [rawName, rawIdentifier, rawFilename] = payload.split('|');
   if (!rawName || !rawIdentifier) {
     return null;
   }
 
   const name = decodeQdnTagPart(rawName);
   const identifier = decodeQdnTagPart(rawIdentifier);
+  const filename = rawFilename ? decodeQdnTagPart(rawFilename) : undefined;
   if (!name || !identifier) {
     return null;
   }
@@ -120,16 +121,21 @@ const parseQdnImageTagPayload = (
     service: 'IMAGE',
     name,
     identifier,
+    filename,
   };
 };
 
 export const encodeQdnImageTag = (reference: {
   name: string;
   identifier: string;
+  filename?: string;
 }) => {
   const name = encodeURIComponent(reference.name.trim());
   const identifier = encodeURIComponent(reference.identifier.trim());
-  return `[imgqdn]${name}|${identifier}[/imgqdn]`;
+  const filename = reference.filename?.trim()
+    ? `|${encodeURIComponent(reference.filename.trim())}`
+    : '';
+  return `[imgqdn]${name}|${identifier}${filename}[/imgqdn]`;
 };
 
 export const extractQdnImageTags = (value: string): ParsedQdnImageTag[] => {

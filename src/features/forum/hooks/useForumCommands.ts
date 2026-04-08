@@ -1061,6 +1061,7 @@ export const useForumCommands = ({
           imageTag: encodeQdnImageTag({
             name: reference.name,
             identifier: reference.identifier,
+            filename: reference.filename,
           }),
         };
       } catch (error) {

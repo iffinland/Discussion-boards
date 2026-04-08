@@ -750,8 +750,9 @@ export const forumQdnService = {
     service: string;
     name: string;
     identifier: string;
+    filename?: string;
   }): Promise<string> {
-    const cacheKey = `${reference.service}:${reference.name}:${reference.identifier}`;
+    const cacheKey = `${reference.service}:${reference.name}:${reference.identifier}:${reference.filename ?? ''}`;
     const cached = imageUrlCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -772,6 +773,7 @@ export const forumQdnService = {
       service: reference.service,
       name: reference.name,
       identifier: reference.identifier,
+      path: reference.filename?.trim() || undefined,
     });
     imageUrlCache.set(cacheKey, resourceUrl);
     return resourceUrl;
