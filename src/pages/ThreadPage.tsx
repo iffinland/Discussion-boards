@@ -262,7 +262,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   }, [id, onSearchQueryChange, searchQuery]);
 
   useEffect(() => {
-    if (!id) {
+    if (!id || !isAuthReady || !subTopic) {
       return;
     }
 
@@ -279,7 +279,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     return () => {
       active = false;
     };
-  }, [id, loadThreadPosts]);
+  }, [id, isAuthReady, loadThreadPosts, subTopic]);
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);

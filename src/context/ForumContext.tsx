@@ -352,7 +352,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   }, [threadLoadStateKey]);
 
   useEffect(() => {
-    if (subTopics.length === 0 && posts.length === 0) {
+    if (posts.length === 0) {
       loadedThreadsRef.current.clear();
     }
   }, [posts.length, subTopics.length]);
