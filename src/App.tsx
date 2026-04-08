@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 
 const Layout = lazy(() => import('./components/layout/Layout'));
 const Home = lazy(() => import('./pages/Home'));
@@ -7,6 +14,23 @@ const ThreadPage = lazy(() => import('./pages/ThreadPage'));
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
 const THEME_STORAGE_KEY = 'forum-theme-mode';
+const qortalWindow = window as Window & { _qdnBase?: string };
+const routerBaseName = qortalWindow._qdnBase || '';
+
+const LegacyHashRedirect = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!location.hash.startsWith('#/')) {
+      return;
+    }
+
+    navigate(location.hash.slice(1), { replace: true });
+  }, [location.hash, navigate]);
+
+  return null;
+};
 
 const App = () => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
@@ -32,12 +56,13 @@ const App = () => {
   };
 
   return (
-    <HashRouter>
+    <BrowserRouter basename={routerBaseName}>
       <Suspense
         fallback={
           <div className="p-4 text-sm text-slate-500">Loading app...</div>
         }
       >
+        <LegacyHashRedirect />
         <Layout
           themeMode={themeMode}
           onToggleTheme={handleToggleTheme}
@@ -59,7 +84,7 @@ const App = () => {
           </Routes>
         </Layout>
       </Suspense>
-    </HashRouter>
+    </BrowserRouter>
   );
 };
 

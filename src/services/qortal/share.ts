@@ -1,33 +1,41 @@
 const trimSlashes = (value: string) => value.replace(/^\/+|\/+$/g, '');
 
-const ensureHashPath = (value: string) => {
+const ensureRoutePath = (value: string) => {
   if (!value) {
-    return '#/';
+    return '/';
   }
 
-  if (value.startsWith('#')) {
+  if (value.startsWith('/')) {
     return value;
   }
 
-  return value.startsWith('/') ? `#${value}` : `#/${value}`;
+  if (value.startsWith('#/')) {
+    return value.slice(1);
+  }
+
+  if (value.startsWith('#')) {
+    return `/${value.slice(1)}`;
+  }
+
+  return `/${value}`;
 };
 
-export const buildQortalShareLink = (hashPath: string) => {
+export const buildQortalShareLink = (routePath: string) => {
   if (typeof window === 'undefined') {
     return '';
   }
 
   const qortalWindow = window as Window & { _qdnBase?: string };
   const qdnBase = qortalWindow._qdnBase;
-  const normalizedHashPath = ensureHashPath(hashPath);
+  const normalizedRoutePath = ensureRoutePath(routePath);
 
   if (typeof qdnBase === 'string' && qdnBase.startsWith('/render/')) {
     const qdnSegments = trimSlashes(qdnBase).split('/');
     const sharePath = qdnSegments.slice(1).join('/');
-    return `qortal://${sharePath}/${normalizedHashPath}`;
+    return `qortal://${sharePath}${normalizedRoutePath}`;
   }
 
-  return `${window.location.origin}${window.location.pathname}${normalizedHashPath}`;
+  return `${window.location.origin}${normalizedRoutePath}`;
 };
 
 export const copyToClipboard = async (value: string) => {

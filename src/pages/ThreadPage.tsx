@@ -374,7 +374,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const shareUrl = buildQortalShareLink(`#/thread/${id}`);
+    const shareUrl = buildQortalShareLink(`/thread/${id}`);
     try {
       await copyToClipboard(shareUrl);
       setModerationFeedback('Thread link copied to clipboard.');

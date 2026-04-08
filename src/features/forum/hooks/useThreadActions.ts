@@ -103,7 +103,7 @@ export const useThreadActions = ({
       }
 
       const shareUrl = buildQortalShareLink(
-        `#/thread/${threadId}?post=${postId}`
+        `/thread/${threadId}?post=${postId}`
       );
       try {
         await copyToClipboard(shareUrl);
