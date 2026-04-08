@@ -36,6 +36,7 @@ const RichTextEditor = ({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
   const [editorInfo, setEditorInfo] = useState<string | null>(null);
+  const isUploadingImage = editorInfo === 'Uploading image to QDN...';
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -316,7 +317,15 @@ const RichTextEditor = ({
       </div>
 
       {editorInfo ? (
-        <p className="text-ui-muted mb-2 text-xs" role="status">
+        <p
+          className={[
+            'mb-2 rounded-md border px-3 py-2 text-xs font-semibold',
+            isUploadingImage
+              ? 'border-cyan-300 bg-cyan-50 text-cyan-800 shadow-sm'
+              : 'border-slate-200 bg-slate-50 text-slate-600',
+          ].join(' ')}
+          role="status"
+        >
           {editorInfo}
         </p>
       ) : null}
