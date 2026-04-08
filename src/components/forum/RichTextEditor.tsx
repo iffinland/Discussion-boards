@@ -297,6 +297,20 @@ const RichTextEditor = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => handleFormat('heading2')}
+            className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            H2
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('heading3')}
+            className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            H3
+          </button>
+          <button
+            type="button"
             onClick={() => handleFormat('bold')}
             className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
           >
@@ -465,8 +479,8 @@ const RichTextEditor = ({
 
       <div className="mt-3 flex items-center justify-between">
         <p className="text-ui-muted text-xs">
-          Supported tags: [b], [i], [u], [s], [quote], [code], [ul], [ol],
-          [color], [img]
+          Supported tags: [h2], [h3], [b], [i], [u], [s], [quote], [code], [ul],
+          [ol], [color], [img]
         </p>
         <button
           type="submit"

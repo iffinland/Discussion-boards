@@ -1,4 +1,6 @@
 export type RichTextFormatType =
+  | 'heading2'
+  | 'heading3'
   | 'bold'
   | 'italic'
   | 'underline'
@@ -278,6 +280,8 @@ export const applyListFormat = ({
 };
 
 export const formatToTags: Record<RichTextFormatType, [string, string]> = {
+  heading2: ['[h2]', '[/h2]'],
+  heading3: ['[h3]', '[/h3]'],
   bold: ['[b]', '[/b]'],
   italic: ['[i]', '[/i]'],
   underline: ['[u]', '[/u]'],
@@ -291,6 +295,18 @@ export const formatToTags: Record<RichTextFormatType, [string, string]> = {
 export const toRichTextHtml = (value: string): string => {
   let html = escapeHtml(value);
 
+  html = replacePatternRecursively(
+    html,
+    /\[h2\]([\s\S]*?)\[\/h2\]/gi,
+    (_full, content) =>
+      `<h2 class="mt-4 mb-2 text-xl font-bold tracking-tight text-slate-900">${content}</h2>`
+  );
+  html = replacePatternRecursively(
+    html,
+    /\[h3\]([\s\S]*?)\[\/h3\]/gi,
+    (_full, content) =>
+      `<h3 class="mt-3 mb-2 text-lg font-bold tracking-tight text-slate-900">${content}</h3>`
+  );
   html = replacePatternRecursively(
     html,
     /\[b\]([\s\S]*?)\[\/b\]/gi,
@@ -321,7 +337,7 @@ export const toRichTextHtml = (value: string): string => {
     html,
     /\[code\]([\s\S]*?)\[\/code\]/gi,
     (_full, content) =>
-      `<pre class="my-3 overflow-x-auto rounded-md border border-slate-200 bg-slate-950/95 p-3 text-xs text-slate-100"><code>${content}</code></pre>`
+      `<div class="my-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm"><div class="flex items-center justify-between border-b border-slate-800 bg-slate-900/95 px-3 py-2"><span class="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Code</span><span class="text-[11px] text-slate-400">formatted block</span></div><pre class="overflow-x-auto px-4 py-3 text-[13px] leading-6 text-slate-100"><code class="font-mono">${content}</code></pre></div>`
   );
   html = replacePatternRecursively(
     html,
