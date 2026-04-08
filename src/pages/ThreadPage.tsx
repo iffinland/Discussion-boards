@@ -17,14 +17,19 @@ import {
   canAccessSubTopic,
   resolveAccessLabel,
 } from '../services/forum/forumAccess';
+import {
+  buildQortalShareLink,
+  copyToClipboard,
+} from '../services/qortal/share';
 
 const THREAD_BATCH_SIZE = 12;
 
 type ThreadPageProps = {
   searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
 };
 
-const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
+const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const {
@@ -251,6 +256,16 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
       return;
     }
 
+    if (searchQuery) {
+      onSearchQueryChange('');
+    }
+  }, [id, onSearchQueryChange, searchQuery]);
+
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+
     let active = true;
     void loadThreadPosts(id).then((result) => {
       if (!active) {
@@ -355,16 +370,21 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   };
 
   const handleShareThread = async () => {
-    if (!id || typeof window === 'undefined' || !navigator.clipboard) {
+    if (!id || typeof window === 'undefined') {
       return;
     }
 
-    const shareUrl = `${window.location.origin}${window.location.pathname}#/thread/${id}`;
+    const shareUrl = buildQortalShareLink(`#/thread/${id}`);
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setModerationFeedback('Thread link copied.');
+      await copyToClipboard(shareUrl);
+      setModerationFeedback('Thread link copied to clipboard.');
+      window.setTimeout(() => {
+        setModerationFeedback((current) =>
+          current === 'Thread link copied to clipboard.' ? null : current
+        );
+      }, 2400);
     } catch {
-      setModerationFeedback('Unable to copy thread link.');
+      setModerationFeedback('Unable to copy thread link to clipboard.');
     }
   };
 
@@ -533,9 +553,27 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
         </div>
       </section>
 
-      {feedback ? <p className="text-ui-muted text-xs">{feedback}</p> : null}
+      {feedback ? (
+        <p
+          className={
+            feedback.toLowerCase().includes('copied')
+              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+              : 'text-ui-muted text-xs'
+          }
+        >
+          {feedback}
+        </p>
+      ) : null}
       {moderationFeedback ? (
-        <p className="text-ui-muted text-xs">{moderationFeedback}</p>
+        <p
+          className={
+            moderationFeedback.toLowerCase().includes('copied')
+              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+              : 'text-ui-muted text-xs'
+          }
+        >
+          {moderationFeedback}
+        </p>
       ) : null}
       {threadLoadError ? (
         <p className="text-ui-muted text-xs">{threadLoadError}</p>

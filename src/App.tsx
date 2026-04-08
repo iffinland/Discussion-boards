@@ -48,7 +48,12 @@ const App = () => {
             <Route path="/" element={<Home searchQuery={searchQuery} />} />
             <Route
               path="/thread/:id"
-              element={<ThreadPage searchQuery={searchQuery} />}
+              element={
+                <ThreadPage
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                />
+              }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

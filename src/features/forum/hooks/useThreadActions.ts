@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react';
 
+import {
+  buildQortalShareLink,
+  copyToClipboard,
+} from '../../../services/qortal/share';
 import type { Post } from '../../../types';
 import type { ForumMutationResult, ForumUploadImageResult } from '../types';
 
@@ -94,16 +98,23 @@ export const useThreadActions = ({
 
   const handleSharePost = useCallback(
     async (postId: string) => {
-      if (!threadId || typeof window === 'undefined' || !navigator.clipboard) {
+      if (!threadId || typeof window === 'undefined') {
         return;
       }
 
-      const shareUrl = `${window.location.origin}${window.location.pathname}#/thread/${threadId}?post=${postId}`;
+      const shareUrl = buildQortalShareLink(
+        `#/thread/${threadId}?post=${postId}`
+      );
       try {
-        await navigator.clipboard.writeText(shareUrl);
-        setFeedback('Post link copied.');
+        await copyToClipboard(shareUrl);
+        setFeedback('Post link copied to clipboard.');
+        window.setTimeout(() => {
+          setFeedback((current) =>
+            current === 'Post link copied to clipboard.' ? null : current
+          );
+        }, 2400);
       } catch {
-        setFeedback('Unable to copy post link.');
+        setFeedback('Unable to copy post link to clipboard.');
       }
     },
     [threadId]
