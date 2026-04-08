@@ -17,6 +17,7 @@ type ThreadPostCardProps = {
   repliedPost?: Post | null;
   repliedAuthorName?: string | null;
   highlighted?: boolean;
+  replyContextHighlighted?: boolean;
   isOwner: boolean;
   canModerate: boolean;
   tipCount: number;
@@ -24,6 +25,7 @@ type ThreadPostCardProps = {
   onReply: (post: Post) => void;
   onShare: (postId: string) => void;
   onSendTip: (postId: string) => void;
+  onJumpToPost?: (postId: string) => void;
   onEdit: (postId: string, nextContent: string) => void;
   onDelete: (postId: string) => void;
 };
@@ -51,6 +53,7 @@ const ThreadPostCard = ({
   repliedPost = null,
   repliedAuthorName = null,
   highlighted = false,
+  replyContextHighlighted = false,
   isOwner,
   canModerate,
   tipCount,
@@ -58,6 +61,7 @@ const ThreadPostCard = ({
   onReply,
   onShare,
   onSendTip,
+  onJumpToPost,
   onEdit,
   onDelete,
 }: ThreadPostCardProps) => {
@@ -225,15 +229,29 @@ const ThreadPostCard = ({
       ) : (
         <>
           {repliedPost ? (
-            <div className="mt-3 rounded-lg border-l-4 border-slate-300 bg-slate-50 px-3 py-2">
-              <p className="text-ui-strong text-xs font-semibold">
-                Replying to {repliedAuthorName ?? 'Member'}
-              </p>
+            <button
+              type="button"
+              onClick={() => onJumpToPost?.(repliedPost.id)}
+              className={[
+                'mt-3 w-full rounded-lg border-l-4 px-3 py-2 text-left transition',
+                replyContextHighlighted
+                  ? 'border-cyan-400 bg-cyan-50 ring-1 ring-cyan-200'
+                  : 'border-slate-300 bg-slate-50 hover:bg-slate-100',
+              ].join(' ')}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-ui-strong text-xs font-semibold">
+                  Replying to {repliedAuthorName ?? 'Member'}
+                </p>
+                <span className="text-xs font-semibold text-cyan-700">
+                  Jump to post
+                </span>
+              </div>
               <RichTextContent
                 value={repliedPost.content}
                 className="text-ui-muted mt-1 text-xs leading-relaxed"
               />
-            </div>
+            </button>
           ) : null}
           <RichTextContent
             value={post.content}

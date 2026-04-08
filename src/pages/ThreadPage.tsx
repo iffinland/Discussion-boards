@@ -53,6 +53,9 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(
     null
   );
+  const [replyContextPostId, setReplyContextPostId] = useState<string | null>(
+    null
+  );
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -301,9 +304,17 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
         block: 'center',
       });
       setHighlightedPostId(sharedPostId);
+      setReplyContextPostId(
+        threadPostMap.get(sharedPostId)?.parentPostId ?? null
+      );
       timeoutId = window.setTimeout(() => {
         setHighlightedPostId((current) =>
           current === sharedPostId ? null : current
+        );
+        setReplyContextPostId((current) =>
+          current === threadPostMap.get(sharedPostId)?.parentPostId
+            ? null
+            : current
         );
       }, 3000);
     });
@@ -314,7 +325,34 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [displayPosts, sharedPostId]);
+  }, [displayPosts, sharedPostId, threadPostMap]);
+
+  const jumpToPost = (postId: string) => {
+    const targetIndex = filteredThreadPosts.findIndex(
+      (post) => post.id === postId
+    );
+    if (targetIndex >= 0) {
+      setVisibleCount((current) => Math.max(current, targetIndex + 1));
+    }
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`post-${postId}`);
+      if (!element) {
+        return;
+      }
+
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      setHighlightedPostId(postId);
+      window.setTimeout(() => {
+        setHighlightedPostId((current) =>
+          current === postId ? null : current
+        );
+      }, 3000);
+    });
+  };
 
   const handleShareThread = async () => {
     if (!id || typeof window === 'undefined' || !navigator.clipboard) {
@@ -525,6 +563,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
                 : null
             }
             highlighted={highlightedPostId === post.id}
+            replyContextHighlighted={replyContextPostId === post.parentPostId}
             isOwner={post.authorUserId === currentUser.id}
             canModerate={canModerate}
             tipCount={tipsByPostId[post.id] ?? 0}
@@ -532,6 +571,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
             onReply={handleReplyToPost}
             onShare={handleSharePost}
             onSendTip={handleSendTip}
+            onJumpToPost={jumpToPost}
             onEdit={handleEditPost}
             onDelete={handleDeletePost}
           />
