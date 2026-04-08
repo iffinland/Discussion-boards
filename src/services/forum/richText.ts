@@ -93,6 +93,8 @@ const sanitizeImageSource = (value: string): string | null => {
 };
 
 const QDN_IMAGE_TAG_PATTERN = /\[imgqdn\]([\s\S]*?)\[\/imgqdn\]/gi;
+const QORTAL_LINK_PATTERN = /qortal:\/\/[^\s<]+/gi;
+const TRAILING_PUNCTUATION_PATTERN = /[.,!?;:)\]}]+$/;
 
 const decodeQdnTagPart = (value: string) => {
   try {
@@ -123,6 +125,40 @@ const parseQdnImageTagPayload = (
     identifier,
     filename,
   };
+};
+
+const splitLinkAndTrailingPunctuation = (value: string) => {
+  const trailingMatch = value.match(TRAILING_PUNCTUATION_PATTERN);
+  if (!trailingMatch) {
+    return { link: value, trailing: '' };
+  }
+
+  const trailing = trailingMatch[0];
+  return {
+    link: value.slice(0, value.length - trailing.length),
+    trailing,
+  };
+};
+
+const linkifyQortalUris = (html: string) => {
+  const segments = html.split(/(<[^>]+>)/g);
+
+  return segments
+    .map((segment) => {
+      if (!segment || segment.startsWith('<')) {
+        return segment;
+      }
+
+      return segment.replace(QORTAL_LINK_PATTERN, (rawLink) => {
+        const { link, trailing } = splitLinkAndTrailingPunctuation(rawLink);
+        if (!link) {
+          return rawLink;
+        }
+
+        return `<a href="${link}" class="text-brand-primary font-medium underline underline-offset-2 break-all transition hover:text-cyan-700">${link}</a>${trailing}`;
+      });
+    })
+    .join('');
 };
 
 export const encodeQdnImageTag = (reference: {
@@ -322,6 +358,7 @@ export const toRichTextHtml = (value: string): string => {
     }
   );
   html = replacePatternRecursively(html, QDN_IMAGE_TAG_PATTERN, () => '');
+  html = linkifyQortalUris(html);
 
   return html.replace(/\n/g, '<br/>');
 };
