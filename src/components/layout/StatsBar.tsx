@@ -10,6 +10,10 @@ type StatsBarProps = {
 const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
   const { topics, subTopics, posts } = useForumData();
   const location = useLocation();
+  const totalPosters = new Set(posts.map((post) => post.authorUserId)).size;
+  const totalSubTopicStarters = new Set(
+    subTopics.map((subTopic) => subTopic.authorUserId)
+  ).size;
   const placeholder = location.pathname.startsWith('/thread/')
     ? 'Search posts in this thread'
     : 'Search main topics and sub-topics';
@@ -33,6 +37,18 @@ const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
           Total Posts:{' '}
           <strong className="text-brand-primary-strong font-semibold">
             {posts.length}
+          </strong>
+        </span>
+        <span className="forum-pill-primary rounded-md px-2 py-1">
+          Total Posters:{' '}
+          <strong className="text-brand-primary-strong font-semibold">
+            {totalPosters}
+          </strong>
+        </span>
+        <span className="forum-pill-primary rounded-md px-2 py-1">
+          Sub-Topic Starters:{' '}
+          <strong className="text-brand-primary-strong font-semibold">
+            {totalSubTopicStarters}
           </strong>
         </span>
         <div className="ml-auto min-w-[220px] flex-1 sm:max-w-sm">
