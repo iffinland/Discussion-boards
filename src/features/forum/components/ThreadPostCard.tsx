@@ -16,6 +16,7 @@ type ThreadPostCardProps = {
   author: User | undefined;
   repliedPost?: Post | null;
   repliedAuthorName?: string | null;
+  highlighted?: boolean;
   isOwner: boolean;
   canModerate: boolean;
   tipCount: number;
@@ -49,6 +50,7 @@ const ThreadPostCard = ({
   author,
   repliedPost = null,
   repliedAuthorName = null,
+  highlighted = false,
   isOwner,
   canModerate,
   tipCount,
@@ -145,7 +147,15 @@ const ThreadPostCard = ({
   };
 
   return (
-    <article className="forum-card-accent p-4">
+    <article
+      id={`post-${post.id}`}
+      className={[
+        'forum-card-accent p-4 transition',
+        highlighted
+          ? 'ring-2 ring-cyan-300 ring-offset-2 ring-offset-slate-50'
+          : '',
+      ].join(' ')}
+    >
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div

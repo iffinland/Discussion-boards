@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import ThreadComposer from '../features/forum/components/ThreadComposer';
 import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
@@ -26,6 +26,7 @@ type ThreadPageProps = {
 
 const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const {
     users,
     currentUser,
@@ -47,6 +48,9 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   } = useForumData();
   const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
   const [moderationFeedback, setModerationFeedback] = useState<string | null>(
+    null
+  );
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(
     null
   );
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
@@ -100,6 +104,10 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
     () => searchThreadPosts(postSearchIndex, threadPosts, deferredSearchQuery),
     [deferredSearchQuery, postSearchIndex, threadPosts]
   );
+  const sharedPostId = useMemo(
+    () => new URLSearchParams(location.search).get('post'),
+    [location.search]
+  );
   const threadPostMap = useMemo(
     () => new Map(threadPosts.map((post) => [post.id, post])),
     [threadPosts]
@@ -108,6 +116,25 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
     () => filteredThreadPosts.slice(0, visibleCount),
     [filteredThreadPosts, visibleCount]
   );
+  const displayPosts = useMemo(() => {
+    if (!sharedPostId) {
+      return visiblePosts;
+    }
+
+    if (visiblePosts.some((post) => post.id === sharedPostId)) {
+      return visiblePosts;
+    }
+
+    const sharedPost = threadPostMap.get(sharedPostId);
+    if (!sharedPost) {
+      return visiblePosts;
+    }
+
+    return [...visiblePosts, sharedPost].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }, [sharedPostId, threadPostMap, visiblePosts]);
 
   const canLoadMore = visibleCount < filteredThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
@@ -239,6 +266,69 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
   }, [filteredThreadPosts.length, id]);
+
+  useEffect(() => {
+    if (!sharedPostId) {
+      setHighlightedPostId(null);
+      return;
+    }
+
+    const targetIndex = filteredThreadPosts.findIndex(
+      (post) => post.id === sharedPostId
+    );
+    if (targetIndex >= 0) {
+      setVisibleCount((current) => Math.max(current, targetIndex + 1));
+    }
+  }, [filteredThreadPosts, sharedPostId]);
+
+  useEffect(() => {
+    if (
+      !sharedPostId ||
+      !displayPosts.some((post) => post.id === sharedPostId)
+    ) {
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const frameId = window.requestAnimationFrame(() => {
+      const element = document.getElementById(`post-${sharedPostId}`);
+      if (!element) {
+        return;
+      }
+
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      setHighlightedPostId(sharedPostId);
+      timeoutId = window.setTimeout(() => {
+        setHighlightedPostId((current) =>
+          current === sharedPostId ? null : current
+        );
+      }, 3000);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [displayPosts, sharedPostId]);
+
+  const handleShareThread = async () => {
+    if (!id || typeof window === 'undefined' || !navigator.clipboard) {
+      return;
+    }
+
+    const shareUrl = `${window.location.origin}${window.location.pathname}#/thread/${id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setModerationFeedback('Thread link copied.');
+    } catch {
+      setModerationFeedback('Unable to copy thread link.');
+    }
+  };
 
   useEffect(() => {
     if (!canLoadMore || !loadMoreRef.current) {
@@ -395,6 +485,13 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
               {subTopic.isSolved ? 'Clear Solved' : 'Mark as Solved'}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={handleShareThread}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+          >
+            Share Thread
+          </button>
         </div>
       </section>
 
@@ -410,7 +507,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
       ) : null}
 
       <section className="space-y-3">
-        {visiblePosts.map((post) => (
+        {displayPosts.map((post) => (
           <ThreadPostCard
             key={post.id}
             post={post}
@@ -427,6 +524,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
                   )
                 : null
             }
+            highlighted={highlightedPostId === post.id}
             isOwner={post.authorUserId === currentUser.id}
             canModerate={canModerate}
             tipCount={tipsByPostId[post.id] ?? 0}
@@ -441,7 +539,7 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
         {canLoadMore ? (
           <div ref={loadMoreRef} className="h-6 w-full" aria-hidden="true" />
         ) : null}
-        {visiblePosts.length === 0 ? (
+        {displayPosts.length === 0 ? (
           <div className="forum-card p-5">
             <p className="text-ui-strong text-sm font-semibold">
               No matching posts
