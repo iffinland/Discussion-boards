@@ -1,6 +1,7 @@
 export type RichTextFormatType =
   | 'heading2'
   | 'heading3'
+  | 'inlineCode'
   | 'bold'
   | 'italic'
   | 'underline'
@@ -282,6 +283,7 @@ export const applyListFormat = ({
 export const formatToTags: Record<RichTextFormatType, [string, string]> = {
   heading2: ['[h2]', '[/h2]'],
   heading3: ['[h3]', '[/h3]'],
+  inlineCode: ['[icode]', '[/icode]'],
   bold: ['[b]', '[/b]'],
   italic: ['[i]', '[/i]'],
   underline: ['[u]', '[/u]'],
@@ -306,6 +308,12 @@ export const toRichTextHtml = (value: string): string => {
     /\[h3\]([\s\S]*?)\[\/h3\]/gi,
     (_full, content) =>
       `<h3 class="mt-3 mb-2 text-lg font-bold tracking-tight text-slate-900">${content}</h3>`
+  );
+  html = replacePatternRecursively(
+    html,
+    /\[icode\]([\s\S]*?)\[\/icode\]/gi,
+    (_full, content) =>
+      `<code class="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-800">${content}</code>`
   );
   html = replacePatternRecursively(
     html,

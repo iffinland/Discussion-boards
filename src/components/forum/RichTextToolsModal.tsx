@@ -21,6 +21,7 @@ const baseColors = [
 const formatActions: Array<{ label: string; value: RichTextFormatType }> = [
   { label: 'Heading 2', value: 'heading2' },
   { label: 'Heading 3', value: 'heading3' },
+  { label: 'Inline Code', value: 'inlineCode' },
   { label: 'Bold', value: 'bold' },
   { label: 'Italic', value: 'italic' },
   { label: 'Underline', value: 'underline' },
