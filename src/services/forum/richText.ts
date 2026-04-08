@@ -84,7 +84,12 @@ const sanitizeImageSource = (value: string): string | null => {
   if (
     normalized.startsWith('https://') ||
     normalized.startsWith('http://') ||
-    normalized.startsWith('data:image/')
+    normalized.startsWith('data:image/') ||
+    normalized.startsWith('/arbitrary/') ||
+    normalized.startsWith('/render/') ||
+    normalized.startsWith('./') ||
+    normalized.startsWith('../') ||
+    source.startsWith('/')
   ) {
     return source;
   }
