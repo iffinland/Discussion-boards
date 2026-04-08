@@ -68,6 +68,8 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   updateTopicSettings: (input: {
     topicId: string;
+    title: string;
+    description: string;
     status: Topic['status'];
     visibility: Topic['visibility'];
     subTopicAccess: TopicAccess;
@@ -75,12 +77,16 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   updateSubTopicSettings: (input: {
     subTopicId: string;
+    title: string;
+    description: string;
     status: SubTopic['status'];
     visibility: SubTopic['visibility'];
     isPinned: boolean;
+    isSolved: boolean;
     access: TopicAccess;
     allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
+  toggleSubTopicSolved: (subTopicId: string) => Promise<ForumMutationResult>;
   createPost: (input: {
     subTopicId: string;
     content: string;
@@ -162,6 +168,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     createSubTopic,
     updateTopicSettings,
     updateSubTopicSettings,
+    toggleSubTopicSolved,
     upsertRoleAssignment,
     removeRoleAssignment,
     createPost,
@@ -294,6 +301,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
+      toggleSubTopicSolved,
       upsertRoleAssignment,
       removeRoleAssignment,
       createPost,
@@ -326,6 +334,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
+      toggleSubTopicSolved,
       upsertRoleAssignment,
       removeRoleAssignment,
       createPost,

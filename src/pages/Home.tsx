@@ -123,6 +123,8 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [roleType, setRoleType] = useState<'Admin' | 'Moderator'>('Admin');
   const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
   const [managedTopicId, setManagedTopicId] = useState<string | null>(null);
+  const [managedTopicTitle, setManagedTopicTitle] = useState('');
+  const [managedTopicDescription, setManagedTopicDescription] = useState('');
   const [managedTopicStatus, setManagedTopicStatus] = useState<
     'open' | 'locked'
   >('open');
@@ -136,6 +138,9 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [managedSubTopicId, setManagedSubTopicId] = useState<string | null>(
     null
   );
+  const [managedSubTopicTitle, setManagedSubTopicTitle] = useState('');
+  const [managedSubTopicDescription, setManagedSubTopicDescription] =
+    useState('');
   const [managedSubTopicStatus, setManagedSubTopicStatus] = useState<
     'open' | 'locked'
   >('open');
@@ -205,6 +210,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                 ...subTopic.allowedAddresses,
                 subTopic.status,
                 subTopic.visibility,
+                subTopic.isSolved ? 'solved' : 'unsolved',
                 subTopic.authorUserId,
               ]),
             })),
@@ -401,6 +407,8 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   const handleOpenTopicManager = (topic: Topic) => {
     setManagedTopicId((current) => (current === topic.id ? null : topic.id));
+    setManagedTopicTitle(topic.title);
+    setManagedTopicDescription(topic.description);
     setManagedTopicStatus(topic.status);
     setManagedTopicVisibility(topic.visibility);
     setManagedTopicAccess(topic.subTopicAccess);
@@ -418,6 +426,8 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     const result = await updateTopicSettings({
       topicId: managedTopicId,
+      title: managedTopicTitle,
+      description: managedTopicDescription,
       status: managedTopicStatus,
       visibility: managedTopicVisibility,
       subTopicAccess: managedTopicAccess,
@@ -434,9 +444,12 @@ const Home = ({ searchQuery }: HomeProps) => {
   const handleToggleSubTopicStatus = async (subTopic: SubTopic) => {
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status === 'locked' ? 'open' : 'locked',
       visibility: subTopic.visibility,
       isPinned: subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -451,9 +464,12 @@ const Home = ({ searchQuery }: HomeProps) => {
   const handleToggleSubTopicVisibility = async (subTopic: SubTopic) => {
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status,
       visibility: subTopic.visibility === 'hidden' ? 'visible' : 'hidden',
       isPinned: subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -468,9 +484,12 @@ const Home = ({ searchQuery }: HomeProps) => {
   const handleToggleSubTopicPin = async (subTopic: SubTopic) => {
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status,
       visibility: subTopic.visibility,
       isPinned: !subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -488,6 +507,8 @@ const Home = ({ searchQuery }: HomeProps) => {
     setManagedSubTopicId((current) =>
       current === subTopic.id ? null : subTopic.id
     );
+    setManagedSubTopicTitle(subTopic.title);
+    setManagedSubTopicDescription(subTopic.description);
     setManagedSubTopicStatus(subTopic.status);
     setManagedSubTopicVisibility(subTopic.visibility);
     setManagedSubTopicAccess(subTopic.access);
@@ -513,9 +534,12 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     const result = await updateSubTopicSettings({
       subTopicId: managedSubTopicId,
+      title: managedSubTopicTitle,
+      description: managedSubTopicDescription,
       status: managedSubTopicStatus,
       visibility: managedSubTopicVisibility,
       isPinned: existingSubTopic.isPinned,
+      isSolved: existingSubTopic.isSolved,
       access: managedSubTopicAccess,
       allowedAddresses: parseAddressInput(managedSubTopicAllowedAddresses),
     });
@@ -546,6 +570,11 @@ const Home = ({ searchQuery }: HomeProps) => {
                 className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
               >
                 <p className="text-ui-strong text-sm font-semibold">
+                  {subTopic.isSolved ? (
+                    <span className="mr-2 inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
+                      Solved
+                    </span>
+                  ) : null}
                   {subTopic.title}
                 </p>
                 <p className="text-ui-muted text-xs">
@@ -721,6 +750,20 @@ const Home = ({ searchQuery }: HomeProps) => {
                 <h3 className="text-ui-strong text-sm font-semibold">
                   Manage Main Topic
                 </h3>
+                <input
+                  value={managedTopicTitle}
+                  onChange={(event) => setManagedTopicTitle(event.target.value)}
+                  placeholder="Main topic title"
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={managedTopicDescription}
+                  onChange={(event) =>
+                    setManagedTopicDescription(event.target.value)
+                  }
+                  placeholder="Main topic description"
+                  className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
                 <select
                   value={managedTopicStatus}
                   onChange={(event) =>
@@ -796,6 +839,22 @@ const Home = ({ searchQuery }: HomeProps) => {
                 <h3 className="text-ui-strong text-sm font-semibold">
                   Manage Sub-Topic
                 </h3>
+                <input
+                  value={managedSubTopicTitle}
+                  onChange={(event) =>
+                    setManagedSubTopicTitle(event.target.value)
+                  }
+                  placeholder="Sub-topic title"
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={managedSubTopicDescription}
+                  onChange={(event) =>
+                    setManagedSubTopicDescription(event.target.value)
+                  }
+                  placeholder="Sub-topic description"
+                  className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
                 <select
                   value={managedSubTopicStatus}
                   onChange={(event) =>

@@ -362,6 +362,15 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
       typeof value.pinnedAt === 'string' && value.pinnedAt.trim()
         ? value.pinnedAt
         : null,
+    isSolved: value.isSolved === true,
+    solvedAt:
+      typeof value.solvedAt === 'string' && value.solvedAt.trim()
+        ? value.solvedAt
+        : null,
+    solvedByUserId:
+      typeof value.solvedByUserId === 'string' && value.solvedByUserId.trim()
+        ? value.solvedByUserId
+        : null,
     access:
       value.access === 'moderators' ||
       value.access === 'admins' ||

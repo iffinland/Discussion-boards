@@ -38,6 +38,9 @@ export interface SubTopic {
   lastPostAt: string;
   isPinned: boolean;
   pinnedAt: string | null;
+  isSolved: boolean;
+  solvedAt: string | null;
+  solvedByUserId: string | null;
   access: TopicAccess;
   allowedAddresses: string[];
   status: SubTopicStatus;

@@ -39,6 +39,9 @@ export type TopicDirectorySnapshot = {
     description: string;
     isPinned: boolean;
     pinnedAt: string | null;
+    isSolved: boolean;
+    solvedAt: string | null;
+    solvedByUserId: string | null;
     access: SubTopic['access'];
     allowedAddresses: string[];
     status: SubTopic['status'];
@@ -247,6 +250,16 @@ const parseTopicDirectoryPayload = (
             typeof item.pinnedAt === 'string' && item.pinnedAt.trim()
               ? item.pinnedAt
               : null,
+          isSolved: item.isSolved === true,
+          solvedAt:
+            typeof item.solvedAt === 'string' && item.solvedAt.trim()
+              ? item.solvedAt
+              : null,
+          solvedByUserId:
+            typeof item.solvedByUserId === 'string' &&
+            item.solvedByUserId.trim()
+              ? item.solvedByUserId
+              : null,
           access: (item.access === 'moderators' ||
           item.access === 'admins' ||
           item.access === 'custom'
@@ -430,6 +443,9 @@ export const forumSearchIndexService = {
           description: subTopic.description,
           isPinned: subTopic.isPinned,
           pinnedAt: subTopic.pinnedAt,
+          isSolved: subTopic.isSolved,
+          solvedAt: subTopic.solvedAt,
+          solvedByUserId: subTopic.solvedByUserId,
           access: subTopic.access,
           allowedAddresses: subTopic.allowedAddresses,
           status: subTopic.status,

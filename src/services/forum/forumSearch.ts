@@ -87,6 +87,7 @@ export const buildForumStructureSearchIndex = (
             ...subTopic.allowedAddresses,
             subTopic.status,
             subTopic.visibility,
+            subTopic.isSolved ? 'solved' : 'unsolved',
             authorName,
             parentTopic?.title ?? '',
             parentTopic?.description ?? '',

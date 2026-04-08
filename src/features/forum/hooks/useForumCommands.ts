@@ -397,6 +397,9 @@ export const useForumCommands = ({
         lastPostAt: createdAt,
         isPinned: false,
         pinnedAt: null,
+        isSolved: false,
+        solvedAt: null,
+        solvedByUserId: null,
         access: input.access,
         allowedAddresses,
         status: 'open',
@@ -448,6 +451,8 @@ export const useForumCommands = ({
   const updateTopicSettings = useCallback(
     async (input: {
       topicId: string;
+      title: string;
+      description: string;
       status: Topic['status'];
       visibility: Topic['visibility'];
       subTopicAccess: TopicAccess;
@@ -466,6 +471,15 @@ export const useForumCommands = ({
         return { ok: false, error: 'Only admins can manage main topics.' };
       }
 
+      const title = input.title.trim();
+      const description = input.description.trim();
+      if (!title || !description) {
+        return {
+          ok: false,
+          error: 'Main topic title and description are required.',
+        };
+      }
+
       const allowedAddresses = normalizeAddressList(input.allowedAddresses);
       if (input.subTopicAccess === 'custom' && allowedAddresses.length === 0) {
         return {
@@ -476,6 +490,8 @@ export const useForumCommands = ({
 
       const updatedTopic: Topic = {
         ...target,
+        title,
+        description,
         status: input.status,
         visibility: input.visibility,
         subTopicAccess: input.subTopicAccess,
@@ -531,9 +547,12 @@ export const useForumCommands = ({
   const updateSubTopicSettings = useCallback(
     async (input: {
       subTopicId: string;
+      title: string;
+      description: string;
       status: SubTopic['status'];
       visibility: SubTopic['visibility'];
       isPinned: boolean;
+      isSolved: boolean;
       access: TopicAccess;
       allowedAddresses: string[];
     }): Promise<ForumMutationResult> => {
@@ -556,6 +575,15 @@ export const useForumCommands = ({
         };
       }
 
+      const title = input.title.trim();
+      const description = input.description.trim();
+      if (!title || !description) {
+        return {
+          ok: false,
+          error: 'Sub-topic title and description are required.',
+        };
+      }
+
       const allowedAddresses = normalizeAddressList(input.allowedAddresses);
       if (input.access === 'custom' && allowedAddresses.length === 0) {
         return {
@@ -566,11 +594,20 @@ export const useForumCommands = ({
 
       const updatedSubTopic: SubTopic = {
         ...target,
+        title,
+        description,
         status: input.status,
         visibility: input.visibility,
         isPinned: input.isPinned,
         pinnedAt: input.isPinned
           ? (target.pinnedAt ?? new Date().toISOString())
+          : null,
+        isSolved: input.isSolved,
+        solvedAt: input.isSolved
+          ? (target.solvedAt ?? new Date().toISOString())
+          : null,
+        solvedByUserId: input.isSolved
+          ? (target.solvedByUserId ?? currentUser.id)
           : null,
         access: input.access,
         allowedAddresses,
@@ -611,12 +648,77 @@ export const useForumCommands = ({
       }
     },
     [
+      currentUser.id,
       currentUser.role,
       currentUser.username,
       buildTopicDirectoryIndexResource,
       isAuthenticated,
       setTopicDirectoryIndex,
       setSubTopics,
+      subTopics,
+      topics,
+    ]
+  );
+
+  const toggleSubTopicSolved = useCallback(
+    async (subTopicId: string): Promise<ForumMutationResult> => {
+      const target = subTopics.find((subTopic) => subTopic.id === subTopicId);
+      if (!target) {
+        return { ok: false, error: 'Sub-topic not found.' };
+      }
+
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      const updatedSubTopic: SubTopic = {
+        ...target,
+        isSolved: !target.isSolved,
+        solvedAt: target.isSolved ? null : new Date().toISOString(),
+        solvedByUserId: target.isSolved ? null : currentUser.id,
+      };
+
+      try {
+        const nextSubTopics = subTopics.map((subTopic) =>
+          subTopic.id === target.id ? updatedSubTopic : subTopic
+        );
+        const subTopicResource = forumQdnService.buildSubTopicPublishResource(
+          updatedSubTopic,
+          currentUser.username
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          topics,
+          nextSubTopics
+        );
+        await publishMultipleQortalResources([
+          subTopicResource.resource,
+          topicDirectoryResource.resource,
+        ]);
+
+        setSubTopics((current) =>
+          current.map((subTopic) =>
+            subTopic.id === target.id ? updatedSubTopic : subTopic
+          )
+        );
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to update solved state.',
+        };
+      }
+    },
+    [
+      currentUser.id,
+      currentUser.username,
+      buildTopicDirectoryIndexResource,
+      isAuthenticated,
+      setSubTopics,
+      setTopicDirectoryIndex,
       subTopics,
       topics,
     ]
@@ -1081,6 +1183,7 @@ export const useForumCommands = ({
     createSubTopic,
     updateTopicSettings,
     updateSubTopicSettings,
+    toggleSubTopicSolved,
     upsertRoleAssignment,
     removeRoleAssignment,
     createPost,

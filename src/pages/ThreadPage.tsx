@@ -33,7 +33,9 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
     subTopics,
     posts,
     threadSearchIndexes,
+    isAuthenticated,
     updateSubTopicSettings,
+    toggleSubTopicSolved,
     createPost,
     uploadPostImage,
     updatePost,
@@ -132,9 +134,12 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status === 'locked' ? 'open' : 'locked',
       visibility: subTopic.visibility,
       isPinned: subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -153,9 +158,12 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status,
       visibility: subTopic.visibility === 'hidden' ? 'visible' : 'hidden',
       isPinned: subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -174,9 +182,12 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
 
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
+      title: subTopic.title,
+      description: subTopic.description,
       status: subTopic.status,
       visibility: subTopic.visibility,
       isPinned: !subTopic.isPinned,
+      isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
     });
@@ -187,6 +198,21 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
           ? 'Sub-topic unpinned.'
           : 'Sub-topic pinned to the top.'
         : (result.error ?? 'Unable to update sub-topic.')
+    );
+  };
+
+  const handleToggleSubTopicSolved = async () => {
+    if (!subTopic) {
+      return;
+    }
+
+    const result = await toggleSubTopicSolved(subTopic.id);
+    setModerationFeedback(
+      result.ok
+        ? subTopic.isSolved
+          ? 'Solved status cleared.'
+          : 'Thread marked as solved.'
+        : (result.error ?? 'Unable to update solved status.')
     );
   };
 
@@ -316,6 +342,11 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
               Pinned
             </span>
           ) : null}
+          {subTopic.isSolved ? (
+            <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+              Solved
+            </span>
+          ) : null}
           {subTopic.access !== 'everyone' ? (
             <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
               Access: {resolveAccessLabel(subTopic.access)}
@@ -354,6 +385,15 @@ const ThreadPage = ({ searchQuery }: ThreadPageProps) => {
                   : 'Hide Sub-Topic'}
               </button>
             </>
+          ) : null}
+          {isAuthenticated ? (
+            <button
+              type="button"
+              onClick={handleToggleSubTopicSolved}
+              className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+            >
+              {subTopic.isSolved ? 'Clear Solved' : 'Mark as Solved'}
+            </button>
           ) : null}
         </div>
       </section>

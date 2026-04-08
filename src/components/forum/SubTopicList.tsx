@@ -25,6 +25,12 @@ const PinnedBadge = () => (
   </span>
 );
 
+const SolvedBadge = () => (
+  <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+    Solved
+  </span>
+);
+
 const SubTopicList = ({
   subTopics,
   users,
@@ -58,6 +64,11 @@ const SubTopicList = ({
                   {subTopic.isPinned ? (
                     <span className="mr-2 inline-flex align-middle">
                       <PinnedBadge />
+                    </span>
+                  ) : null}
+                  {subTopic.isSolved ? (
+                    <span className="mr-2 inline-flex align-middle">
+                      <SolvedBadge />
                     </span>
                   ) : null}
                   {subTopic.title}
