@@ -72,6 +72,7 @@ const ThreadPostCard = ({
   const [draftContent, setDraftContent] = useState(post.content);
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
+  const [isAvatarVisible, setIsAvatarVisible] = useState(true);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleStartEdit = () => {
@@ -163,12 +164,21 @@ const ThreadPostCard = ({
     >
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div
-            className={`${avatarColor} flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold text-white`}
-            aria-hidden="true"
-          >
-            {getInitials(displayName)}
-          </div>
+          {author?.avatarUrl && isAvatarVisible ? (
+            <img
+              src={author.avatarUrl}
+              alt={`${displayName} avatar`}
+              className="h-10 w-10 rounded-full object-cover"
+              onError={() => setIsAvatarVisible(false)}
+            />
+          ) : (
+            <div
+              className={`${avatarColor} flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold text-white`}
+              aria-hidden="true"
+            >
+              {getInitials(displayName)}
+            </div>
+          )}
           <div>
             <p className="text-ui-strong text-sm font-semibold">
               {displayName}

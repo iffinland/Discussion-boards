@@ -20,6 +20,7 @@ export interface User {
   username: string;
   displayName: string;
   address?: string | null;
+  avatarUrl?: string | null;
   role: UserRole;
   avatarColor: string;
   joinedAt: string;

@@ -75,6 +75,7 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   } = useForumData();
   const [isNameMenuOpen, setIsNameMenuOpen] = useState(false);
   const [highlightedNameIndex, setHighlightedNameIndex] = useState(0);
+  const [isAvatarVisible, setIsAvatarVisible] = useState(true);
   const nameMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const nameMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const nameOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -84,6 +85,10 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
     [activeAuthName, currentUser.displayName]
   );
   const canOpenNameMenu = availableAuthNames.length > 1;
+
+  useEffect(() => {
+    setIsAvatarVisible(true);
+  }, [currentUser.avatarUrl]);
 
   useEffect(() => {
     const closeIfOutside = (event: MouseEvent) => {
@@ -248,12 +253,25 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
               aria-expanded={isNameMenuOpen}
               aria-haspopup="menu"
             >
-              <div
-                className={`${currentUser.avatarColor} flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-cyan-100`}
-                aria-hidden="true"
-              >
-                {initials}
-              </div>
+              {currentUser.avatarUrl && isAvatarVisible ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={
+                    (activeAuthName ?? currentUser.displayName)
+                      ? `${activeAuthName ?? currentUser.displayName} avatar`
+                      : 'User avatar'
+                  }
+                  className="h-8 w-8 rounded-full object-cover ring-2 ring-cyan-100"
+                  onError={() => setIsAvatarVisible(false)}
+                />
+              ) : (
+                <div
+                  className={`${currentUser.avatarColor} flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-cyan-100`}
+                  aria-hidden="true"
+                >
+                  {initials}
+                </div>
+              )}
               <div className="leading-tight text-left">
                 <p className="text-ui-strong text-sm font-semibold">
                   {activeAuthName ?? currentUser.displayName}

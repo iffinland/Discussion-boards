@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'qapp-core';
+import { createAvatarLink } from 'qapp-core';
 
 import {
   getAccountNames,
@@ -32,6 +33,7 @@ const GUEST_USER: User = {
   username: 'qortal-guest',
   displayName: 'Guest',
   address: null,
+  avatarUrl: null,
   role: 'Member',
   avatarColor: 'bg-slate-400',
   joinedAt: new Date(0).toISOString(),
@@ -83,6 +85,7 @@ const mergeUsersFromForumData = (
       username: id,
       displayName: id,
       address: null,
+      avatarUrl: createAvatarLink(id),
       role: 'Member',
       avatarColor: 'bg-cyan-500',
       joinedAt: new Date().toISOString(),
@@ -288,6 +291,7 @@ export const useForumDataQuery = () => {
           username: identity,
           displayName: identity,
           address: authenticatedAddress,
+          avatarUrl: createAvatarLink(identity),
           role: resolveRoleForAddress(authenticatedAddress, roleRegistry),
           avatarColor: 'bg-cyan-600',
           joinedAt: new Date().toISOString(),
