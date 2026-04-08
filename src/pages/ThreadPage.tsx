@@ -44,6 +44,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     toggleSubTopicSolved,
     createPost,
     uploadPostImage,
+    uploadPostAttachment,
     updatePost,
     deletePost,
     likePost,
@@ -76,7 +77,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const {
     replyText,
     replyTarget,
+    replyAttachments,
     setReplyText,
+    setReplyAttachments,
     feedback,
     tipsByPostId,
     handleSubmitReply,
@@ -87,10 +90,12 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     handleSharePost,
     handleSendTip,
     uploadImageForReply,
+    uploadAttachmentForReply,
   } = useThreadActions({
     threadId: id,
     createPost,
     uploadPostImage,
+    uploadPostAttachment,
     updatePost,
     deletePost,
     resolveAuthorDisplayName,
@@ -631,6 +636,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
       <ThreadComposer
         replyText={replyText}
+        replyAttachments={replyAttachments}
         replyTargetAuthorName={
           replyTarget
             ? resolveAuthorDisplayName(replyTarget.authorUserId)
@@ -638,8 +644,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         }
         replyTargetContent={replyTarget?.content ?? null}
         onReplyTextChange={setReplyText}
+        onReplyAttachmentsChange={setReplyAttachments}
         onSubmit={handleSubmitReply}
         onUploadImage={uploadImageForReply}
+        onUploadAttachment={uploadAttachmentForReply}
         onCancelReplyTarget={handleCancelReplyTarget}
         disabled={isComposerDisabled}
         helperText={composerHelperText}

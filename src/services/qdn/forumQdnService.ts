@@ -1,4 +1,4 @@
-import type { Post, SubTopic, Topic } from '../../types';
+import type { Post, PostAttachment, SubTopic, Topic } from '../../types';
 import { generateForumEntityId, toPartitionKey } from '../forum/forumId';
 import {
   ensureQdnResourceReady,
@@ -21,6 +21,7 @@ const TOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}topic-`;
 const SUBTOPIC_PREFIX = `${FORUM_IDENTIFIER_PREFIX}sub-`;
 const POST_PREFIX = `${FORUM_IDENTIFIER_PREFIX}post-`;
 const IMAGE_PREFIX = `${FORUM_IDENTIFIER_PREFIX}img-`;
+const ATTACHMENT_PREFIX = `${FORUM_IDENTIFIER_PREFIX}att-`;
 const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
 const IMAGE_PUBLISH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -37,6 +38,15 @@ export type ForumPostImageReference = {
   name: string;
   identifier: string;
   filename: string;
+};
+
+export type ForumPostAttachmentReference = {
+  service: string;
+  name: string;
+  identifier: string;
+  filename: string;
+  mimeType: string;
+  size: number;
 };
 
 type EntityStatus = 'active' | 'deleted';
@@ -124,6 +134,40 @@ const toPostIdentifier = (post: Post) =>
   `${toThreadPostPrefix(post.subTopicId)}${post.id}`;
 const toLegacyPostIdentifier = (post: Post) => `${POST_PREFIX}${post.id}`;
 const toImageIdentifier = (imageId: string) => `${IMAGE_PREFIX}${imageId}`;
+const toAttachmentIdentifier = (attachmentId: string) =>
+  `${ATTACHMENT_PREFIX}${attachmentId}`;
+
+const sanitizePostAttachments = (value: unknown): PostAttachment[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => isObject(item))
+    .map((item) => ({
+      id: typeof item.id === 'string' ? item.id : '',
+      service: typeof item.service === 'string' ? item.service : 'FILE',
+      name: typeof item.name === 'string' ? item.name : '',
+      identifier: typeof item.identifier === 'string' ? item.identifier : '',
+      filename: typeof item.filename === 'string' ? item.filename : '',
+      mimeType:
+        typeof item.mimeType === 'string'
+          ? item.mimeType
+          : 'application/octet-stream',
+      size:
+        typeof item.size === 'number' && Number.isFinite(item.size)
+          ? item.size
+          : 0,
+    }))
+    .filter((attachment) =>
+      Boolean(
+        attachment.id &&
+          attachment.name &&
+          attachment.identifier &&
+          attachment.filename
+      )
+    );
+};
 
 const resolveOwnerName = async (providedName?: string): Promise<string> => {
   if (providedName?.trim()) {
@@ -394,6 +438,7 @@ const isPost = (value: unknown): value is Post => {
     typeof value.authorUserId === 'string' &&
     (typeof value.parentPostId === 'string' || value.parentPostId === null) &&
     typeof value.content === 'string' &&
+    (Array.isArray(value.attachments) || value.attachments === undefined) &&
     typeof value.createdAt === 'string' &&
     typeof value.likes === 'number'
   );
@@ -450,7 +495,10 @@ const parsePostPayload = (raw: unknown): PostPayload | null => {
     type: 'post',
     status,
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
-    post: raw.post,
+    post: {
+      ...raw.post,
+      attachments: sanitizePostAttachments(raw.post.attachments),
+    },
   };
 };
 
@@ -755,7 +803,40 @@ export const forumQdnService = {
     };
   },
 
-  async getPostImageResourceUrl(reference: {
+  async publishPostAttachment(
+    file: File,
+    ownerName?: string
+  ): Promise<ForumPostAttachmentReference> {
+    const resolvedOwner = await resolveOwnerName(ownerName);
+    const attachmentId = generateForumEntityId('attachment', resolvedOwner);
+    const identifier = toAttachmentIdentifier(attachmentId);
+    assertIdentifierLength(identifier);
+
+    await requestQortal<unknown>(
+      {
+        action: 'PUBLISH_QDN_RESOURCE',
+        service: 'FILE',
+        name: resolvedOwner,
+        identifier,
+        filename: file.name,
+        file,
+      },
+      {
+        timeoutMs: IMAGE_PUBLISH_TIMEOUT_MS,
+      }
+    );
+
+    return {
+      service: 'FILE',
+      name: resolvedOwner,
+      identifier,
+      filename: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+    };
+  },
+
+  async getQdnResourceUrl(reference: {
     service: string;
     name: string;
     identifier: string;
@@ -786,5 +867,14 @@ export const forumQdnService = {
     });
     imageUrlCache.set(cacheKey, resourceUrl);
     return resourceUrl;
+  },
+
+  async getPostImageResourceUrl(reference: {
+    service: string;
+    name: string;
+    identifier: string;
+    filename?: string;
+  }): Promise<string> {
+    return this.getQdnResourceUrl(reference);
   },
 };

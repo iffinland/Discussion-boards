@@ -1,13 +1,17 @@
+import type { PostAttachment } from '../../../types';
 import RichTextContent from '../../../components/forum/RichTextContent';
 import RichTextEditor from '../../../components/forum/RichTextEditor';
 
 type ThreadComposerProps = {
   replyText: string;
+  replyAttachments: PostAttachment[];
   replyTargetAuthorName?: string | null;
   replyTargetContent?: string | null;
   onReplyTextChange: (value: string) => void;
+  onReplyAttachmentsChange: (attachments: PostAttachment[]) => void;
   onSubmit: () => void;
   onUploadImage: (file: File) => Promise<string>;
+  onUploadAttachment: (file: File) => Promise<PostAttachment>;
   onCancelReplyTarget?: () => void;
   disabled?: boolean;
   helperText?: string | null;
@@ -15,11 +19,14 @@ type ThreadComposerProps = {
 
 const ThreadComposer = ({
   replyText,
+  replyAttachments,
   replyTargetAuthorName = null,
   replyTargetContent = null,
   onReplyTextChange,
+  onReplyAttachmentsChange,
   onSubmit,
   onUploadImage,
+  onUploadAttachment,
   onCancelReplyTarget,
   disabled = false,
   helperText = null,
@@ -66,9 +73,12 @@ const ThreadComposer = ({
       ) : null}
       <RichTextEditor
         value={replyText}
+        attachments={replyAttachments}
         onChange={onReplyTextChange}
+        onAttachmentsChange={onReplyAttachmentsChange}
         onSubmit={onSubmit}
         onUploadImage={onUploadImage}
+        onUploadAttachment={onUploadAttachment}
         placeholder="Share your thoughts with the community..."
       />
     </section>

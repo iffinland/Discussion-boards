@@ -13,6 +13,7 @@ import { useForumCommands } from '../features/forum/hooks/useForumCommands';
 import { useForumDataQuery } from '../features/forum/hooks/useForumDataQuery';
 import type {
   ForumMutationResult,
+  ForumUploadAttachmentResult,
   ForumUploadImageResult,
 } from '../features/forum/types';
 import type {
@@ -25,6 +26,7 @@ import { forumQdnService } from '../services/qdn/forumQdnService';
 import type {
   ForumRoleRegistry,
   Post,
+  PostAttachment,
   SubTopic,
   Topic,
   TopicAccess,
@@ -91,6 +93,7 @@ type ForumContextValue = {
     subTopicId: string;
     content: string;
     parentPostId?: string | null;
+    attachments?: PostAttachment[];
   }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
@@ -98,6 +101,7 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   removeRoleAssignment: (address: string) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
+  uploadPostAttachment: (file: File) => Promise<ForumUploadAttachmentResult>;
   updatePost: (input: {
     postId: string;
     content: string;
@@ -131,6 +135,7 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     authorUserId: post.authorUserId,
     parentPostId: post.parentPostId,
     content: post.content,
+    attachments: post.attachments,
     createdAt: post.createdAt,
     likes: 0,
   }));
@@ -173,6 +178,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     removeRoleAssignment,
     createPost,
     uploadPostImage,
+    uploadPostAttachment,
     updatePost,
     deletePost,
     likePost,
@@ -306,6 +312,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       removeRoleAssignment,
       createPost,
       uploadPostImage,
+      uploadPostAttachment,
       updatePost,
       deletePost,
       likePost,
@@ -339,6 +346,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       removeRoleAssignment,
       createPost,
       uploadPostImage,
+      uploadPostAttachment,
       updatePost,
       deletePost,
       likePost,

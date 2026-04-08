@@ -4,8 +4,12 @@ import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../../../services/qortal/share';
-import type { Post } from '../../../types';
-import type { ForumMutationResult, ForumUploadImageResult } from '../types';
+import type { Post, PostAttachment } from '../../../types';
+import type {
+  ForumMutationResult,
+  ForumUploadAttachmentResult,
+  ForumUploadImageResult,
+} from '../types';
 
 type UseThreadActionsParams = {
   threadId?: string;
@@ -13,8 +17,10 @@ type UseThreadActionsParams = {
     subTopicId: string;
     content: string;
     parentPostId?: string | null;
+    attachments?: PostAttachment[];
   }) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
+  uploadPostAttachment: (file: File) => Promise<ForumUploadAttachmentResult>;
   updatePost: (input: {
     postId: string;
     content: string;
@@ -27,12 +33,16 @@ export const useThreadActions = ({
   threadId,
   createPost,
   uploadPostImage,
+  uploadPostAttachment,
   updatePost,
   deletePost,
   resolveAuthorDisplayName,
 }: UseThreadActionsParams) => {
   const [replyText, setReplyText] = useState('');
   const [replyTarget, setReplyTarget] = useState<Post | null>(null);
+  const [replyAttachments, setReplyAttachments] = useState<PostAttachment[]>(
+    []
+  );
   const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -45,6 +55,7 @@ export const useThreadActions = ({
       subTopicId: threadId,
       content: replyText,
       parentPostId: replyTarget?.id ?? null,
+      attachments: replyAttachments,
     });
 
     if (!result.ok) {
@@ -54,8 +65,9 @@ export const useThreadActions = ({
 
     setReplyText('');
     setReplyTarget(null);
+    setReplyAttachments([]);
     setFeedback('Reply published.');
-  }, [createPost, replyTarget, replyText, threadId]);
+  }, [createPost, replyAttachments, replyTarget, replyText, threadId]);
 
   const handleReplyToPost = useCallback(
     (post: Post) => {
@@ -139,10 +151,24 @@ export const useThreadActions = ({
     [uploadPostImage]
   );
 
+  const uploadAttachmentForReply = useCallback(
+    async (file: File): Promise<PostAttachment> => {
+      const result = await uploadPostAttachment(file);
+      if (!result.ok || !result.attachment) {
+        throw new Error(result.error ?? 'Unable to upload attachment.');
+      }
+
+      return result.attachment;
+    },
+    [uploadPostAttachment]
+  );
+
   return {
     replyText,
     replyTarget,
+    replyAttachments,
     setReplyText,
+    setReplyAttachments,
     feedback,
     tipsByPostId,
     handleSubmitReply,
@@ -153,5 +179,6 @@ export const useThreadActions = ({
     handleSharePost,
     handleSendTip,
     uploadImageForReply,
+    uploadAttachmentForReply,
   };
 };

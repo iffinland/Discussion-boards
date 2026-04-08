@@ -13,27 +13,42 @@ import {
   RICH_TEXT_IMAGE_LIMITS,
   type RichTextFormatType,
 } from '../../services/forum/richText';
+import {
+  FORUM_ATTACHMENT_LIMITS,
+  createAttachmentSignature,
+  formatAttachmentSize,
+  getAttachmentHelperText,
+} from '../../services/forum/attachments';
+import type { PostAttachment } from '../../types';
 import RichTextToolsModal from './RichTextToolsModal';
 
 type RichTextEditorProps = {
   value: string;
+  attachments: PostAttachment[];
   onChange: (value: string) => void;
+  onAttachmentsChange: (attachments: PostAttachment[]) => void;
   onSubmit: () => void;
   onUploadImage?: (file: File) => Promise<string>;
+  onUploadAttachment?: (file: File) => Promise<PostAttachment>;
   placeholder?: string;
 };
 
 const RichTextEditor = ({
   value,
+  attachments,
   onChange,
+  onAttachmentsChange,
   onSubmit,
   onUploadImage,
+  onUploadAttachment,
   placeholder = 'Write your reply...',
 }: RichTextEditorProps) => {
   const editorId = useId();
   const fileInputId = useId();
+  const attachmentInputId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
   const [editorInfo, setEditorInfo] = useState<string | null>(null);
   const isUploadingImage = editorInfo === 'Uploading image to QDN...';
@@ -41,7 +56,7 @@ const RichTextEditor = ({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!value.trim()) {
+    if (!value.trim() && attachments.length === 0) {
       return;
     }
 
@@ -220,6 +235,62 @@ const RichTextEditor = ({
     }
   };
 
+  const handleAttachmentSelected = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    event.target.value = '';
+
+    if (selectedFiles.length === 0 || !onUploadAttachment) {
+      return;
+    }
+
+    if (
+      attachments.length + selectedFiles.length >
+      FORUM_ATTACHMENT_LIMITS.maxFiles
+    ) {
+      setEditorInfo('Too many attachments. Maximum allowed is 5 files.');
+      return;
+    }
+
+    try {
+      setEditorInfo('Uploading attachments to QDN...');
+      const nextAttachments = [...attachments];
+
+      for (const file of selectedFiles) {
+        const uploaded = await onUploadAttachment(file);
+        if (
+          nextAttachments.some(
+            (attachment) =>
+              createAttachmentSignature(attachment) ===
+              createAttachmentSignature(uploaded)
+          )
+        ) {
+          continue;
+        }
+
+        nextAttachments.push(uploaded);
+      }
+
+      onAttachmentsChange(nextAttachments);
+      setEditorInfo(
+        `${selectedFiles.length} attachment${selectedFiles.length === 1 ? '' : 's'} added.`
+      );
+    } catch (error) {
+      setEditorInfo(
+        error instanceof Error
+          ? error.message
+          : 'Unable to upload selected attachment.'
+      );
+    }
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    onAttachmentsChange(
+      attachments.filter((attachment) => attachment.id !== attachmentId)
+    );
+  };
+
   return (
     <form onSubmit={handleSubmit} className="forum-card-primary p-4">
       <div className="border-brand-primary bg-brand-primary-soft mb-3 rounded-md border p-2">
@@ -310,9 +381,28 @@ const RichTextEditor = ({
           >
             Add Image
           </button>
+          <input
+            ref={attachmentInputRef}
+            id={attachmentInputId}
+            type="file"
+            accept=".txt,.md,.zip,text/plain,text/markdown,application/zip,application/x-zip-compressed"
+            multiple
+            className="hidden"
+            onChange={handleAttachmentSelected}
+          />
+          <button
+            type="button"
+            onClick={() => attachmentInputRef.current?.click()}
+            className="forum-pill-accent text-brand-accent-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            Add Attachment
+          </button>
         </div>
         <p className="text-ui-muted mt-2 text-xs">
           Image limits: max 1920x1080, max 2 MB, types JPG/PNG/WEBP/GIF.
+        </p>
+        <p className="text-ui-muted mt-1 text-xs">
+          {getAttachmentHelperText()}
         </p>
       </div>
 
@@ -341,6 +431,37 @@ const RichTextEditor = ({
         placeholder={placeholder}
         className="bg-surface-card text-ui-strong min-h-28 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-cyan-300"
       />
+
+      {attachments.length > 0 ? (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-ui-strong text-xs font-semibold">Attachments</p>
+          <div className="mt-2 space-y-2">
+            {attachments.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-ui-strong truncate text-xs font-semibold">
+                    {attachment.filename}
+                  </p>
+                  <p className="text-ui-muted text-xs">
+                    {attachment.mimeType} ·{' '}
+                    {formatAttachmentSize(attachment.size)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(attachment.id)}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex items-center justify-between">
         <p className="text-ui-muted text-xs">

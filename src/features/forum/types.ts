@@ -8,3 +8,9 @@ export type ForumUploadImageResult = {
   error?: string;
   imageTag?: string;
 };
+
+export type ForumUploadAttachmentResult = {
+  ok: boolean;
+  error?: string;
+  attachment?: import('../../types').PostAttachment;
+};

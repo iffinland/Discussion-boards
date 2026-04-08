@@ -5,6 +5,16 @@ export type TopicAccess = 'everyone' | 'moderators' | 'admins' | 'custom';
 export type SubTopicStatus = 'open' | 'locked';
 export type SubTopicVisibility = 'visible' | 'hidden';
 
+export interface PostAttachment {
+  id: string;
+  service: string;
+  name: string;
+  identifier: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -53,6 +63,7 @@ export interface Post {
   authorUserId: string;
   parentPostId: string | null;
   content: string;
+  attachments: PostAttachment[];
   createdAt: string;
   likes: number;
 }

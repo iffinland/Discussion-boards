@@ -1,4 +1,4 @@
-import type { Post, SubTopic, Topic } from '../../types';
+import type { Post, PostAttachment, SubTopic, Topic } from '../../types';
 import { fetchWithQdnReadyFallback, mapWithConcurrency } from './qdnReadiness';
 import {
   requestQortal,
@@ -59,6 +59,7 @@ export type ThreadSearchSnapshot = {
     authorUserId: string;
     parentPostId: string | null;
     content: string;
+    attachments: PostAttachment[];
     createdAt: string;
   }>;
 };
@@ -112,6 +113,38 @@ const parseJsonLike = (raw: unknown): unknown => {
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
+};
+
+const sanitizePostAttachments = (value: unknown): PostAttachment[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => isObject(item))
+    .map((item) => ({
+      id: typeof item.id === 'string' ? item.id : '',
+      service: typeof item.service === 'string' ? item.service : 'FILE',
+      name: typeof item.name === 'string' ? item.name : '',
+      identifier: typeof item.identifier === 'string' ? item.identifier : '',
+      filename: typeof item.filename === 'string' ? item.filename : '',
+      mimeType:
+        typeof item.mimeType === 'string'
+          ? item.mimeType
+          : 'application/octet-stream',
+      size:
+        typeof item.size === 'number' && Number.isFinite(item.size)
+          ? item.size
+          : 0,
+    }))
+    .filter((attachment) =>
+      Boolean(
+        attachment.id &&
+          attachment.name &&
+          attachment.identifier &&
+          attachment.filename
+      )
+    );
 };
 
 const sleep = async (durationMs: number) => {
@@ -324,6 +357,7 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
           parentPostId:
             typeof item.parentPostId === 'string' ? item.parentPostId : null,
           content: typeof item.content === 'string' ? item.content : '',
+          attachments: sanitizePostAttachments(item.attachments),
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
         }))
         .filter((item) => item.postId),
@@ -540,6 +574,7 @@ export const forumSearchIndexService = {
             authorUserId: post.authorUserId,
             parentPostId: post.parentPostId,
             content: post.content,
+            attachments: post.attachments,
             createdAt: post.createdAt,
           })),
       },

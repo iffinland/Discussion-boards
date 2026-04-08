@@ -9,6 +9,7 @@ import {
   type RichTextFormatType,
 } from '../../../services/forum/richText';
 import type { Post, User } from '../../../types';
+import PostAttachmentList from './PostAttachmentList';
 import PostActionsModal from './PostActionsModal';
 
 type ThreadPostCardProps = {
@@ -257,6 +258,7 @@ const ThreadPostCard = ({
             value={post.content}
             className="text-ui-strong mt-3 text-sm leading-relaxed"
           />
+          <PostAttachmentList attachments={post.attachments} />
         </>
       )}
 

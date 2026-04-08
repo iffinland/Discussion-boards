@@ -2,6 +2,11 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { generateForumEntityId } from '../../../services/forum/forumId';
+import {
+  getAttachmentExtension,
+  getAttachmentSizeLimit,
+  isAllowedAttachmentFile,
+} from '../../../services/forum/attachments';
 import { canAccessSubTopic } from '../../../services/forum/forumAccess';
 import { encodeQdnImageTag } from '../../../services/forum/richText';
 import { threadPostCache } from '../../../services/forum/threadPostCache';
@@ -16,12 +21,17 @@ import { forumRolesService } from '../../../services/qdn/forumRolesService';
 import type {
   ForumRoleRegistry,
   Post,
+  PostAttachment,
   SubTopic,
   Topic,
   TopicAccess,
   User,
 } from '../../../types';
-import type { ForumMutationResult, ForumUploadImageResult } from '../types';
+import type {
+  ForumMutationResult,
+  ForumUploadAttachmentResult,
+  ForumUploadImageResult,
+} from '../types';
 
 type UseForumCommandsParams = {
   currentUser: User;
@@ -865,11 +875,13 @@ export const useForumCommands = ({
       subTopicId: string;
       content: string;
       parentPostId?: string | null;
+      attachments?: PostAttachment[];
     }): Promise<ForumMutationResult> => {
       const content = input.content.trim();
+      const attachments = input.attachments ?? [];
 
-      if (!content) {
-        return { ok: false, error: 'Post content is required.' };
+      if (!content && attachments.length === 0) {
+        return { ok: false, error: 'Post content or attachment is required.' };
       }
 
       if (!isAuthenticated) {
@@ -924,6 +936,7 @@ export const useForumCommands = ({
         authorUserId: currentUser.id,
         parentPostId: input.parentPostId ?? null,
         content,
+        attachments,
         createdAt,
         likes: 0,
       };
@@ -1177,6 +1190,61 @@ export const useForumCommands = ({
     [currentUser.username, isAuthenticated]
   );
 
+  const uploadPostAttachment = useCallback(
+    async (file: File): Promise<ForumUploadAttachmentResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      if (!isAllowedAttachmentFile(file)) {
+        return {
+          ok: false,
+          error: 'Unsupported attachment type. Use TXT, MD or ZIP.',
+        };
+      }
+
+      const sizeLimit = getAttachmentSizeLimit(file);
+      if (file.size > sizeLimit) {
+        return {
+          ok: false,
+          error:
+            getAttachmentExtension(file.name) === 'zip'
+              ? 'ZIP attachment is too large. Maximum allowed size is 10 MB.'
+              : 'Text attachment is too large. Maximum allowed size is 2 MB.',
+        };
+      }
+
+      try {
+        const reference = await forumQdnService.publishPostAttachment(
+          file,
+          currentUser.username
+        );
+
+        return {
+          ok: true,
+          attachment: {
+            id: generateForumEntityId('attachment', currentUser.username),
+            service: reference.service,
+            name: reference.name,
+            identifier: reference.identifier,
+            filename: reference.filename,
+            mimeType: reference.mimeType,
+            size: reference.size,
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to upload attachment.',
+        };
+      }
+    },
+    [currentUser.username, isAuthenticated]
+  );
+
   return {
     createTopic,
     reorderTopics,
@@ -1191,5 +1259,6 @@ export const useForumCommands = ({
     deletePost,
     likePost,
     uploadPostImage,
+    uploadPostAttachment,
   };
 };
