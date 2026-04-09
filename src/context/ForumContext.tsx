@@ -92,8 +92,12 @@ type ForumContextValue = {
     isSolved: boolean;
     access: TopicAccess;
     allowedAddresses: string[];
+    moderationReason?: string | null;
   }) => Promise<ForumMutationResult>;
-  toggleSubTopicSolved: (subTopicId: string) => Promise<ForumMutationResult>;
+  toggleSubTopicSolved: (input: {
+    subTopicId: string;
+    reason: string;
+  }) => Promise<ForumMutationResult>;
   createPost: (input: {
     subTopicId: string;
     content: string;
@@ -111,7 +115,10 @@ type ForumContextValue = {
     postId: string;
     content: string;
   }) => Promise<ForumMutationResult>;
-  deletePost: (postId: string) => Promise<ForumMutationResult>;
+  deletePost: (input: {
+    postId: string;
+    reason: string;
+  }) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
   isThreadPostsLoading: boolean;

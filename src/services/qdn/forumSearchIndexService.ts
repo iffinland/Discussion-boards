@@ -48,6 +48,10 @@ export type TopicDirectorySnapshot = {
     visibility: SubTopic['visibility'];
     authorUserId: string;
     lastPostAt: string;
+    lastModerationAction?: string | null;
+    lastModerationReason?: string | null;
+    lastModeratedByUserId?: string | null;
+    lastModeratedAt?: string | null;
   }>;
 };
 
@@ -343,6 +347,26 @@ const parseTopicDirectoryPayload = (
             typeof item.authorUserId === 'string' ? item.authorUserId : '',
           lastPostAt:
             typeof item.lastPostAt === 'string' ? item.lastPostAt : '',
+          lastModerationAction:
+            typeof item.lastModerationAction === 'string' &&
+            item.lastModerationAction.trim()
+              ? item.lastModerationAction
+              : null,
+          lastModerationReason:
+            typeof item.lastModerationReason === 'string' &&
+            item.lastModerationReason.trim()
+              ? item.lastModerationReason
+              : null,
+          lastModeratedByUserId:
+            typeof item.lastModeratedByUserId === 'string' &&
+            item.lastModeratedByUserId.trim()
+              ? item.lastModeratedByUserId
+              : null,
+          lastModeratedAt:
+            typeof item.lastModeratedAt === 'string' &&
+            item.lastModeratedAt.trim()
+              ? item.lastModeratedAt
+              : null,
         }))
         .filter((item) => item.subTopicId && item.topicId),
     },
@@ -528,6 +552,10 @@ export const forumSearchIndexService = {
           visibility: subTopic.visibility,
           authorUserId: subTopic.authorUserId,
           lastPostAt: subTopic.lastPostAt,
+          lastModerationAction: subTopic.lastModerationAction ?? null,
+          lastModerationReason: subTopic.lastModerationReason ?? null,
+          lastModeratedByUserId: subTopic.lastModeratedByUserId ?? null,
+          lastModeratedAt: subTopic.lastModeratedAt ?? null,
         })),
       },
     };

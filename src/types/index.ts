@@ -61,6 +61,10 @@ export interface SubTopic {
   allowedAddresses: string[];
   status: SubTopicStatus;
   visibility: SubTopicVisibility;
+  lastModerationAction?: string | null;
+  lastModerationReason?: string | null;
+  lastModeratedByUserId?: string | null;
+  lastModeratedAt?: string | null;
 }
 
 export interface Post {

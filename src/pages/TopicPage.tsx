@@ -147,8 +147,14 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   );
   const topicId = topic?.id ?? null;
   const canModerate = currentUser.role !== 'Member';
+  const canManageSubTopics =
+    currentUser.role === 'SysOp' ||
+    currentUser.role === 'SuperAdmin' ||
+    currentUser.role === 'Admin';
   const canReorderPinnedSubTopics =
-    (currentUser.role === 'SysOp' || currentUser.role === 'SuperAdmin') &&
+    (currentUser.role === 'SysOp' ||
+      currentUser.role === 'SuperAdmin' ||
+      currentUser.role === 'Admin') &&
     searchQuery.trim().length === 0;
   const canCreateHere = topic
     ? canCreateSubTopicForTopic(
@@ -514,6 +520,16 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicStatus = async (subTopic: SubTopic) => {
+    const reason = window.prompt(
+      `Provide reason to ${
+        subTopic.status === 'locked' ? 'unlock' : 'lock'
+      } this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setManagementFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -525,6 +541,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setManagementFeedback(
@@ -535,6 +552,16 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicVisibility = async (subTopic: SubTopic) => {
+    const reason = window.prompt(
+      `Provide reason to ${
+        subTopic.visibility === 'hidden' ? 'show' : 'hide'
+      } this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setManagementFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -546,6 +573,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setManagementFeedback(
@@ -556,6 +584,14 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicPin = async (subTopic: SubTopic) => {
+    const reason = window.prompt(
+      `Provide reason to ${subTopic.isPinned ? 'unpin' : 'pin'} this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setManagementFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -567,6 +603,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setManagementFeedback(
@@ -764,7 +801,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             postCountsBySubTopicId={postCountsBySubTopicId}
             walletNamesByAddress={walletNamesByAddress}
             onOpenThread={handleOpenThread}
-            canManageSubTopics={canModerate}
+            canManageSubTopics={canManageSubTopics}
             onManageSubTopic={handleOpenSubTopicManager}
             onToggleSubTopicPin={handleToggleSubTopicPin}
             onToggleSubTopicStatus={handleToggleSubTopicStatus}

@@ -86,6 +86,9 @@ const SubTopicList = ({
             subTopic.access !== 'everyone'
               ? `Access: ${resolveAccessLabel(subTopic.access)}`
               : null,
+            subTopic.lastModerationReason
+              ? `Mod reason: ${subTopic.lastModerationReason}`
+              : null,
           ]
             .filter(Boolean)
             .join(' • ');

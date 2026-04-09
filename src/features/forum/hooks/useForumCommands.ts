@@ -86,6 +86,7 @@ const isModeratorRole = (role: User['role']) =>
   role === 'SysOp';
 const isSuperAdminRole = (role: User['role']) =>
   role === 'SuperAdmin' || role === 'SysOp';
+const isSysOpRole = (role: User['role']) => role === 'SysOp';
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 
 const sortTopicsByOrder = (items: Topic[]) =>
@@ -559,6 +560,10 @@ export const useForumCommands = ({
         allowedAddresses,
         status: 'open',
         visibility: 'visible',
+        lastModerationAction: null,
+        lastModerationReason: null,
+        lastModeratedByUserId: null,
+        lastModeratedAt: null,
       };
 
       try {
@@ -718,6 +723,7 @@ export const useForumCommands = ({
       isSolved: boolean;
       access: TopicAccess;
       allowedAddresses: string[];
+      moderationReason?: string | null;
     }): Promise<ForumMutationResult> => {
       const target = subTopics.find(
         (subTopic) => subTopic.id === input.subTopicId
@@ -738,9 +744,69 @@ export const useForumCommands = ({
         };
       }
 
+      const normalizedAllowedAddresses = normalizeAddressList(
+        input.allowedAddresses
+      );
+      const sameAllowedAddresses =
+        normalizedAllowedAddresses.length === target.allowedAddresses.length &&
+        normalizedAllowedAddresses.every(
+          (address, index) => address === target.allowedAddresses[index]
+        );
+      const nextTopicId = input.topicId?.trim() || target.topicId;
+      const isStatusChanged = input.status !== target.status;
+      const isVisibilityChanged = input.visibility !== target.visibility;
+      const isPinnedChanged = input.isPinned !== target.isPinned;
+      const isSolvedChanged = input.isSolved !== target.isSolved;
+      const isTitleChanged = input.title.trim() !== target.title;
+      const isDescriptionChanged =
+        input.description.trim() !== target.description;
+      const isTopicChanged = nextTopicId !== target.topicId;
+      const isAccessChanged = input.access !== target.access;
+      const hasConfigurationChanges =
+        isTitleChanged ||
+        isDescriptionChanged ||
+        isVisibilityChanged ||
+        isPinnedChanged ||
+        isSolvedChanged ||
+        isTopicChanged ||
+        isAccessChanged ||
+        !sameAllowedAddresses;
+
+      if (currentUser.role === 'Moderator') {
+        const onlyStatusChange = isStatusChanged && !hasConfigurationChanges;
+        if (!onlyStatusChange) {
+          return {
+            ok: false,
+            error:
+              'Moderators can only lock or unlock sub-topics. Ask an admin for other changes.',
+          };
+        }
+      }
+
+      const moderationActions: string[] = [];
+      if (isStatusChanged) {
+        moderationActions.push(input.status === 'locked' ? 'lock' : 'unlock');
+      }
+      if (isVisibilityChanged) {
+        moderationActions.push(input.visibility === 'hidden' ? 'hide' : 'show');
+      }
+      if (isPinnedChanged) {
+        moderationActions.push(input.isPinned ? 'pin' : 'unpin');
+      }
+      if (isSolvedChanged) {
+        moderationActions.push(input.isSolved ? 'mark-solved' : 'clear-solved');
+      }
+      const requiresModerationReason = moderationActions.length > 0;
+      const moderationReason = input.moderationReason?.trim() ?? '';
+      if (requiresModerationReason && !moderationReason) {
+        return {
+          ok: false,
+          error: 'Reason is required for moderation actions.',
+        };
+      }
+
       const title = input.title.trim();
       const description = input.description.trim();
-      const nextTopicId = input.topicId?.trim() || target.topicId;
       if (!title || !description) {
         return {
           ok: false,
@@ -759,7 +825,7 @@ export const useForumCommands = ({
         return { ok: false, error: 'Target main topic not found.' };
       }
 
-      const allowedAddresses = normalizeAddressList(input.allowedAddresses);
+      const allowedAddresses = normalizedAllowedAddresses;
       if (input.access === 'custom' && allowedAddresses.length === 0) {
         return {
           ok: false,
@@ -787,6 +853,18 @@ export const useForumCommands = ({
           : null,
         access: input.access,
         allowedAddresses,
+        lastModerationAction: requiresModerationReason
+          ? moderationActions.join(',')
+          : (target.lastModerationAction ?? null),
+        lastModerationReason: requiresModerationReason
+          ? moderationReason
+          : (target.lastModerationReason ?? null),
+        lastModeratedByUserId: requiresModerationReason
+          ? currentUser.id
+          : (target.lastModeratedByUserId ?? null),
+        lastModeratedAt: requiresModerationReason
+          ? new Date().toISOString()
+          : (target.lastModeratedAt ?? null),
       };
 
       try {
@@ -837,8 +915,13 @@ export const useForumCommands = ({
   );
 
   const toggleSubTopicSolved = useCallback(
-    async (subTopicId: string): Promise<ForumMutationResult> => {
-      const target = subTopics.find((subTopic) => subTopic.id === subTopicId);
+    async (input: {
+      subTopicId: string;
+      reason: string;
+    }): Promise<ForumMutationResult> => {
+      const target = subTopics.find(
+        (subTopic) => subTopic.id === input.subTopicId
+      );
       if (!target) {
         return { ok: false, error: 'Sub-topic not found.' };
       }
@@ -847,11 +930,31 @@ export const useForumCommands = ({
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
 
+      if (!isModeratorRole(currentUser.role)) {
+        return {
+          ok: false,
+          error:
+            'Only moderators, admins, Super Admins and SysOp can change solved state.',
+        };
+      }
+
+      const reason = input.reason.trim();
+      if (!reason) {
+        return {
+          ok: false,
+          error: 'Reason is required for moderation actions.',
+        };
+      }
+
       const updatedSubTopic: SubTopic = {
         ...target,
         isSolved: !target.isSolved,
         solvedAt: target.isSolved ? null : new Date().toISOString(),
         solvedByUserId: target.isSolved ? null : currentUser.id,
+        lastModerationAction: target.isSolved ? 'clear-solved' : 'mark-solved',
+        lastModerationReason: reason,
+        lastModeratedByUserId: currentUser.id,
+        lastModeratedAt: new Date().toISOString(),
       };
 
       try {
@@ -890,6 +993,7 @@ export const useForumCommands = ({
     },
     [
       currentUser.id,
+      currentUser.role,
       currentUser.username,
       buildTopicDirectoryIndexResource,
       isAuthenticated,
@@ -915,13 +1019,16 @@ export const useForumCommands = ({
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
 
-      if (
-        currentUser.role !== 'SysOp' ||
-        authenticatedAddress !== roleRegistry.primarySysOpAddress
-      ) {
+      const isPrimarySysOp =
+        isSysOpRole(currentUser.role) &&
+        authenticatedAddress === roleRegistry.primarySysOpAddress;
+      const isSuperAdmin = currentUser.role === 'SuperAdmin';
+      const isAdmin = currentUser.role === 'Admin';
+
+      if (!isPrimarySysOp && !isSuperAdmin && !isAdmin) {
         return {
           ok: false,
-          error: 'Only the primary SysOp can manage forum roles.',
+          error: 'Only SysOp, Super Admin or Admin can manage forum roles.',
         };
       }
 
@@ -929,6 +1036,13 @@ export const useForumCommands = ({
         return {
           ok: false,
           error: 'The primary SysOp address is fixed and cannot be reassigned.',
+        };
+      }
+
+      if (isAdmin && input.role !== 'Moderator') {
+        return {
+          ok: false,
+          error: 'Admins can only assign Moderator role.',
         };
       }
 
@@ -988,13 +1102,16 @@ export const useForumCommands = ({
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
 
-      if (
-        currentUser.role !== 'SysOp' ||
-        authenticatedAddress !== roleRegistry.primarySysOpAddress
-      ) {
+      const isPrimarySysOp =
+        isSysOpRole(currentUser.role) &&
+        authenticatedAddress === roleRegistry.primarySysOpAddress;
+      const isSuperAdmin = currentUser.role === 'SuperAdmin';
+      const isAdmin = currentUser.role === 'Admin';
+
+      if (!isPrimarySysOp && !isSuperAdmin && !isAdmin) {
         return {
           ok: false,
-          error: 'Only the primary SysOp can manage forum roles.',
+          error: 'Only SysOp, Super Admin or Admin can manage forum roles.',
         };
       }
 
@@ -1002,6 +1119,32 @@ export const useForumCommands = ({
         return {
           ok: false,
           error: 'The primary SysOp role cannot be removed.',
+        };
+      }
+
+      const isTargetSuperAdmin =
+        roleRegistry.sysOps.includes(normalizedAddress);
+      const isTargetAdmin = roleRegistry.admins.includes(normalizedAddress);
+      const isTargetModerator =
+        roleRegistry.moderators.includes(normalizedAddress);
+
+      if (isAdmin && !isTargetModerator) {
+        return {
+          ok: false,
+          error: 'Admins can only remove Moderator role.',
+        };
+      }
+
+      if (
+        isSuperAdmin &&
+        !isTargetSuperAdmin &&
+        !isTargetAdmin &&
+        !isTargetModerator
+      ) {
+        return {
+          ok: false,
+          error:
+            'Super Admin can only remove Super Admin, Admin or Moderator roles.',
         };
       }
 
@@ -1271,8 +1414,11 @@ export const useForumCommands = ({
   );
 
   const deletePost = useCallback(
-    async (postId: string): Promise<ForumMutationResult> => {
-      const target = posts.find((post) => post.id === postId);
+    async (input: {
+      postId: string;
+      reason: string;
+    }): Promise<ForumMutationResult> => {
+      const target = posts.find((post) => post.id === input.postId);
       if (!target) {
         return { ok: false, error: 'Post not found.' };
       }
@@ -1281,21 +1427,28 @@ export const useForumCommands = ({
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
 
-      if (
-        target.authorUserId !== currentUser.id &&
-        !isModeratorRole(currentUser.role)
-      ) {
+      const canDeleteAsStaff = isAdminRole(currentUser.role);
+      if (target.authorUserId !== currentUser.id && !canDeleteAsStaff) {
         return {
           ok: false,
-          error: 'Only owner or moderator can delete this post.',
+          error:
+            'Only owner, admin, Super Admin or SysOp can delete this post.',
+        };
+      }
+
+      const reason = input.reason.trim();
+      if (!reason) {
+        return {
+          ok: false,
+          error: 'Reason is required when deleting posts.',
         };
       }
 
       try {
         await forumQdnService.deletePost(target, currentUser.username);
-        const nextPosts = posts.filter((post) => post.id !== postId);
+        const nextPosts = posts.filter((post) => post.id !== input.postId);
         setPosts((current) => {
-          const next = current.filter((post) => post.id !== postId);
+          const next = current.filter((post) => post.id !== input.postId);
           threadPostCache.write(
             target.subTopicId,
             next.filter((post) => post.subTopicId === target.subTopicId)

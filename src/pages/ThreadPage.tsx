@@ -192,6 +192,12 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
   const canLoadMore = visibleCount < orderedThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
+  const canLockSubTopic = canModerate;
+  const canManageSubTopicAdvanced =
+    currentUser.role === 'SysOp' ||
+    currentUser.role === 'SuperAdmin' ||
+    currentUser.role === 'Admin';
+  const canDeletePosts = canManageSubTopicAdvanced;
   const hasSubTopicAccess = subTopic
     ? canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
     : false;
@@ -294,6 +300,16 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
+    const reason = window.prompt(
+      `Provide reason to ${
+        subTopic.status === 'locked' ? 'unlock' : 'lock'
+      } this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setModerationFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -304,6 +320,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -318,6 +335,16 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
+    const reason = window.prompt(
+      `Provide reason to ${
+        subTopic.visibility === 'hidden' ? 'show' : 'hide'
+      } this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setModerationFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -328,6 +355,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -342,6 +370,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
+    const reason = window.prompt(
+      `Provide reason to ${subTopic.isPinned ? 'unpin' : 'pin'} this sub-topic:`
+    );
+    if (!reason?.trim()) {
+      setModerationFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -352,6 +388,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -368,7 +405,20 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const result = await toggleSubTopicSolved(subTopic.id);
+    const reason = window.prompt(
+      `Provide reason to ${
+        subTopic.isSolved ? 'clear solved' : 'mark as solved'
+      }:`
+    );
+    if (!reason?.trim()) {
+      setModerationFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
+    const result = await toggleSubTopicSolved({
+      subTopicId: subTopic.id,
+      reason,
+    });
     setModerationFeedback(
       result.ok
         ? subTopic.isSolved
@@ -658,7 +708,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
               Hidden
             </span>
           ) : null}
-          {canModerate ? (
+          {canManageSubTopicAdvanced ? (
             <>
               <button
                 type="button"
@@ -666,15 +716,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
                 className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
               >
                 {subTopic.isPinned ? 'Unpin Sub-Topic' : 'Pin Sub-Topic'}
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleSubTopicStatus}
-                className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
-              >
-                {subTopic.status === 'locked'
-                  ? 'Unlock Sub-Topic'
-                  : 'Lock Sub-Topic'}
               </button>
               <button
                 type="button"
@@ -687,7 +728,18 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
               </button>
             </>
           ) : null}
-          {isAuthenticated ? (
+          {isAuthenticated && canLockSubTopic ? (
+            <button
+              type="button"
+              onClick={handleToggleSubTopicStatus}
+              className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+            >
+              {subTopic.status === 'locked'
+                ? 'Unlock Sub-Topic'
+                : 'Lock Sub-Topic'}
+            </button>
+          ) : null}
+          {isAuthenticated && canLockSubTopic ? (
             <button
               type="button"
               onClick={handleToggleSubTopicSolved}
@@ -726,6 +778,11 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             {isComposerOpen ? 'Close Reply' : 'Add Reply'}
           </button>
         </div>
+        {subTopic.lastModerationReason ? (
+          <p className="text-ui-muted mt-2 text-xs">
+            Moderation note: {subTopic.lastModerationReason}
+          </p>
+        ) : null}
       </section>
 
       {feedback ? (
@@ -793,7 +850,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             highlighted={highlightedPostId === post.id}
             replyContextHighlighted={replyContextPostId === post.parentPostId}
             isOwner={post.authorUserId === currentUser.id}
-            canModerate={canModerate}
+            canModerate={canDeletePosts}
             hasLiked={
               likeActorId ? post.likedByAddresses.includes(likeActorId) : false
             }

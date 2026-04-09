@@ -424,6 +424,25 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
     allowedAddresses: sanitizeAddressList(value.allowedAddresses),
     status: value.status === 'locked' ? 'locked' : 'open',
     visibility: value.visibility === 'hidden' ? 'hidden' : 'visible',
+    lastModerationAction:
+      typeof value.lastModerationAction === 'string' &&
+      value.lastModerationAction.trim()
+        ? value.lastModerationAction
+        : null,
+    lastModerationReason:
+      typeof value.lastModerationReason === 'string' &&
+      value.lastModerationReason.trim()
+        ? value.lastModerationReason
+        : null,
+    lastModeratedByUserId:
+      typeof value.lastModeratedByUserId === 'string' &&
+      value.lastModeratedByUserId.trim()
+        ? value.lastModeratedByUserId
+        : null,
+    lastModeratedAt:
+      typeof value.lastModeratedAt === 'string' && value.lastModeratedAt.trim()
+        ? value.lastModeratedAt
+        : null,
   };
 };
 

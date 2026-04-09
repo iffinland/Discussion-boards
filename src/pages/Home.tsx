@@ -198,10 +198,35 @@ const Home = ({ searchQuery }: HomeProps) => {
     currentUser.role === 'SysOp';
   const isSysOp = currentUser.role === 'SysOp';
   const isSuperAdmin = currentUser.role === 'SuperAdmin';
+  const canManageRoles =
+    currentUser.role === 'SysOp' ||
+    currentUser.role === 'SuperAdmin' ||
+    currentUser.role === 'Admin';
+  const assignableRoleOptions = useMemo(() => {
+    if (isSysOp) {
+      return [
+        { value: 'SuperAdmin' as const, label: 'Super Admin' },
+        { value: 'Admin' as const, label: 'Admin' },
+        { value: 'Moderator' as const, label: 'Moderator' },
+      ];
+    }
+
+    if (isSuperAdmin) {
+      return [
+        { value: 'SuperAdmin' as const, label: 'Super Admin' },
+        { value: 'Admin' as const, label: 'Admin' },
+        { value: 'Moderator' as const, label: 'Moderator' },
+      ];
+    }
+
+    return [{ value: 'Moderator' as const, label: 'Moderator' }];
+  }, [isSuperAdmin, isSysOp]);
   const canModerate = currentUser.role !== 'Member';
   const normalizedSearchQuery = searchQuery.trim();
   const hasActiveSearch = normalizedSearchQuery.length > 0;
-  const canReorderTopicsByDrag = (isSysOp || isSuperAdmin) && !hasActiveSearch;
+  const canReorderTopicsByDrag =
+    (isSysOp || isSuperAdmin || currentUser.role === 'Admin') &&
+    !hasActiveSearch;
 
   const topicQueryParam = searchParams.get('topic');
   useEffect(() => {
@@ -809,6 +834,14 @@ const Home = ({ searchQuery }: HomeProps) => {
     );
   };
 
+  useEffect(() => {
+    if (assignableRoleOptions.some((option) => option.value === roleType)) {
+      return;
+    }
+
+    setRoleType(assignableRoleOptions[0]?.value ?? 'Moderator');
+  }, [assignableRoleOptions, roleType]);
+
   if (!isAuthReady && topics.length === 0 && subTopics.length === 0) {
     return (
       <div className="space-y-4">
@@ -1109,7 +1142,7 @@ const Home = ({ searchQuery }: HomeProps) => {
         ) : null}
       </div>
 
-      {isSysOp ? (
+      {canManageRoles ? (
         <section className="space-y-3">
           <h2 className="text-brand-primary text-lg font-semibold">
             Forum Roles
@@ -1142,9 +1175,11 @@ const Home = ({ searchQuery }: HomeProps) => {
                 }
                 className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               >
-                <option value="SuperAdmin">Super Admin</option>
-                <option value="Admin">Admin</option>
-                <option value="Moderator">Moderator</option>
+                {assignableRoleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
               <button
                 type="submit"
@@ -1166,13 +1201,15 @@ const Home = ({ searchQuery }: HomeProps) => {
                       className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                     >
                       {renderRoleIdentity(address)}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRole(address)}
-                        className="text-brand-accent-strong text-xs font-semibold"
-                      >
-                        Remove
-                      </button>
+                      {isSysOp || isSuperAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRole(address)}
+                          className="text-brand-accent-strong text-xs font-semibold"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -1190,6 +1227,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                       <button
                         type="button"
                         onClick={() => handleRemoveRole(address)}
+                        disabled={currentUser.role === 'Admin'}
                         className="text-brand-accent-strong text-xs font-semibold"
                       >
                         Remove
