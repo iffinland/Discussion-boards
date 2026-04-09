@@ -689,21 +689,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-1 text-xs font-semibold">
-            {topic.status === 'locked' ? 'Locked' : 'Open'}
-          </span>
-          {topic.visibility === 'hidden' ? (
-            <span className="text-ui-muted rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
-              Hidden
-            </span>
-          ) : null}
-          {topic.subTopicAccess !== 'everyone' ? (
-            <span className="text-ui-muted rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
-              Sub-topic access: {resolveAccessLabel(topic.subTopicAccess)}
-            </span>
-          ) : null}
-        </div>
       </section>
 
       {isCreateOpen ? (

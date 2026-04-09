@@ -495,7 +495,7 @@ const RichTextEditor = ({
         </p>
         <button
           type="submit"
-          className="bg-brand-primary-solid rounded-md px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600"
+          className="bg-brand-primary-solid rounded-md px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-cyan-600"
         >
           {submitLabel}
         </button>
