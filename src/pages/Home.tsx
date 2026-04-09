@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useForumData } from '../hooks/useForumData';
@@ -15,6 +21,13 @@ const parseAddressInput = (value: string) =>
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+};
 
 const topicAccessOptions: Array<{
   value: TopicAccess;
@@ -66,6 +79,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     topics,
     subTopics,
     createTopic,
+    reorderTopics,
     updateTopicSettings,
     upsertRoleAssignment,
     removeRoleAssignment,
@@ -102,10 +116,13 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [roleNamesByAddress, setRoleNamesByAddress] = useState<
     Record<string, string>
   >({});
+  const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
+  const [dragOverTopicId, setDragOverTopicId] = useState<string | null>(null);
 
   const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SysOp';
   const isSysOp = currentUser.role === 'SysOp';
   const canModerate = currentUser.role !== 'Member';
+  const canReorderTopicsByDrag = isSysOp && searchQuery.trim().length === 0;
 
   const topicQueryParam = searchParams.get('topic');
   useEffect(() => {
@@ -232,6 +249,67 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   const handleOpenTopic = (topicId: string) => {
     navigate(`/topic/${topicId}`);
+  };
+
+  const handleTopicDragStart = (topicId: string) => {
+    if (!canReorderTopicsByDrag) {
+      return;
+    }
+
+    setDraggedTopicId(topicId);
+    setDragOverTopicId(topicId);
+  };
+
+  const handleTopicDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    topicId: string
+  ) => {
+    if (!canReorderTopicsByDrag) {
+      return;
+    }
+
+    event.preventDefault();
+    setDragOverTopicId(topicId);
+  };
+
+  const handleTopicDragEnd = () => {
+    setDraggedTopicId(null);
+    setDragOverTopicId(null);
+  };
+
+  const handleTopicDrop = async (targetTopicId: string) => {
+    if (!canReorderTopicsByDrag || !draggedTopicId) {
+      handleTopicDragEnd();
+      return;
+    }
+
+    if (draggedTopicId === targetTopicId) {
+      handleTopicDragEnd();
+      return;
+    }
+
+    const fromIndex = filteredTopics.findIndex(
+      (topic) => topic.id === draggedTopicId
+    );
+    const toIndex = filteredTopics.findIndex(
+      (topic) => topic.id === targetTopicId
+    );
+    if (fromIndex < 0 || toIndex < 0) {
+      handleTopicDragEnd();
+      return;
+    }
+
+    const reorderedTopics = reorderList(filteredTopics, fromIndex, toIndex);
+    const result = await reorderTopics(
+      reorderedTopics.map((topic) => topic.id)
+    );
+
+    setManagementFeedback(
+      result.ok
+        ? 'Main topic order updated.'
+        : (result.error ?? 'Unable to reorder main topics.')
+    );
+    handleTopicDragEnd();
   };
 
   const handleOpenThread = (subTopicId: string) => {
@@ -395,6 +473,10 @@ const Home = ({ searchQuery }: HomeProps) => {
           <p className="text-ui-muted text-sm">
             Search results: {filteredTopics.length} main topics.
           </p>
+        ) : canReorderTopicsByDrag ? (
+          <p className="text-ui-muted text-sm">
+            Drag main topics to change their persistent display order.
+          </p>
         ) : null}
         {managementFeedback ? (
           <p
@@ -411,7 +493,22 @@ const Home = ({ searchQuery }: HomeProps) => {
 
       <div className="space-y-4">
         {filteredTopics.map((topic) => (
-          <div key={topic.id} className="space-y-2">
+          <div
+            key={topic.id}
+            className={[
+              'space-y-2 rounded-lg',
+              canReorderTopicsByDrag && dragOverTopicId === topic.id
+                ? 'ring-2 ring-cyan-300 ring-offset-1 ring-offset-slate-50'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            draggable={canReorderTopicsByDrag}
+            onDragStart={() => handleTopicDragStart(topic.id)}
+            onDragOver={(event) => handleTopicDragOver(event, topic.id)}
+            onDrop={() => void handleTopicDrop(topic.id)}
+            onDragEnd={handleTopicDragEnd}
+          >
             <article className="forum-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <button

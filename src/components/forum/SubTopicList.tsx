@@ -1,3 +1,5 @@
+import type { DragEvent } from 'react';
+
 import UserRoleBadge from '../common/UserRoleBadge';
 import type { SubTopic, User } from '../../types';
 import { resolveAccessLabel } from '../../services/forum/forumAccess';
@@ -12,6 +14,16 @@ type SubTopicListProps = {
   onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
   onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
   onManageSubTopic?: (subTopic: SubTopic) => void;
+  canReorderPinnedSubTopics?: boolean;
+  draggedPinnedSubTopicId?: string | null;
+  dragOverPinnedSubTopicId?: string | null;
+  onPinnedDragStart?: (subTopicId: string) => void;
+  onPinnedDragOver?: (
+    subTopicId: string,
+    event: DragEvent<HTMLLIElement>
+  ) => void;
+  onPinnedDrop?: (subTopicId: string) => void;
+  onPinnedDragEnd?: () => void;
 };
 
 const formatDate = (date: string) =>
@@ -43,6 +55,13 @@ const SubTopicList = ({
   onToggleSubTopicStatus,
   onToggleSubTopicVisibility,
   onManageSubTopic,
+  canReorderPinnedSubTopics = false,
+  draggedPinnedSubTopicId = null,
+  dragOverPinnedSubTopicId = null,
+  onPinnedDragStart,
+  onPinnedDragOver,
+  onPinnedDrop,
+  onPinnedDragEnd,
 }: SubTopicListProps) => {
   const usernameMap = new Map(users.map((user) => [user.id, user.displayName]));
   const userMap = new Map(users.map((user) => [user.id, user]));
@@ -57,7 +76,21 @@ const SubTopicList = ({
 
       <ul className="bg-surface-card border-brand-primary divide-y">
         {subTopics.map((subTopic) => (
-          <li key={subTopic.id}>
+          <li
+            key={subTopic.id}
+            draggable={canReorderPinnedSubTopics && subTopic.isPinned}
+            onDragStart={() => onPinnedDragStart?.(subTopic.id)}
+            onDragOver={(event) => onPinnedDragOver?.(subTopic.id, event)}
+            onDrop={() => onPinnedDrop?.(subTopic.id)}
+            onDragEnd={onPinnedDragEnd}
+            className={
+              canReorderPinnedSubTopics &&
+              subTopic.isPinned &&
+              dragOverPinnedSubTopicId === subTopic.id
+                ? 'bg-cyan-50/60 ring-2 ring-cyan-300 ring-inset'
+                : ''
+            }
+          >
             <div className="px-4 py-3 transition hover:bg-gradient-to-r hover:from-cyan-50 hover:to-orange-50/60">
               <button
                 type="button"
@@ -68,6 +101,13 @@ const SubTopicList = ({
                   {subTopic.isPinned ? (
                     <span className="mr-2 inline-flex align-middle">
                       <PinnedBadge />
+                    </span>
+                  ) : null}
+                  {canReorderPinnedSubTopics &&
+                  subTopic.isPinned &&
+                  draggedPinnedSubTopicId === subTopic.id ? (
+                    <span className="text-ui-muted mr-2 inline-flex align-middle text-[11px] font-semibold">
+                      Dragging...
                     </span>
                   ) : null}
                   {subTopic.isSolved ? (

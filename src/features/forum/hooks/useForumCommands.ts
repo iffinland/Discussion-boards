@@ -81,6 +81,7 @@ const isAdminRole = (role: User['role']) =>
   role === 'Admin' || role === 'SysOp';
 const isModeratorRole = (role: User['role']) =>
   role === 'Moderator' || role === 'Admin' || role === 'SysOp';
+const isSuperAdminRole = (role: User['role']) => role === 'SysOp';
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 
 const sortTopicsByOrder = (items: Topic[]) =>
@@ -278,10 +279,10 @@ export const useForumCommands = ({
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
 
-      if (!isAdminRole(currentUser.role)) {
+      if (!isSuperAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and Super Admins can reorder main topics.',
+          error: 'Only Super Admins can reorder main topics.',
         };
       }
 
@@ -336,6 +337,127 @@ export const useForumCommands = ({
       isAuthenticated,
       setTopicDirectoryIndex,
       setTopics,
+      subTopics,
+      topics,
+    ]
+  );
+
+  const reorderPinnedSubTopics = useCallback(
+    async (input: {
+      topicId: string;
+      orderedPinnedSubTopicIds: string[];
+    }): Promise<ForumMutationResult> => {
+      const topicId = input.topicId.trim();
+      if (!topicId) {
+        return { ok: false, error: 'Main topic id is required.' };
+      }
+
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      if (!isSuperAdminRole(currentUser.role)) {
+        return {
+          ok: false,
+          error: 'Only Super Admins can reorder pinned sub-topics.',
+        };
+      }
+
+      if (!topics.some((topic) => topic.id === topicId)) {
+        return { ok: false, error: 'Main topic not found.' };
+      }
+
+      const pinnedInTopic = subTopics.filter(
+        (subTopic) => subTopic.topicId === topicId && subTopic.isPinned
+      );
+
+      if (pinnedInTopic.length < 2) {
+        return { ok: true };
+      }
+
+      if (input.orderedPinnedSubTopicIds.length !== pinnedInTopic.length) {
+        return {
+          ok: false,
+          error: 'Pinned sub-topic reorder payload is incomplete.',
+        };
+      }
+
+      const pinnedIdSet = new Set(pinnedInTopic.map((subTopic) => subTopic.id));
+      const orderedIdSet = new Set(input.orderedPinnedSubTopicIds);
+      if (
+        orderedIdSet.size !== pinnedIdSet.size ||
+        [...orderedIdSet].some((id) => !pinnedIdSet.has(id))
+      ) {
+        return {
+          ok: false,
+          error: 'Pinned sub-topic reorder contains unknown sub-topic id.',
+        };
+      }
+
+      const pinnedMap = new Map(
+        pinnedInTopic.map((subTopic) => [subTopic.id, subTopic])
+      );
+      const baseTimestampMs =
+        Date.now() - input.orderedPinnedSubTopicIds.length * 1000;
+
+      try {
+        const reorderedPinned = input.orderedPinnedSubTopicIds.map(
+          (subTopicId, index) => {
+            const target = pinnedMap.get(subTopicId);
+            if (!target) {
+              throw new Error(
+                'Pinned sub-topic reorder contains an unknown sub-topic id.'
+              );
+            }
+
+            return {
+              ...target,
+              pinnedAt: new Date(baseTimestampMs + index * 1000).toISOString(),
+            };
+          }
+        );
+
+        const reorderedPinnedMap = new Map(
+          reorderedPinned.map((subTopic) => [subTopic.id, subTopic])
+        );
+        const nextSubTopics = subTopics.map(
+          (subTopic) => reorderedPinnedMap.get(subTopic.id) ?? subTopic
+        );
+        const subTopicResources = reorderedPinned.map((subTopic) =>
+          forumQdnService.buildSubTopicPublishResource(
+            subTopic,
+            currentUser.username
+          )
+        );
+        const topicDirectoryResource = buildTopicDirectoryIndexResource(
+          topics,
+          nextSubTopics
+        );
+        await publishMultipleQortalResources([
+          ...subTopicResources.map((resource) => resource.resource),
+          topicDirectoryResource.resource,
+        ]);
+
+        setSubTopics(nextSubTopics);
+        setTopicDirectoryIndex(topicDirectoryResource.snapshot);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to reorder pinned sub-topics.',
+        };
+      }
+    },
+    [
+      currentUser.role,
+      currentUser.username,
+      buildTopicDirectoryIndexResource,
+      isAuthenticated,
+      setSubTopics,
+      setTopicDirectoryIndex,
       subTopics,
       topics,
     ]
@@ -1299,6 +1421,7 @@ export const useForumCommands = ({
   return {
     createTopic,
     reorderTopics,
+    reorderPinnedSubTopics,
     createSubTopic,
     updateTopicSettings,
     updateSubTopicSettings,

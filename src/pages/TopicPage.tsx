@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type DragEvent,
   type FormEvent,
 } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -27,6 +28,13 @@ type TopicPageProps = {
 };
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+
+const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+};
 
 const sortSubTopics = (items: SubTopic[]) =>
   [...items].sort((a, b) => {
@@ -88,6 +96,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     uploadPostImage,
     uploadPostAttachment,
     updateSubTopicSettings,
+    reorderPinnedSubTopics,
   } = useForumData();
   const [walletNamesByAddress, setWalletNamesByAddress] = useState<
     Record<string, string>
@@ -120,6 +129,12 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     useState<TopicAccess>('everyone');
   const [managedSubTopicAllowedAddresses, setManagedSubTopicAllowedAddresses] =
     useState('');
+  const [draggedPinnedSubTopicId, setDraggedPinnedSubTopicId] = useState<
+    string | null
+  >(null);
+  const [dragOverPinnedSubTopicId, setDragOverPinnedSubTopicId] = useState<
+    string | null
+  >(null);
 
   const topic = useMemo(
     () => topics.find((item) => item.id === id),
@@ -127,6 +142,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   );
   const topicId = topic?.id ?? null;
   const canModerate = currentUser.role !== 'Member';
+  const canReorderPinnedSubTopics =
+    currentUser.role === 'SysOp' && searchQuery.trim().length === 0;
   const canCreateHere = topic
     ? canCreateSubTopicForTopic(
         topic.subTopicAccess,
@@ -176,6 +193,13 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     authenticatedAddress,
     users,
   ]);
+  const pinnedSubTopicIds = useMemo(
+    () =>
+      visibleSubTopics
+        .filter((subTopic) => subTopic.isPinned)
+        .map((subTopic) => subTopic.id),
+    [visibleSubTopics]
+  );
 
   useEffect(() => {
     if (!topic) {
@@ -261,6 +285,84 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
 
   const handleOpenThread = (subTopicId: string) => {
     navigate(`/thread/${subTopicId}`);
+  };
+
+  const handlePinnedDragStart = (subTopicId: string) => {
+    if (!canReorderPinnedSubTopics) {
+      return;
+    }
+
+    if (!pinnedSubTopicIds.includes(subTopicId)) {
+      return;
+    }
+
+    setDraggedPinnedSubTopicId(subTopicId);
+    setDragOverPinnedSubTopicId(subTopicId);
+  };
+
+  const handlePinnedDragOver = (
+    subTopicId: string,
+    event: DragEvent<HTMLLIElement>
+  ) => {
+    if (!canReorderPinnedSubTopics) {
+      return;
+    }
+
+    if (!pinnedSubTopicIds.includes(subTopicId)) {
+      return;
+    }
+
+    event.preventDefault();
+    setDragOverPinnedSubTopicId(subTopicId);
+  };
+
+  const handlePinnedDragEnd = () => {
+    setDraggedPinnedSubTopicId(null);
+    setDragOverPinnedSubTopicId(null);
+  };
+
+  const handlePinnedDrop = async (targetSubTopicId: string) => {
+    if (
+      !topic ||
+      !canReorderPinnedSubTopics ||
+      !draggedPinnedSubTopicId ||
+      !pinnedSubTopicIds.includes(targetSubTopicId)
+    ) {
+      handlePinnedDragEnd();
+      return;
+    }
+
+    if (draggedPinnedSubTopicId === targetSubTopicId) {
+      handlePinnedDragEnd();
+      return;
+    }
+
+    const fromIndex = pinnedSubTopicIds.findIndex(
+      (subTopicId) => subTopicId === draggedPinnedSubTopicId
+    );
+    const toIndex = pinnedSubTopicIds.findIndex(
+      (subTopicId) => subTopicId === targetSubTopicId
+    );
+    if (fromIndex < 0 || toIndex < 0) {
+      handlePinnedDragEnd();
+      return;
+    }
+
+    const reorderedPinnedSubTopicIds = reorderList(
+      pinnedSubTopicIds,
+      fromIndex,
+      toIndex
+    );
+    const result = await reorderPinnedSubTopics({
+      topicId: topic.id,
+      orderedPinnedSubTopicIds: reorderedPinnedSubTopicIds,
+    });
+    setManagementFeedback(
+      result.ok
+        ? 'Pinned sub-topics order updated.'
+        : (result.error ?? 'Unable to reorder pinned sub-topics.')
+    );
+    handlePinnedDragEnd();
   };
 
   const handleShareTopic = async () => {
@@ -591,6 +693,11 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         <h3 className="text-brand-primary text-base font-semibold">
           Sub-Topics
         </h3>
+        {canReorderPinnedSubTopics && pinnedSubTopicIds.length > 1 ? (
+          <p className="text-ui-muted text-xs">
+            Drag pinned sub-topics to reorder how they appear at the top.
+          </p>
+        ) : null}
         {visibleSubTopics.length > 0 ? (
           <SubTopicList
             subTopics={visibleSubTopics}
@@ -602,6 +709,15 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             onToggleSubTopicPin={handleToggleSubTopicPin}
             onToggleSubTopicStatus={handleToggleSubTopicStatus}
             onToggleSubTopicVisibility={handleToggleSubTopicVisibility}
+            canReorderPinnedSubTopics={
+              canReorderPinnedSubTopics && pinnedSubTopicIds.length > 1
+            }
+            draggedPinnedSubTopicId={draggedPinnedSubTopicId}
+            dragOverPinnedSubTopicId={dragOverPinnedSubTopicId}
+            onPinnedDragStart={handlePinnedDragStart}
+            onPinnedDragOver={handlePinnedDragOver}
+            onPinnedDrop={handlePinnedDrop}
+            onPinnedDragEnd={handlePinnedDragEnd}
           />
         ) : (
           <div className="forum-card p-5">

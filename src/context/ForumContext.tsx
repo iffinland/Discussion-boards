@@ -61,6 +61,10 @@ type ForumContextValue = {
     allowedAddresses: string[];
   }) => Promise<ForumMutationResult>;
   reorderTopics: (orderedTopicIds: string[]) => Promise<ForumMutationResult>;
+  reorderPinnedSubTopics: (input: {
+    topicId: string;
+    orderedPinnedSubTopicIds: string[];
+  }) => Promise<ForumMutationResult>;
   createSubTopic: (input: {
     topicId: string;
     title: string;
@@ -172,6 +176,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   const {
     createTopic,
     reorderTopics,
+    reorderPinnedSubTopics,
     createSubTopic,
     updateTopicSettings,
     updateSubTopicSettings,
@@ -306,6 +311,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       setCurrentUser,
       createTopic,
       reorderTopics,
+      reorderPinnedSubTopics,
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
@@ -340,6 +346,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       setCurrentUser,
       createTopic,
       reorderTopics,
+      reorderPinnedSubTopics,
       createSubTopic,
       updateTopicSettings,
       updateSubTopicSettings,
