@@ -16,6 +16,30 @@ interface NameDataResponse {
   address?: string;
 }
 
+const readNumericBalance = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const candidateRecord = value as Record<string, unknown>;
+    const keys = ['value', 'balance', 'amount'];
+    for (const key of keys) {
+      const parsed = readNumericBalance(candidateRecord[key]);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
 const normalizeNames = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -84,21 +108,42 @@ export const resolveNameWalletAddress = async (
 };
 
 export const getQortBalance = async (): Promise<number> => {
-  const response = await requestQortal<unknown>({
-    action: 'GET_BALANCE',
-    coin: 'QORT',
-  });
-
-  if (typeof response === 'number' && Number.isFinite(response)) {
-    return response;
+  try {
+    const walletBalanceResponse = await requestQortal<unknown>({
+      action: 'GET_WALLET_BALANCE',
+      coin: 'QORT',
+    });
+    const parsedWalletBalance = readNumericBalance(walletBalanceResponse);
+    if (parsedWalletBalance !== null) {
+      return parsedWalletBalance;
+    }
+  } catch {
+    // Fallback below.
   }
 
-  if (typeof response === 'string') {
-    const parsed = Number(response);
-    if (Number.isFinite(parsed)) {
+  try {
+    const response = await requestQortal<unknown>({
+      action: 'GET_BALANCE',
+      coin: 'QORT',
+    });
+    const parsed = readNumericBalance(response);
+    if (parsed !== null) {
       return parsed;
     }
+  } catch {
+    // Final fallback below includes explicit address.
   }
 
-  throw new Error('Unable to read QORT balance.');
+  const account = await getUserAccount();
+  const responseWithAddress = await requestQortal<unknown>({
+    action: 'GET_BALANCE',
+    coin: 'QORT',
+    address: account.address,
+  });
+  const parsedWithAddress = readNumericBalance(responseWithAddress);
+  if (parsedWithAddress !== null) {
+    return parsedWithAddress;
+  }
+
+  throw new Error('Unable to read QORT wallet balance.');
 };
