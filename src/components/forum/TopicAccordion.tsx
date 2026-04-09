@@ -6,6 +6,7 @@ import SubTopicList from './SubTopicList';
 type TopicAccordionProps = {
   topic: Topic & { subTopics: SubTopic[] };
   users: User[];
+  walletNamesByAddress?: Record<string, string>;
   isOpen: boolean;
   isDragEnabled?: boolean;
   isDragging?: boolean;
@@ -29,6 +30,7 @@ type TopicAccordionProps = {
 const TopicAccordion = ({
   topic,
   users,
+  walletNamesByAddress = {},
   isOpen,
   isDragEnabled = false,
   isDragging = false,
@@ -126,9 +128,21 @@ const TopicAccordion = ({
                 </span>
               ) : null}
               {topic.allowedAddresses.length > 0 ? (
-                <span className="text-ui-muted text-[11px]">
-                  {topic.allowedAddresses.length} allowed wallet
-                  {topic.allowedAddresses.length === 1 ? '' : 's'}
+                <span className="flex flex-wrap items-center gap-1">
+                  {topic.allowedAddresses.slice(0, 3).map((address) => (
+                    <span
+                      key={address}
+                      className="text-ui-muted inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
+                      title={address}
+                    >
+                      {walletNamesByAddress[address] || address}
+                    </span>
+                  ))}
+                  {topic.allowedAddresses.length > 3 ? (
+                    <span className="text-ui-muted text-[11px]">
+                      +{topic.allowedAddresses.length - 3} more
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
             </div>
@@ -171,6 +185,7 @@ const TopicAccordion = ({
         <SubTopicList
           subTopics={topic.subTopics}
           users={users}
+          walletNamesByAddress={walletNamesByAddress}
           onOpenThread={onOpenThread}
           canManageSubTopics={canManageSubTopics}
           onManageSubTopic={onManageSubTopic}

@@ -310,6 +310,8 @@ const Home = ({ searchQuery }: HomeProps) => {
       ...roleRegistry.sysOps,
       ...roleRegistry.admins,
       ...roleRegistry.moderators,
+      ...topics.flatMap((topic) => topic.allowedAddresses),
+      ...subTopics.flatMap((subTopic) => subTopic.allowedAddresses),
     ].filter(Boolean);
 
     if (addresses.length === 0) {
@@ -350,7 +352,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     return () => {
       active = false;
     };
-  }, [roleRegistry]);
+  }, [roleRegistry, subTopics, topics]);
 
   const renderRoleIdentity = (address: string) => {
     const displayName = roleNamesByAddress[address];
@@ -873,6 +875,7 @@ const Home = ({ searchQuery }: HomeProps) => {
             <TopicAccordion
               topic={topic}
               users={users}
+              walletNamesByAddress={roleNamesByAddress}
               isOpen={openTopicId === topic.id}
               isDragEnabled={isAdmin && !hasActiveSearch}
               isDragging={draggedTopicId === topic.id}

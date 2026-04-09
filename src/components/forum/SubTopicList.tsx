@@ -5,6 +5,7 @@ import { resolveAccessLabel } from '../../services/forum/forumAccess';
 type SubTopicListProps = {
   subTopics: SubTopic[];
   users: User[];
+  walletNamesByAddress?: Record<string, string>;
   onOpenThread: (subTopicId: string) => void;
   canManageSubTopics?: boolean;
   onToggleSubTopicPin?: (subTopic: SubTopic) => void;
@@ -35,6 +36,7 @@ const SolvedBadge = () => (
 const SubTopicList = ({
   subTopics,
   users,
+  walletNamesByAddress = {},
   onOpenThread,
   canManageSubTopics = false,
   onToggleSubTopicPin,
@@ -130,9 +132,21 @@ const SubTopicList = ({
                     {subTopic.visibility === 'hidden' ? 'Show' : 'Hide'}
                   </button>
                   {subTopic.allowedAddresses.length > 0 ? (
-                    <span className="text-ui-muted inline-flex items-center px-1 text-xs">
-                      {subTopic.allowedAddresses.length} wallet
-                      {subTopic.allowedAddresses.length === 1 ? '' : 's'}
+                    <span className="flex flex-wrap items-center gap-1">
+                      {subTopic.allowedAddresses.slice(0, 3).map((address) => (
+                        <span
+                          key={address}
+                          className="text-ui-muted inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
+                          title={address}
+                        >
+                          {walletNamesByAddress[address] || address}
+                        </span>
+                      ))}
+                      {subTopic.allowedAddresses.length > 3 ? (
+                        <span className="text-ui-muted text-xs">
+                          +{subTopic.allowedAddresses.length - 3} more
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </div>
