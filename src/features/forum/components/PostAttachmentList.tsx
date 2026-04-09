@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import AppModal from '../../../components/common/AppModal';
 import {
   formatAttachmentSize,
   getAttachmentExtension,
@@ -13,6 +14,12 @@ type PostAttachmentListProps = {
 
 const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
   const [urlsById, setUrlsById] = useState<Record<string, string>>({});
+  const [isResolvingUrls, setIsResolvingUrls] = useState(false);
+  const [previewAttachment, setPreviewAttachment] =
+    useState<PostAttachment | null>(null);
+  const [previewContent, setPreviewContent] = useState('');
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const triggerAttachmentDownload = (
     attachmentUrl: string,
@@ -32,10 +39,25 @@ const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
     return extension === 'txt' || extension === 'md';
   };
 
+  const closePreviewModal = () => {
+    setPreviewAttachment(null);
+    setPreviewContent('');
+    setPreviewError(null);
+    setIsPreviewLoading(false);
+  };
+
+  const openPreviewModal = (attachment: PostAttachment) => {
+    setPreviewAttachment(attachment);
+    setPreviewContent('');
+    setPreviewError(null);
+    setIsPreviewLoading(true);
+  };
+
   useEffect(() => {
     let active = true;
 
     const resolveUrls = async () => {
+      setIsResolvingUrls(true);
       const entries = await Promise.all(
         attachments.map(async (attachment) => {
           try {
@@ -57,19 +79,80 @@ const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
         return;
       }
 
-      setUrlsById(Object.fromEntries(entries.filter((entry) => entry[1])));
+      setUrlsById(Object.fromEntries(entries));
+      setIsResolvingUrls(false);
     };
 
     if (attachments.length > 0) {
       void resolveUrls();
     } else {
       setUrlsById({});
+      setIsResolvingUrls(false);
     }
 
     return () => {
       active = false;
     };
   }, [attachments]);
+
+  useEffect(() => {
+    if (!previewAttachment) {
+      return;
+    }
+
+    const previewUrl = urlsById[previewAttachment.id];
+    if (!previewUrl) {
+      if (isResolvingUrls) {
+        setIsPreviewLoading(true);
+        return;
+      }
+
+      setIsPreviewLoading(false);
+      setPreviewError('Unable to load attachment preview.');
+      return;
+    }
+
+    let active = true;
+
+    const loadPreviewContent = async () => {
+      try {
+        setIsPreviewLoading(true);
+        setPreviewError(null);
+
+        const response = await fetch(previewUrl);
+        if (!response.ok) {
+          throw new Error('Unable to load attachment preview.');
+        }
+
+        const text = await response.text();
+        if (!active) {
+          return;
+        }
+
+        setPreviewContent(text);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setPreviewError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load attachment preview.'
+        );
+      } finally {
+        if (active) {
+          setIsPreviewLoading(false);
+        }
+      }
+    };
+
+    void loadPreviewContent();
+
+    return () => {
+      active = false;
+    };
+  }, [isResolvingUrls, previewAttachment, urlsById]);
 
   if (attachments.length === 0) {
     return null;
@@ -98,13 +181,15 @@ const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
               </div>
               {attachmentUrl ? (
                 <div className="flex items-center gap-2">
-                  <a
-                    href={attachmentUrl}
-                    rel="noopener noreferrer"
-                    className="text-brand-primary rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold"
-                  >
-                    {isTextAttachment(attachment) ? 'View' : 'Open'}
-                  </a>
+                  {isTextAttachment(attachment) ? (
+                    <button
+                      type="button"
+                      onClick={() => openPreviewModal(attachment)}
+                      className="text-brand-primary rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold"
+                    >
+                      View
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() =>
@@ -120,13 +205,37 @@ const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
                 </div>
               ) : (
                 <span className="text-ui-muted text-xs font-semibold">
-                  Loading...
+                  {isResolvingUrls ? 'Loading...' : 'Unavailable'}
                 </span>
               )}
             </div>
           );
         })}
       </div>
+
+      <AppModal
+        isOpen={Boolean(previewAttachment)}
+        onClose={closePreviewModal}
+        ariaLabel="Attachment preview"
+        title={
+          previewAttachment
+            ? `Preview: ${previewAttachment.filename}`
+            : 'Attachment preview'
+        }
+        maxWidthClassName="max-w-4xl"
+      >
+        {isPreviewLoading ? (
+          <p className="text-ui-muted text-sm">Loading preview...</p>
+        ) : previewError ? (
+          <p className="text-brand-accent-strong text-sm font-semibold">
+            {previewError}
+          </p>
+        ) : (
+          <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-800">
+            {previewContent}
+          </pre>
+        )}
+      </AppModal>
     </div>
   );
 };
