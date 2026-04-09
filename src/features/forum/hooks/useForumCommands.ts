@@ -81,6 +81,7 @@ const isAdminRole = (role: User['role']) =>
   role === 'Admin' || role === 'SysOp';
 const isModeratorRole = (role: User['role']) =>
   role === 'Moderator' || role === 'Admin' || role === 'SysOp';
+const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 
 const sortTopicsByOrder = (items: Topic[]) =>
   [...items].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -181,6 +182,13 @@ export const useForumCommands = ({
 
       if (!title || !description) {
         return { ok: false, error: 'Title and description are required.' };
+      }
+
+      if (description.length > TOPIC_DESCRIPTION_MAX_LENGTH) {
+        return {
+          ok: false,
+          error: `Description must be ${TOPIC_DESCRIPTION_MAX_LENGTH} characters or less.`,
+        };
       }
 
       if (!isAuthenticated) {
@@ -349,6 +357,13 @@ export const useForumCommands = ({
         return { ok: false, error: 'Title and description are required.' };
       }
 
+      if (description.length > TOPIC_DESCRIPTION_MAX_LENGTH) {
+        return {
+          ok: false,
+          error: `Description must be ${TOPIC_DESCRIPTION_MAX_LENGTH} characters or less.`,
+        };
+      }
+
       if (!isAuthenticated) {
         return { ok: false, error: 'Authenticate with Qortal first.' };
       }
@@ -490,6 +505,13 @@ export const useForumCommands = ({
         };
       }
 
+      if (description.length > TOPIC_DESCRIPTION_MAX_LENGTH) {
+        return {
+          ok: false,
+          error: `Main topic description must be ${TOPIC_DESCRIPTION_MAX_LENGTH} characters or less.`,
+        };
+      }
+
       const allowedAddresses = normalizeAddressList(input.allowedAddresses);
       if (input.subTopicAccess === 'custom' && allowedAddresses.length === 0) {
         return {
@@ -590,6 +612,13 @@ export const useForumCommands = ({
         return {
           ok: false,
           error: 'Sub-topic title and description are required.',
+        };
+      }
+
+      if (description.length > TOPIC_DESCRIPTION_MAX_LENGTH) {
+        return {
+          ok: false,
+          error: `Sub-topic description must be ${TOPIC_DESCRIPTION_MAX_LENGTH} characters or less.`,
         };
       }
 

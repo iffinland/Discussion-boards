@@ -41,6 +41,7 @@ const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
 };
 
 const ACTIVE_SUBTOPIC_LIMIT = 6;
+const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 
 const sortSubTopics = (items: SubTopic[]) => {
   return [...items].sort((a, b) => {
@@ -916,8 +917,13 @@ const Home = ({ searchQuery }: HomeProps) => {
                     setManagedTopicDescription(event.target.value)
                   }
                   placeholder="Main topic description"
+                  maxLength={TOPIC_DESCRIPTION_MAX_LENGTH}
                   className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 />
+                <p className="text-ui-muted text-xs">
+                  {managedTopicDescription.length}/
+                  {TOPIC_DESCRIPTION_MAX_LENGTH}
+                </p>
                 <select
                   value={managedTopicStatus}
                   onChange={(event) =>
@@ -1007,8 +1013,13 @@ const Home = ({ searchQuery }: HomeProps) => {
                     setManagedSubTopicDescription(event.target.value)
                   }
                   placeholder="Sub-topic description"
+                  maxLength={TOPIC_DESCRIPTION_MAX_LENGTH}
                   className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 />
+                <p className="text-ui-muted text-xs">
+                  {managedSubTopicDescription.length}/
+                  {TOPIC_DESCRIPTION_MAX_LENGTH}
+                </p>
                 <select
                   value={managedSubTopicStatus}
                   onChange={(event) =>
@@ -1134,8 +1145,12 @@ const Home = ({ searchQuery }: HomeProps) => {
                       setTopicDescription(event.target.value)
                     }
                     placeholder="Topic description"
+                    maxLength={TOPIC_DESCRIPTION_MAX_LENGTH}
                     className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                   />
+                  <p className="text-ui-muted text-xs">
+                    {topicDescription.length}/{TOPIC_DESCRIPTION_MAX_LENGTH}
+                  </p>
                   <select
                     value={topicStatus}
                     onChange={(event) =>
@@ -1247,8 +1262,12 @@ const Home = ({ searchQuery }: HomeProps) => {
                     setSubTopicDescription(event.target.value)
                   }
                   placeholder="Sub-topic description"
+                  maxLength={TOPIC_DESCRIPTION_MAX_LENGTH}
                   className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 />
+                <p className="text-ui-muted text-xs">
+                  {subTopicDescription.length}/{TOPIC_DESCRIPTION_MAX_LENGTH}
+                </p>
                 <select
                   value={subTopicAccess}
                   onChange={(event) =>
