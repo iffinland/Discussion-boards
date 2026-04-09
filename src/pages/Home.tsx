@@ -67,6 +67,29 @@ const roleLabelByType: Record<'SysOp' | 'Admin' | 'Moderator', string> = {
   Admin: 'Admin',
   Moderator: 'Moderator',
 };
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const MINUTE_IN_MS = 60 * 1000;
+
+const formatActiveTopicTime = (value: string, nowMs: number) => {
+  const parsedMs = new Date(value).getTime();
+  if (!Number.isFinite(parsedMs)) {
+    return 'Unknown time';
+  }
+
+  const elapsedMs = Math.max(0, nowMs - parsedMs);
+  if (elapsedMs < DAY_IN_MS) {
+    const totalMinutes = Math.floor(elapsedMs / MINUTE_IN_MS);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ago`;
+  }
+
+  return new Date(parsedMs).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
 
 const Home = ({ searchQuery }: HomeProps) => {
   const navigate = useNavigate();
@@ -78,6 +101,8 @@ const Home = ({ searchQuery }: HomeProps) => {
     users,
     topics,
     subTopics,
+    posts,
+    threadSearchIndexes,
     createTopic,
     reorderTopics,
     updateTopicSettings,
@@ -118,6 +143,9 @@ const Home = ({ searchQuery }: HomeProps) => {
   >({});
   const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
   const [dragOverTopicId, setDragOverTopicId] = useState<string | null>(null);
+  const [activeTopicsNowMs, setActiveTopicsNowMs] = useState<number>(() =>
+    Date.now()
+  );
 
   const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SysOp';
   const isSysOp = currentUser.role === 'SysOp';
@@ -162,6 +190,36 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   const activeSubTopics = useMemo(() => {
     const userMap = new Map(users.map((user) => [user.id, user.displayName]));
+    const latestBySubTopicId = new Map<
+      string,
+      { authorUserId: string; createdAt: string }
+    >();
+
+    const trackLatest = (
+      subTopicId: string,
+      authorUserId: string,
+      createdAt: string
+    ) => {
+      const nextMs = new Date(createdAt).getTime();
+      if (!Number.isFinite(nextMs)) {
+        return;
+      }
+
+      const current = latestBySubTopicId.get(subTopicId);
+      const currentMs = current ? new Date(current.createdAt).getTime() : -1;
+      if (!current || nextMs >= currentMs) {
+        latestBySubTopicId.set(subTopicId, { authorUserId, createdAt });
+      }
+    };
+
+    posts.forEach((post) => {
+      trackLatest(post.subTopicId, post.authorUserId, post.createdAt);
+    });
+    Object.entries(threadSearchIndexes).forEach(([subTopicId, snapshot]) => {
+      snapshot.posts.forEach((post) => {
+        trackLatest(subTopicId, post.authorUserId, post.createdAt);
+      });
+    });
 
     return [...subTopics]
       .filter((subTopic) => canModerate || subTopic.visibility !== 'hidden')
@@ -177,9 +235,39 @@ const Home = ({ searchQuery }: HomeProps) => {
       .slice(0, ACTIVE_SUBTOPIC_LIMIT)
       .map((subTopic) => ({
         ...subTopic,
-        authorName: userMap.get(subTopic.authorUserId) ?? 'Unknown User',
+        lastPostAuthorName:
+          userMap.get(
+            latestBySubTopicId.get(subTopic.id)?.authorUserId ??
+              subTopic.authorUserId
+          ) ??
+          latestBySubTopicId.get(subTopic.id)?.authorUserId ??
+          subTopic.authorUserId ??
+          'Unknown User',
+        activeTimeLabel: formatActiveTopicTime(
+          latestBySubTopicId.get(subTopic.id)?.createdAt ?? subTopic.lastPostAt,
+          activeTopicsNowMs
+        ),
       }));
-  }, [authenticatedAddress, canModerate, currentUser, subTopics, users]);
+  }, [
+    activeTopicsNowMs,
+    authenticatedAddress,
+    canModerate,
+    currentUser,
+    posts,
+    subTopics,
+    threadSearchIndexes,
+    users,
+  ]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveTopicsNowMs(Date.now());
+    }, MINUTE_IN_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -451,8 +539,8 @@ const Home = ({ searchQuery }: HomeProps) => {
                     {subTopic.title}
                   </p>
                   <p className="text-ui-muted text-xs">
-                    {subTopic.authorName} • Last activity{' '}
-                    {new Date(subTopic.lastPostAt).toLocaleDateString('en-US')}
+                    Last post by {subTopic.lastPostAuthorName} •{' '}
+                    {subTopic.activeTimeLabel}
                   </p>
                 </button>
               </li>

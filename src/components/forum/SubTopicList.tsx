@@ -32,6 +32,16 @@ const formatDate = (date: string) =>
     day: 'numeric',
     year: 'numeric',
   });
+const SUB_TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+
+const truncateDescription = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed.length <= SUB_TOPIC_DESCRIPTION_MAX_LENGTH) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, SUB_TOPIC_DESCRIPTION_MAX_LENGTH)}...`;
+};
 
 const PinnedBadge = () => (
   <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold">
@@ -123,6 +133,9 @@ const SubTopicList = ({
                       ? ` • Access: ${resolveAccessLabel(subTopic.access)}`
                       : ''}
                   </span>
+                </span>
+                <span className="text-ui-muted block text-xs leading-relaxed">
+                  {truncateDescription(subTopic.description)}
                 </span>
                 <span className="text-brand-primary-strong text-sm">
                   <span className="flex flex-wrap items-center gap-2">
