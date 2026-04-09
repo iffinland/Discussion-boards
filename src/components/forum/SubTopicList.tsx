@@ -7,6 +7,7 @@ import { resolveAccessLabel } from '../../services/forum/forumAccess';
 type SubTopicListProps = {
   subTopics: SubTopic[];
   users: User[];
+  postCountsBySubTopicId?: Record<string, number>;
   walletNamesByAddress?: Record<string, string>;
   onOpenThread: (subTopicId: string) => void;
   canManageSubTopics?: boolean;
@@ -58,6 +59,7 @@ const SolvedBadge = () => (
 const SubTopicList = ({
   subTopics,
   users,
+  postCountsBySubTopicId = {},
   walletNamesByAddress = {},
   onOpenThread,
   canManageSubTopics = false,
@@ -151,6 +153,12 @@ const SubTopicList = ({
                 </span>
                 <span className="text-ui-muted text-sm">
                   {formatDate(subTopic.lastPostAt)}
+                  <span className="block text-xs">
+                    Posts:{' '}
+                    {postCountsBySubTopicId[subTopic.id] !== undefined
+                      ? postCountsBySubTopicId[subTopic.id]
+                      : '...'}
+                  </span>
                 </span>
               </button>
 

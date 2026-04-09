@@ -15,6 +15,7 @@ import {
   canAccessSubTopic,
   resolveAccessLabel,
 } from '../services/forum/forumAccess';
+import { forumSearchIndexService } from '../services/qdn/forumSearchIndexService';
 import {
   buildQortalShareLink,
   copyToClipboard,
@@ -91,6 +92,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     authenticatedAddress,
     topics,
     subTopics,
+    posts,
+    threadSearchIndexes,
     createSubTopic,
     createPost,
     uploadPostImage,
@@ -135,6 +138,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   const [dragOverPinnedSubTopicId, setDragOverPinnedSubTopicId] = useState<
     string | null
   >(null);
+  const [fetchedPostCountsBySubTopicId, setFetchedPostCountsBySubTopicId] =
+    useState<Record<string, number>>({});
 
   const topic = useMemo(
     () => topics.find((item) => item.id === id),
@@ -200,6 +205,31 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         .map((subTopic) => subTopic.id),
     [visibleSubTopics]
   );
+  const localPostCountsBySubTopicId = useMemo(() => {
+    const countsBySubTopicId: Record<string, number> = {};
+
+    posts.forEach((post) => {
+      countsBySubTopicId[post.subTopicId] =
+        (countsBySubTopicId[post.subTopicId] ?? 0) + 1;
+    });
+
+    Object.entries(threadSearchIndexes).forEach(([subTopicId, snapshot]) => {
+      const indexedCount = snapshot.posts.length;
+      const currentCount = countsBySubTopicId[subTopicId] ?? 0;
+      countsBySubTopicId[subTopicId] = Math.max(currentCount, indexedCount);
+    });
+
+    return countsBySubTopicId;
+  }, [posts, threadSearchIndexes]);
+  const postCountsBySubTopicId = useMemo(() => {
+    const merged: Record<string, number> = { ...fetchedPostCountsBySubTopicId };
+    Object.entries(localPostCountsBySubTopicId).forEach(
+      ([subTopicId, count]) => {
+        merged[subTopicId] = Math.max(merged[subTopicId] ?? 0, count);
+      }
+    );
+    return merged;
+  }, [fetchedPostCountsBySubTopicId, localPostCountsBySubTopicId]);
 
   useEffect(() => {
     if (!topic) {
@@ -250,6 +280,53 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       active = false;
     };
   }, [topic, visibleSubTopics]);
+
+  useEffect(() => {
+    let active = true;
+    const missingSubTopicIds = visibleSubTopics
+      .map((subTopic) => subTopic.id)
+      .filter((subTopicId) => postCountsBySubTopicId[subTopicId] === undefined);
+
+    if (missingSubTopicIds.length === 0) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const loadMissingPostCounts = async () => {
+      const resolvedEntries = await Promise.all(
+        missingSubTopicIds.map(async (subTopicId) => {
+          try {
+            const threadIndex =
+              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            const indexCount = threadIndex?.posts.length ?? 0;
+            const localCount = localPostCountsBySubTopicId[subTopicId] ?? 0;
+            return [subTopicId, Math.max(indexCount, localCount)] as const;
+          } catch {
+            return [
+              subTopicId,
+              localPostCountsBySubTopicId[subTopicId] ?? 0,
+            ] as const;
+          }
+        })
+      );
+
+      if (!active) {
+        return;
+      }
+
+      setFetchedPostCountsBySubTopicId((current) => ({
+        ...current,
+        ...Object.fromEntries(resolvedEntries),
+      }));
+    };
+
+    void loadMissingPostCounts();
+
+    return () => {
+      active = false;
+    };
+  }, [localPostCountsBySubTopicId, postCountsBySubTopicId, visibleSubTopics]);
 
   useEffect(() => {
     if (!topicId) {
@@ -702,6 +779,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
           <SubTopicList
             subTopics={visibleSubTopics}
             users={users}
+            postCountsBySubTopicId={postCountsBySubTopicId}
             walletNamesByAddress={walletNamesByAddress}
             onOpenThread={handleOpenThread}
             canManageSubTopics={canModerate}
