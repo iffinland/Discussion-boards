@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -8,9 +8,9 @@ import {
   useNavigate,
 } from 'react-router-dom';
 
-const Layout = lazy(() => import('./components/layout/Layout'));
-const Home = lazy(() => import('./pages/Home'));
-const ThreadPage = lazy(() => import('./pages/ThreadPage'));
+import Layout from './components/layout/Layout';
+import Home from './pages/Home';
+import ThreadPage from './pages/ThreadPage';
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
 const THEME_STORAGE_KEY = 'forum-theme-mode';
@@ -57,33 +57,27 @@ const App = () => {
 
   return (
     <BrowserRouter basename={routerBaseName}>
-      <Suspense
-        fallback={
-          <div className="p-4 text-sm text-slate-500">Loading app...</div>
-        }
+      <LegacyHashRedirect />
+      <Layout
+        themeMode={themeMode}
+        onToggleTheme={handleToggleTheme}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       >
-        <LegacyHashRedirect />
-        <Layout
-          themeMode={themeMode}
-          onToggleTheme={handleToggleTheme}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-        >
-          <Routes>
-            <Route path="/" element={<Home searchQuery={searchQuery} />} />
-            <Route
-              path="/thread/:id"
-              element={
-                <ThreadPage
-                  searchQuery={searchQuery}
-                  onSearchQueryChange={setSearchQuery}
-                />
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
-      </Suspense>
+        <Routes>
+          <Route path="/" element={<Home searchQuery={searchQuery} />} />
+          <Route
+            path="/thread/:id"
+            element={
+              <ThreadPage
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
     </BrowserRouter>
   );
 };
