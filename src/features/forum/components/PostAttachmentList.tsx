@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import { formatAttachmentSize } from '../../../services/forum/attachments';
+import {
+  formatAttachmentSize,
+  getAttachmentExtension,
+} from '../../../services/forum/attachments';
 import { forumQdnService } from '../../../services/qdn/forumQdnService';
 import type { PostAttachment } from '../../../types';
 
@@ -10,6 +13,24 @@ type PostAttachmentListProps = {
 
 const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
   const [urlsById, setUrlsById] = useState<Record<string, string>>({});
+
+  const triggerAttachmentDownload = (
+    attachmentUrl: string,
+    filename: string
+  ) => {
+    const link = document.createElement('a');
+    link.href = attachmentUrl;
+    link.download = filename;
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const isTextAttachment = (attachment: PostAttachment) => {
+    const extension = getAttachmentExtension(attachment.filename);
+    return extension === 'txt' || extension === 'md';
+  };
 
   useEffect(() => {
     let active = true;
@@ -76,14 +97,27 @@ const PostAttachmentList = ({ attachments }: PostAttachmentListProps) => {
                 </p>
               </div>
               {attachmentUrl ? (
-                <a
-                  href={attachmentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand-primary rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold"
-                >
-                  Open
-                </a>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={attachmentUrl}
+                    rel="noopener noreferrer"
+                    className="text-brand-primary rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold"
+                  >
+                    {isTextAttachment(attachment) ? 'View' : 'Open'}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      triggerAttachmentDownload(
+                        attachmentUrl,
+                        attachment.filename
+                      )
+                    }
+                    className="text-ui-strong rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold"
+                  >
+                    Download
+                  </button>
+                </div>
               ) : (
                 <span className="text-ui-muted text-xs font-semibold">
                   Loading...
