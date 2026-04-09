@@ -579,6 +579,7 @@ export const useForumCommands = ({
   const updateSubTopicSettings = useCallback(
     async (input: {
       subTopicId: string;
+      topicId?: string;
       title: string;
       description: string;
       status: SubTopic['status'];
@@ -608,6 +609,7 @@ export const useForumCommands = ({
 
       const title = input.title.trim();
       const description = input.description.trim();
+      const nextTopicId = input.topicId?.trim() || target.topicId;
       if (!title || !description) {
         return {
           ok: false,
@@ -622,6 +624,10 @@ export const useForumCommands = ({
         };
       }
 
+      if (!topics.some((topic) => topic.id === nextTopicId)) {
+        return { ok: false, error: 'Target main topic not found.' };
+      }
+
       const allowedAddresses = normalizeAddressList(input.allowedAddresses);
       if (input.access === 'custom' && allowedAddresses.length === 0) {
         return {
@@ -632,6 +638,7 @@ export const useForumCommands = ({
 
       const updatedSubTopic: SubTopic = {
         ...target,
+        topicId: nextTopicId,
         title,
         description,
         status: input.status,

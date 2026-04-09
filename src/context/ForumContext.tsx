@@ -79,6 +79,7 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   updateSubTopicSettings: (input: {
     subTopicId: string;
+    topicId?: string;
     title: string;
     description: string;
     status: SubTopic['status'];

@@ -156,6 +156,7 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [managedSubTopicId, setManagedSubTopicId] = useState<string | null>(
     null
   );
+  const [managedSubTopicTopicId, setManagedSubTopicTopicId] = useState('');
   const [managedSubTopicTitle, setManagedSubTopicTitle] = useState('');
   const [managedSubTopicDescription, setManagedSubTopicDescription] =
     useState('');
@@ -637,6 +638,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     setManagedSubTopicId((current) =>
       current === subTopic.id ? null : subTopic.id
     );
+    setManagedSubTopicTopicId(subTopic.topicId);
     setManagedSubTopicTitle(subTopic.title);
     setManagedSubTopicDescription(subTopic.description);
     setManagedSubTopicStatus(subTopic.status);
@@ -664,6 +666,7 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     const result = await updateSubTopicSettings({
       subTopicId: managedSubTopicId,
+      topicId: managedSubTopicTopicId,
       title: managedSubTopicTitle,
       description: managedSubTopicDescription,
       status: managedSubTopicStatus,
@@ -999,6 +1002,19 @@ const Home = ({ searchQuery }: HomeProps) => {
                 <h3 className="text-ui-strong text-sm font-semibold">
                   Manage Sub-Topic
                 </h3>
+                <select
+                  value={managedSubTopicTopicId}
+                  onChange={(event) =>
+                    setManagedSubTopicTopicId(event.target.value)
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      Move to Main Topic: {topic.title}
+                    </option>
+                  ))}
+                </select>
                 <input
                   value={managedSubTopicTitle}
                   onChange={(event) =>
