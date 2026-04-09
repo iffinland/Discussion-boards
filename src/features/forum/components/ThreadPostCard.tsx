@@ -26,7 +26,7 @@ type ThreadPostCardProps = {
   onLike: (postId: string) => void;
   onReply: (post: Post) => void;
   onShare: (postId: string) => void;
-  onSendTip: (postId: string) => void;
+  onSendTip: (post: Post) => void;
   onJumpToPost?: (postId: string) => void;
   onEdit: (postId: string, nextContent: string) => void;
   onDelete: (postId: string) => void;
@@ -299,7 +299,7 @@ const ThreadPostCard = ({
         onLike={() => onLike(post.id)}
         onReply={() => onReply(post)}
         onShare={() => onShare(post.id)}
-        onSendTip={() => onSendTip(post.id)}
+        onSendTip={() => onSendTip(post)}
         onEdit={handleStartEdit}
         onDelete={() => onDelete(post.id)}
       />

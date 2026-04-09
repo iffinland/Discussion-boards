@@ -4,6 +4,11 @@ import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../../../services/qortal/share';
+import { requestQortal } from '../../../services/qortal/qortalClient';
+import {
+  getQortBalance,
+  resolveNameWalletAddress,
+} from '../../../services/qortal/walletService';
 import type { Post, PostAttachment } from '../../../types';
 import type {
   ForumMutationResult,
@@ -44,6 +49,18 @@ export const useThreadActions = ({
     []
   );
   const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
+  const [isTipModalOpen, setIsTipModalOpen] = useState(false);
+  const [tipAmount, setTipAmount] = useState('0');
+  const [tipRecipientName, setTipRecipientName] = useState('');
+  const [tipRecipientAddress, setTipRecipientAddress] = useState<string | null>(
+    null
+  );
+  const [tipResolveError, setTipResolveError] = useState<string | null>(null);
+  const [isResolvingTipRecipient, setIsResolvingTipRecipient] = useState(false);
+  const [isSendingTip, setIsSendingTip] = useState(false);
+  const [qortBalance, setQortBalance] = useState<number | null>(null);
+  const [isTipBalanceLoading, setIsTipBalanceLoading] = useState(false);
+  const [tipTargetPostId, setTipTargetPostId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const handleSubmitReply = useCallback(async () => {
@@ -132,12 +149,141 @@ export const useThreadActions = ({
     [threadId]
   );
 
-  const handleSendTip = useCallback((postId: string) => {
-    setTipsByPostId((current) => ({
-      ...current,
-      [postId]: (current[postId] ?? 0) + 1,
-    }));
+  const resolveTipRecipient = useCallback(async (recipientName: string) => {
+    const normalizedName = recipientName.trim();
+    if (!normalizedName) {
+      setTipRecipientAddress(null);
+      setTipResolveError('Recipient name is missing.');
+      return null;
+    }
+
+    setIsResolvingTipRecipient(true);
+    setTipResolveError(null);
+
+    try {
+      const address = await resolveNameWalletAddress(normalizedName);
+      if (!address) {
+        setTipRecipientAddress(null);
+        setTipResolveError('Recipient wallet address could not be resolved.');
+        return null;
+      }
+
+      setTipRecipientAddress(address);
+      return address;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Recipient wallet address lookup failed.';
+      setTipRecipientAddress(null);
+      setTipResolveError(message);
+      return null;
+    } finally {
+      setIsResolvingTipRecipient(false);
+    }
   }, []);
+
+  const handleSendTip = useCallback(
+    async (post: Post) => {
+      const recipientName = post.authorUserId.trim();
+      setTipTargetPostId(post.id);
+      setTipRecipientName(recipientName);
+      setTipAmount('0');
+      setTipRecipientAddress(null);
+      setTipResolveError(null);
+      setIsTipModalOpen(true);
+
+      setIsTipBalanceLoading(true);
+      try {
+        const balance = await getQortBalance();
+        setQortBalance(balance);
+      } catch {
+        setQortBalance(null);
+      } finally {
+        setIsTipBalanceLoading(false);
+      }
+
+      void resolveTipRecipient(recipientName);
+    },
+    [resolveTipRecipient]
+  );
+
+  const closeTipModal = useCallback(() => {
+    if (isSendingTip) {
+      return;
+    }
+
+    setIsTipModalOpen(false);
+  }, [isSendingTip]);
+
+  const submitTip = useCallback(async () => {
+    const parsedAmount = Number(tipAmount);
+    const trimmedRecipientName = tipRecipientName.trim();
+
+    if (!trimmedRecipientName) {
+      setFeedback('Recipient name is missing.');
+      return;
+    }
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('Enter a QORT amount greater than 0.');
+      return;
+    }
+
+    if (typeof qortBalance === 'number' && parsedAmount > qortBalance) {
+      setFeedback('Entered amount is higher than your wallet balance.');
+      return;
+    }
+
+    const resolvedAddress =
+      tipRecipientAddress ?? (await resolveTipRecipient(trimmedRecipientName));
+    if (!resolvedAddress) {
+      setFeedback('Recipient wallet address could not be resolved.');
+      return;
+    }
+
+    try {
+      setIsSendingTip(true);
+      await requestQortal({
+        action: 'SEND_COIN',
+        coin: 'QORT',
+        recipient: resolvedAddress,
+        amount: parsedAmount,
+      });
+
+      if (tipTargetPostId) {
+        setTipsByPostId((current) => ({
+          ...current,
+          [tipTargetPostId]: (current[tipTargetPostId] ?? 0) + 1,
+        }));
+      }
+
+      setIsTipModalOpen(false);
+      setTipAmount('0');
+      setFeedback(`Tip sent to @${trimmedRecipientName}.`);
+      try {
+        const balance = await getQortBalance();
+        setQortBalance(balance);
+      } catch {
+        // Keep last known balance if refresh fails.
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Tip transfer failed.';
+      setFeedback(message);
+    } finally {
+      setIsSendingTip(false);
+    }
+  }, [
+    qortBalance,
+    resolveTipRecipient,
+    tipAmount,
+    tipRecipientAddress,
+    tipRecipientName,
+    tipTargetPostId,
+  ]);
 
   const uploadImageForReply = useCallback(
     async (file: File): Promise<string> => {
@@ -171,6 +317,16 @@ export const useThreadActions = ({
     setReplyAttachments,
     feedback,
     tipsByPostId,
+    isTipModalOpen,
+    tipAmount,
+    tipRecipientName,
+    tipRecipientAddress,
+    tipResolveError,
+    isResolvingTipRecipient,
+    isSendingTip,
+    isTipBalanceLoading,
+    formattedTipBalance:
+      typeof qortBalance === 'number' ? qortBalance.toFixed(8) : '0.00000000',
     handleSubmitReply,
     handleReplyToPost,
     handleCancelReplyTarget,
@@ -178,6 +334,9 @@ export const useThreadActions = ({
     handleDeletePost,
     handleSharePost,
     handleSendTip,
+    closeTipModal,
+    setTipAmount,
+    submitTip,
     uploadImageForReply,
     uploadAttachmentForReply,
   };

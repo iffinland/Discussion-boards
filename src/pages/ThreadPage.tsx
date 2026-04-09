@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import ShareIcon from '../components/common/ShareIcon';
+import QortTipModal from '../features/forum/components/QortTipModal';
 import ThreadComposer from '../features/forum/components/ThreadComposer';
 import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
 import ThreadPostCard from '../features/forum/components/ThreadPostCard';
@@ -88,6 +89,15 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     setReplyAttachments,
     feedback,
     tipsByPostId,
+    isTipModalOpen,
+    tipAmount,
+    tipRecipientName,
+    tipRecipientAddress,
+    tipResolveError,
+    isResolvingTipRecipient,
+    isSendingTip,
+    isTipBalanceLoading,
+    formattedTipBalance,
     handleSubmitReply,
     handleReplyToPost,
     handleCancelReplyTarget,
@@ -95,6 +105,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     handleDeletePost,
     handleSharePost,
     handleSendTip,
+    closeTipModal,
+    setTipAmount,
+    submitTip,
     uploadImageForReply,
     uploadAttachmentForReply,
   } = useThreadActions({
@@ -613,6 +626,20 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       {threadLoadError ? (
         <p className="text-ui-muted text-xs">{threadLoadError}</p>
       ) : null}
+      <QortTipModal
+        isOpen={isTipModalOpen}
+        isSending={isSendingTip}
+        isResolvingRecipient={isResolvingTipRecipient}
+        isBalanceLoading={isTipBalanceLoading}
+        amount={tipAmount}
+        formattedBalance={formattedTipBalance}
+        recipientName={tipRecipientName}
+        recipientAddress={tipRecipientAddress}
+        resolveError={tipResolveError}
+        onClose={closeTipModal}
+        onAmountChange={setTipAmount}
+        onSend={() => void submitTip()}
+      />
       {isThreadPostsLoading ? (
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
       ) : null}
