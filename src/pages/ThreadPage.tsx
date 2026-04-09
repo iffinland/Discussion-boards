@@ -25,6 +25,7 @@ import {
 } from '../services/qortal/share';
 
 const THREAD_BATCH_SIZE = 12;
+type PostSortMode = 'oldest' | 'newest';
 
 type ThreadPageProps = {
   searchQuery: string;
@@ -66,6 +67,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     null
   );
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [postSortMode, setPostSortMode] = useState<PostSortMode>('oldest');
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -137,6 +139,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     () => searchThreadPosts(postSearchIndex, threadPosts, deferredSearchQuery),
     [deferredSearchQuery, postSearchIndex, threadPosts]
   );
+  const orderedThreadPosts = useMemo(() => {
+    const sorted = [...filteredThreadPosts].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    return postSortMode === 'newest' ? sorted.reverse() : sorted;
+  }, [filteredThreadPosts, postSortMode]);
   const sharedPostId = useMemo(
     () => new URLSearchParams(location.search).get('post'),
     [location.search]
@@ -146,8 +155,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     [threadPosts]
   );
   const visiblePosts = useMemo(
-    () => filteredThreadPosts.slice(0, visibleCount),
-    [filteredThreadPosts, visibleCount]
+    () => orderedThreadPosts.slice(0, visibleCount),
+    [orderedThreadPosts, visibleCount]
   );
   const displayPosts = useMemo(() => {
     if (!sharedPostId) {
@@ -163,13 +172,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return visiblePosts;
     }
 
-    return [...visiblePosts, sharedPost].sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    return [...visiblePosts, sharedPost].sort((a, b) =>
+      postSortMode === 'newest'
+        ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-  }, [sharedPostId, threadPostMap, visiblePosts]);
+  }, [postSortMode, sharedPostId, threadPostMap, visiblePosts]);
 
-  const canLoadMore = visibleCount < filteredThreadPosts.length;
+  const canLoadMore = visibleCount < orderedThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
   const hasSubTopicAccess = subTopic
     ? canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
@@ -322,13 +332,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const targetIndex = filteredThreadPosts.findIndex(
+    const targetIndex = orderedThreadPosts.findIndex(
       (post) => post.id === sharedPostId
     );
     if (targetIndex >= 0) {
       setVisibleCount((current) => Math.max(current, targetIndex + 1));
     }
-  }, [filteredThreadPosts, sharedPostId]);
+  }, [orderedThreadPosts, sharedPostId]);
 
   useEffect(() => {
     if (
@@ -374,7 +384,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   }, [displayPosts, sharedPostId, threadPostMap]);
 
   const jumpToPost = (postId: string) => {
-    const targetIndex = filteredThreadPosts.findIndex(
+    const targetIndex = orderedThreadPosts.findIndex(
       (post) => post.id === postId
     );
     if (targetIndex >= 0) {
@@ -432,7 +442,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         }
 
         setVisibleCount((current) =>
-          Math.min(current + THREAD_BATCH_SIZE, filteredThreadPosts.length)
+          Math.min(current + THREAD_BATCH_SIZE, orderedThreadPosts.length)
         );
       },
       {
@@ -446,7 +456,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     return () => {
       observer.disconnect();
     };
-  }, [canLoadMore, filteredThreadPosts.length]);
+  }, [canLoadMore, orderedThreadPosts.length]);
 
   if (!isAuthReady && !subTopic && subTopics.length === 0) {
     return <ThreadSkeleton />;
@@ -612,6 +622,19 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           >
             <ShareIcon />
             <span>Share Thread</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setPostSortMode((current) =>
+                current === 'oldest' ? 'newest' : 'oldest'
+              )
+            }
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+          >
+            {postSortMode === 'oldest'
+              ? 'Show Newest First'
+              : 'Show Oldest First'}
           </button>
           <button
             type="button"
