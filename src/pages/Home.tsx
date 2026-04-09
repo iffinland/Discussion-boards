@@ -73,12 +73,12 @@ const topicAccessOptions: Array<{
   {
     value: 'moderators',
     label: 'Moderators+',
-    helper: 'Moderators, admins and the super admin can create sub-topics.',
+    helper: 'Moderators, admins and SysOps can create sub-topics.',
   },
   {
     value: 'admins',
     label: 'Admins only',
-    helper: 'Only admins and the super admin can create sub-topics.',
+    helper: 'Only admins and SysOps can create sub-topics.',
   },
   {
     value: 'custom',
@@ -131,7 +131,9 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [subTopicAllowedAddresses, setSubTopicAllowedAddresses] = useState('');
   const [subTopicFeedback, setSubTopicFeedback] = useState<string | null>(null);
   const [roleAddress, setRoleAddress] = useState('');
-  const [roleType, setRoleType] = useState<'Admin' | 'Moderator'>('Admin');
+  const [roleType, setRoleType] = useState<'SysOp' | 'Admin' | 'Moderator'>(
+    'Admin'
+  );
   const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
   const [managedTopicId, setManagedTopicId] = useState<string | null>(null);
   const [managedTopicTitle, setManagedTopicTitle] = useState('');
@@ -170,9 +172,8 @@ const Home = ({ searchQuery }: HomeProps) => {
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const selectedTopicFromRoute = searchParams.get('topic');
 
-  const isAdmin =
-    currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin';
-  const isSuperAdmin = currentUser.role === 'SuperAdmin';
+  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SysOp';
+  const isSysOp = currentUser.role === 'SysOp';
   const canModerate = currentUser.role !== 'Member';
 
   const visibleTopicsWithSubTopics = useMemo(() => {
@@ -661,7 +662,7 @@ const Home = ({ searchQuery }: HomeProps) => {
         ) : null}
       </section>
 
-      {isSuperAdmin ? (
+      {isSysOp ? (
         <section className="space-y-3">
           <h2 className="text-brand-primary text-lg font-semibold">
             Forum Roles
@@ -670,10 +671,10 @@ const Home = ({ searchQuery }: HomeProps) => {
           <article className="forum-card-primary p-4">
             <div className="space-y-1">
               <p className="text-ui-strong text-sm font-semibold">
-                Super admin wallet
+                Primary SysOp wallet
               </p>
               <p className="text-ui-muted text-xs break-all">
-                {roleRegistry.superAdminAddress}
+                {roleRegistry.primarySysOpAddress}
               </p>
               <p className="text-ui-muted text-xs break-all">
                 Authenticated as: {authenticatedAddress ?? 'No wallet detected'}
@@ -690,10 +691,13 @@ const Home = ({ searchQuery }: HomeProps) => {
               <select
                 value={roleType}
                 onChange={(event) =>
-                  setRoleType(event.target.value as 'Admin' | 'Moderator')
+                  setRoleType(
+                    event.target.value as 'SysOp' | 'Admin' | 'Moderator'
+                  )
                 }
                 className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               >
+                <option value="SysOp">SysOp</option>
                 <option value="Admin">Admin</option>
                 <option value="Moderator">Moderator</option>
               </select>
@@ -705,7 +709,35 @@ const Home = ({ searchQuery }: HomeProps) => {
               </button>
             </form>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div>
+                <h3 className="text-ui-strong text-sm font-semibold">SysOps</h3>
+                <ul className="mt-2 space-y-2">
+                  {roleRegistry.sysOps.map((address) => (
+                    <li
+                      key={address}
+                      className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                    >
+                      <span className="text-ui-muted text-xs break-all">
+                        {address}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRole(address)}
+                        className="text-brand-accent-strong text-xs font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                  {roleRegistry.sysOps.length === 0 ? (
+                    <li className="text-ui-muted text-xs">
+                      No extra SysOps added yet.
+                    </li>
+                  ) : null}
+                </ul>
+              </div>
+
               <div>
                 <h3 className="text-ui-strong text-sm font-semibold">Admins</h3>
                 <ul className="mt-2 space-y-2">

@@ -78,9 +78,9 @@ const normalizeAddressList = (input: string[]) => {
 };
 
 const isAdminRole = (role: User['role']) =>
-  role === 'Admin' || role === 'SuperAdmin';
+  role === 'Admin' || role === 'SysOp';
 const isModeratorRole = (role: User['role']) =>
-  role === 'Moderator' || role === 'Admin' || role === 'SuperAdmin';
+  role === 'Moderator' || role === 'Admin' || role === 'SysOp';
 
 const sortTopicsByOrder = (items: Topic[]) =>
   [...items].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -90,7 +90,7 @@ const canCreateSubTopicForTopic = (
   user: User,
   address: string | null
 ) => {
-  if (user.role === 'SuperAdmin' || user.role === 'Admin') {
+  if (user.role === 'SysOp' || user.role === 'Admin') {
     return true;
   }
 
@@ -190,7 +190,7 @@ export const useForumCommands = ({
       if (!isAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and the super admin can create main topics.',
+          error: 'Only admins and SysOps can create main topics.',
         };
       }
 
@@ -273,7 +273,7 @@ export const useForumCommands = ({
       if (!isAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and the super admin can reorder main topics.',
+          error: 'Only admins and SysOps can reorder main topics.',
         };
       }
 
@@ -580,8 +580,7 @@ export const useForumCommands = ({
       if (!isModeratorRole(currentUser.role)) {
         return {
           ok: false,
-          error:
-            'Only moderators, admins and the super admin can manage sub-topics.',
+          error: 'Only moderators, admins and SysOps can manage sub-topics.',
         };
       }
 
@@ -737,7 +736,7 @@ export const useForumCommands = ({
   const upsertRoleAssignment = useCallback(
     async (input: {
       address: string;
-      role: 'Admin' | 'Moderator';
+      role: 'SysOp' | 'Admin' | 'Moderator';
     }): Promise<ForumMutationResult> => {
       const address = input.address.trim();
 
@@ -750,24 +749,28 @@ export const useForumCommands = ({
       }
 
       if (
-        currentUser.role !== 'SuperAdmin' ||
-        authenticatedAddress !== roleRegistry.superAdminAddress
+        currentUser.role !== 'SysOp' ||
+        authenticatedAddress !== roleRegistry.primarySysOpAddress
       ) {
         return {
           ok: false,
-          error: 'Only the super admin can manage forum roles.',
+          error: 'Only the primary SysOp can manage forum roles.',
         };
       }
 
-      if (address === roleRegistry.superAdminAddress) {
+      if (address === roleRegistry.primarySysOpAddress) {
         return {
           ok: false,
-          error: 'The super admin address is fixed and cannot be reassigned.',
+          error: 'The primary SysOp address is fixed and cannot be reassigned.',
         };
       }
 
       const nextRegistry: ForumRoleRegistry = {
         ...roleRegistry,
+        sysOps:
+          input.role === 'SysOp'
+            ? normalizeAddressList([...roleRegistry.sysOps, address])
+            : roleRegistry.sysOps.filter((entry) => entry !== address),
         admins:
           input.role === 'Admin'
             ? normalizeAddressList([...roleRegistry.admins, address])
@@ -819,21 +822,27 @@ export const useForumCommands = ({
       }
 
       if (
-        currentUser.role !== 'SuperAdmin' ||
-        authenticatedAddress !== roleRegistry.superAdminAddress
+        currentUser.role !== 'SysOp' ||
+        authenticatedAddress !== roleRegistry.primarySysOpAddress
       ) {
         return {
           ok: false,
-          error: 'Only the super admin can manage forum roles.',
+          error: 'Only the primary SysOp can manage forum roles.',
         };
       }
 
-      if (normalizedAddress === roleRegistry.superAdminAddress) {
-        return { ok: false, error: 'The super admin role cannot be removed.' };
+      if (normalizedAddress === roleRegistry.primarySysOpAddress) {
+        return {
+          ok: false,
+          error: 'The primary SysOp role cannot be removed.',
+        };
       }
 
       const nextRegistry: ForumRoleRegistry = {
         ...roleRegistry,
+        sysOps: roleRegistry.sysOps.filter(
+          (entry) => entry !== normalizedAddress
+        ),
         admins: roleRegistry.admins.filter(
           (entry) => entry !== normalizedAddress
         ),

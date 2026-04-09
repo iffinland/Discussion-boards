@@ -7,7 +7,7 @@ const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
   import.meta.env.VITE_QORTAL_QDN_IDENTIFIER?.trim() || 'qdbm';
 
-export const SUPER_ADMIN_ADDRESS = 'QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE';
+export const PRIMARY_SYSOP_ADDRESS = 'QiY1TzA7WYAN8DQpNLFpnWLqFnwnwyviLE';
 
 const ROLE_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-roles-`;
 const PRIMARY_ROLE_IDENTIFIER = `${ROLE_IDENTIFIER_PREFIX}default`;
@@ -24,7 +24,9 @@ type RoleRegistryPayload = {
   type: 'role-registry';
   updatedAt: number;
   registry: {
-    superAdminAddress: string;
+    primarySysOpAddress?: string;
+    superAdminAddress?: string;
+    sysOps?: string[];
     admins: string[];
     moderators: string[];
   };
@@ -89,7 +91,7 @@ const normalizeAddressList = (input: unknown) => {
     const normalized = value.trim();
     if (
       !normalized ||
-      normalized === SUPER_ADMIN_ADDRESS ||
+      normalized === PRIMARY_SYSOP_ADDRESS ||
       seen.has(normalized)
     ) {
       return;
@@ -103,7 +105,8 @@ const normalizeAddressList = (input: unknown) => {
 };
 
 export const createDefaultRoleRegistry = (): ForumRoleRegistry => ({
-  superAdminAddress: SUPER_ADMIN_ADDRESS,
+  primarySysOpAddress: PRIMARY_SYSOP_ADDRESS,
+  sysOps: [],
   admins: [],
   moderators: [],
   updatedAt: null,
@@ -123,29 +126,41 @@ const parseRoleRegistryPayload = (raw: unknown): RoleRegistryPayload | null => {
     type: 'role-registry',
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     registry: {
-      superAdminAddress:
-        typeof raw.registry.superAdminAddress === 'string' &&
-        raw.registry.superAdminAddress.trim()
-          ? raw.registry.superAdminAddress.trim()
-          : SUPER_ADMIN_ADDRESS,
+      primarySysOpAddress:
+        typeof raw.registry.primarySysOpAddress === 'string' &&
+        raw.registry.primarySysOpAddress.trim()
+          ? raw.registry.primarySysOpAddress.trim()
+          : typeof raw.registry.superAdminAddress === 'string' &&
+              raw.registry.superAdminAddress.trim()
+            ? raw.registry.superAdminAddress.trim()
+            : PRIMARY_SYSOP_ADDRESS,
+      sysOps: normalizeAddressList(raw.registry.sysOps),
       admins: normalizeAddressList(raw.registry.admins),
       moderators: normalizeAddressList(raw.registry.moderators),
     },
   };
 };
 
-const toForumRoleRegistry = (
-  payload: RoleRegistryPayload
-): ForumRoleRegistry => ({
-  superAdminAddress: payload.registry.superAdminAddress,
-  admins: payload.registry.admins.filter(
-    (address) => !payload.registry.moderators.includes(address)
-  ),
-  moderators: payload.registry.moderators.filter(
-    (address) => !payload.registry.admins.includes(address)
-  ),
-  updatedAt: payload.updatedAt,
-});
+const toForumRoleRegistry = (payload: RoleRegistryPayload) => {
+  const primarySysOpAddress =
+    payload.registry.primarySysOpAddress ?? PRIMARY_SYSOP_ADDRESS;
+  const sysOps = payload.registry.sysOps ?? [];
+
+  return {
+    primarySysOpAddress,
+    sysOps: sysOps.filter((address) => address !== primarySysOpAddress),
+    admins: payload.registry.admins.filter(
+      (address) =>
+        !payload.registry.moderators.includes(address) &&
+        !sysOps.includes(address)
+    ),
+    moderators: payload.registry.moderators.filter(
+      (address) =>
+        !payload.registry.admins.includes(address) && !sysOps.includes(address)
+    ),
+    updatedAt: payload.updatedAt,
+  };
+};
 
 const searchByPrefix = async (
   prefix: string
@@ -235,8 +250,12 @@ export const resolveRoleForAddress = (
 
   const normalized = address.trim();
 
-  if (normalized === registry.superAdminAddress) {
-    return 'SuperAdmin';
+  if (normalized === registry.primarySysOpAddress) {
+    return 'SysOp';
+  }
+
+  if (registry.sysOps.includes(normalized)) {
+    return 'SysOp';
   }
 
   if (registry.admins.includes(normalized)) {
@@ -255,7 +274,7 @@ export const forumRolesService = {
     let trustedNames: string[] = [];
 
     try {
-      trustedNames = await getAccountNames(SUPER_ADMIN_ADDRESS);
+      trustedNames = await getAccountNames(PRIMARY_SYSOP_ADDRESS);
     } catch {
       trustedNames = [];
     }
@@ -291,10 +310,15 @@ export const forumRolesService = {
     const resolvedOwner = await resolveOwnerName(ownerName);
     const updatedAt = Date.now();
     const sanitizedRegistry: ForumRoleRegistry = {
-      superAdminAddress: SUPER_ADMIN_ADDRESS,
-      admins: normalizeAddressList(registry.admins),
+      primarySysOpAddress: PRIMARY_SYSOP_ADDRESS,
+      sysOps: normalizeAddressList(registry.sysOps),
+      admins: normalizeAddressList(registry.admins).filter(
+        (address) => !normalizeAddressList(registry.sysOps).includes(address)
+      ),
       moderators: normalizeAddressList(registry.moderators).filter(
-        (address) => !normalizeAddressList(registry.admins).includes(address)
+        (address) =>
+          !normalizeAddressList(registry.admins).includes(address) &&
+          !normalizeAddressList(registry.sysOps).includes(address)
       ),
       updatedAt,
     };
@@ -304,7 +328,9 @@ export const forumRolesService = {
       type: 'role-registry',
       updatedAt,
       registry: {
-        superAdminAddress: sanitizedRegistry.superAdminAddress,
+        primarySysOpAddress: sanitizedRegistry.primarySysOpAddress,
+        superAdminAddress: sanitizedRegistry.primarySysOpAddress,
+        sysOps: sanitizedRegistry.sysOps,
         admins: sanitizedRegistry.admins,
         moderators: sanitizedRegistry.moderators,
       },

@@ -97,7 +97,7 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
-    role: 'Admin' | 'Moderator';
+    role: 'SysOp' | 'Admin' | 'Moderator';
   }) => Promise<ForumMutationResult>;
   removeRoleAssignment: (address: string) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;

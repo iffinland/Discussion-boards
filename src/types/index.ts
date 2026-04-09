@@ -1,4 +1,4 @@
-export type UserRole = 'SuperAdmin' | 'Admin' | 'Moderator' | 'Member';
+export type UserRole = 'SysOp' | 'Admin' | 'Moderator' | 'Member';
 export type TopicStatus = 'open' | 'locked';
 export type TopicVisibility = 'visible' | 'hidden';
 export type TopicAccess = 'everyone' | 'moderators' | 'admins' | 'custom';
@@ -71,7 +71,8 @@ export interface Post {
 }
 
 export interface ForumRoleRegistry {
-  superAdminAddress: string;
+  primarySysOpAddress: string;
+  sysOps: string[];
   admins: string[];
   moderators: string[];
   updatedAt: number | null;
