@@ -24,6 +24,7 @@ import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../services/qortal/share';
+import { getAccountNames } from '../services/qortal/walletService';
 import type { SubTopic, Topic, TopicAccess } from '../types';
 
 const parseAddressInput = (value: string) =>
@@ -135,6 +136,9 @@ const Home = ({ searchQuery }: HomeProps) => {
     'Admin'
   );
   const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
+  const [roleNamesByAddress, setRoleNamesByAddress] = useState<
+    Record<string, string>
+  >({});
   const [managedTopicId, setManagedTopicId] = useState<string | null>(null);
   const [managedTopicTitle, setManagedTopicTitle] = useState('');
   const [managedTopicDescription, setManagedTopicDescription] = useState('');
@@ -297,6 +301,73 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     setOpenTopicId(selectedTopicFromRoute);
   }, [selectedTopicFromRoute, topics]);
+
+  useEffect(() => {
+    let active = true;
+
+    const addresses = [
+      roleRegistry.primarySysOpAddress,
+      ...roleRegistry.sysOps,
+      ...roleRegistry.admins,
+      ...roleRegistry.moderators,
+    ].filter(Boolean);
+
+    if (addresses.length === 0) {
+      setRoleNamesByAddress({});
+      return () => {
+        active = false;
+      };
+    }
+
+    const uniqueAddresses = [...new Set(addresses)];
+
+    const resolveRoleNames = async () => {
+      const resolvedEntries = await Promise.all(
+        uniqueAddresses.map(async (address) => {
+          try {
+            const names = await getAccountNames(address);
+            const primaryName = names.find((entry) => entry.trim())?.trim();
+            return [address, primaryName ?? ''] as const;
+          } catch {
+            return [address, ''] as const;
+          }
+        })
+      );
+
+      if (!active) {
+        return;
+      }
+
+      setRoleNamesByAddress(
+        Object.fromEntries(
+          resolvedEntries.filter((entry) => Boolean(entry[1].trim()))
+        )
+      );
+    };
+
+    void resolveRoleNames();
+
+    return () => {
+      active = false;
+    };
+  }, [roleRegistry]);
+
+  const renderRoleIdentity = (address: string) => {
+    const displayName = roleNamesByAddress[address];
+
+    return (
+      <span className="min-w-0">
+        <span className="text-ui-strong block truncate text-sm font-semibold">
+          {displayName || address}
+        </span>
+        {displayName ? (
+          <span className="text-ui-muted block truncate text-[11px]">
+            {address}
+          </span>
+        ) : null}
+      </span>
+    );
+  };
 
   const handleToggle = (topicId: string) => {
     setOpenTopicId((current) => {
@@ -671,11 +742,9 @@ const Home = ({ searchQuery }: HomeProps) => {
           <article className="forum-card-primary p-4">
             <div className="space-y-1">
               <p className="text-ui-strong text-sm font-semibold">
-                Primary SysOp wallet
+                Primary SysOp
               </p>
-              <p className="text-ui-muted text-xs break-all">
-                {roleRegistry.primarySysOpAddress}
-              </p>
+              {renderRoleIdentity(roleRegistry.primarySysOpAddress)}
               <p className="text-ui-muted text-xs break-all">
                 Authenticated as: {authenticatedAddress ?? 'No wallet detected'}
               </p>
@@ -718,9 +787,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                       key={address}
                       className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                     >
-                      <span className="text-ui-muted text-xs break-all">
-                        {address}
-                      </span>
+                      {renderRoleIdentity(address)}
                       <button
                         type="button"
                         onClick={() => handleRemoveRole(address)}
@@ -746,9 +813,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                       key={address}
                       className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                     >
-                      <span className="text-ui-muted text-xs break-all">
-                        {address}
-                      </span>
+                      {renderRoleIdentity(address)}
                       <button
                         type="button"
                         onClick={() => handleRemoveRole(address)}
@@ -776,9 +841,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                       key={address}
                       className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                     >
-                      <span className="text-ui-muted text-xs break-all">
-                        {address}
-                      </span>
+                      {renderRoleIdentity(address)}
                       <button
                         type="button"
                         onClick={() => handleRemoveRole(address)}
