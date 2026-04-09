@@ -36,6 +36,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     users,
     currentUser,
     authenticatedAddress,
+    topics,
     subTopics,
     posts,
     threadSearchIndexes,
@@ -73,6 +74,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       subTopics,
       posts,
     });
+  const parentTopic = useMemo(
+    () => topics.find((topic) => topic.id === subTopic?.topicId),
+    [subTopic?.topicId, topics]
+  );
 
   const {
     replyText,
@@ -471,6 +476,29 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
   return (
     <div className="space-y-6">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex flex-wrap items-center gap-2 text-sm"
+      >
+        <Link
+          to="/"
+          className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
+        >
+          Home
+        </Link>
+        {parentTopic ? (
+          <>
+            <span className="text-ui-muted">/</span>
+            <Link
+              to={`/?topic=${parentTopic.id}`}
+              className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
+            >
+              {parentTopic.title}
+            </Link>
+          </>
+        ) : null}
+      </nav>
+
       <section className="forum-card-primary p-5">
         <h2 className="text-ui-strong text-2xl font-semibold">
           {subTopic.isPinned ? (

@@ -1,5 +1,11 @@
-import { useDeferredValue, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import TopicAccordion from '../components/forum/TopicAccordion';
 import HomeSkeleton from '../features/forum/components/HomeSkeleton';
@@ -83,6 +89,7 @@ type HomeProps = {
 
 const Home = ({ searchQuery }: HomeProps) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     currentUser,
     authenticatedAddress,
@@ -157,6 +164,7 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
   const [dragOverTopicId, setDragOverTopicId] = useState<string | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
+  const selectedTopicFromRoute = searchParams.get('topic');
 
   const isAdmin =
     currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin';
@@ -270,8 +278,35 @@ const Home = ({ searchQuery }: HomeProps) => {
     users,
   ]);
 
+  useEffect(() => {
+    if (!selectedTopicFromRoute) {
+      return;
+    }
+
+    const topicExists = topics.some(
+      (topic) => topic.id === selectedTopicFromRoute
+    );
+    if (!topicExists) {
+      return;
+    }
+
+    setOpenTopicId(selectedTopicFromRoute);
+  }, [selectedTopicFromRoute, topics]);
+
   const handleToggle = (topicId: string) => {
-    setOpenTopicId((current) => (current === topicId ? null : topicId));
+    setOpenTopicId((current) => {
+      const nextTopicId = current === topicId ? null : topicId;
+      const nextSearchParams = new URLSearchParams(searchParams);
+
+      if (nextTopicId) {
+        nextSearchParams.set('topic', nextTopicId);
+      } else {
+        nextSearchParams.delete('topic');
+      }
+
+      setSearchParams(nextSearchParams, { replace: true });
+      return nextTopicId;
+    });
   };
 
   const handleOpenThread = (subTopicId: string) => {
