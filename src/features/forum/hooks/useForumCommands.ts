@@ -1036,7 +1036,11 @@ export const useForumCommands = ({
         return { ok: false, error: 'Only owner can edit this post.' };
       }
 
-      const updatedPost: Post = { ...target, content };
+      const updatedPost: Post = {
+        ...target,
+        content,
+        editedAt: new Date().toISOString(),
+      };
 
       try {
         const nextPosts = posts.map((post) =>

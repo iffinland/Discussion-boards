@@ -40,6 +40,9 @@ const formatDateTime = (value: string) =>
     minute: '2-digit',
   });
 
+const formatEditedDateTime = (value: string | null | undefined) =>
+  value ? formatDateTime(value) : null;
+
 const getInitials = (name: string) =>
   name
     .split(' ')
@@ -186,6 +189,11 @@ const ThreadPostCard = ({
             <p className="text-ui-muted text-xs">
               {formatDateTime(post.createdAt)}
             </p>
+            {post.editedAt ? (
+              <p className="mt-0.5 text-xs font-semibold text-amber-700">
+                EDITED {formatEditedDateTime(post.editedAt)}
+              </p>
+            ) : null}
           </div>
         </div>
         <button

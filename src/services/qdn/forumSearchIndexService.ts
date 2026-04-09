@@ -61,6 +61,7 @@ export type ThreadSearchSnapshot = {
     content: string;
     attachments: PostAttachment[];
     createdAt: string;
+    editedAt?: string | null;
   }>;
 };
 
@@ -359,6 +360,10 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
           content: typeof item.content === 'string' ? item.content : '',
           attachments: sanitizePostAttachments(item.attachments),
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+          editedAt:
+            typeof item.editedAt === 'string' || item.editedAt === null
+              ? item.editedAt
+              : null,
         }))
         .filter((item) => item.postId),
     },
@@ -576,6 +581,7 @@ export const forumSearchIndexService = {
             content: post.content,
             attachments: post.attachments,
             createdAt: post.createdAt,
+            editedAt: post.editedAt ?? null,
           })),
       },
     };

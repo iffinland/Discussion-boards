@@ -137,6 +137,7 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     content: post.content,
     attachments: post.attachments,
     createdAt: post.createdAt,
+    editedAt: post.editedAt ?? null,
     likes: 0,
   }));
 };

@@ -66,6 +66,7 @@ export interface Post {
   content: string;
   attachments: PostAttachment[];
   createdAt: string;
+  editedAt?: string | null;
   likes: number;
 }
 

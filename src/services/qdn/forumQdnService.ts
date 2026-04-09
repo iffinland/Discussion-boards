@@ -440,6 +440,9 @@ const isPost = (value: unknown): value is Post => {
     typeof value.content === 'string' &&
     (Array.isArray(value.attachments) || value.attachments === undefined) &&
     typeof value.createdAt === 'string' &&
+    (typeof value.editedAt === 'string' ||
+      value.editedAt === null ||
+      value.editedAt === undefined) &&
     typeof value.likes === 'number'
   );
 };
