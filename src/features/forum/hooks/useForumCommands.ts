@@ -449,7 +449,7 @@ export const useForumCommands = ({
         setSubTopics((current) => [newSubTopic, ...current]);
         setUsers((current) => ensureCurrentUserPresent(current, currentUser));
         setTopicDirectoryIndex(topicDirectoryResource.snapshot);
-        return { ok: true };
+        return { ok: true, subTopicId: newSubTopic.id };
       } catch (error) {
         return {
           ok: false,

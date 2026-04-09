@@ -31,6 +31,8 @@ type RichTextEditorProps = {
   onUploadImage?: (file: File) => Promise<string>;
   onUploadAttachment?: (file: File) => Promise<PostAttachment>;
   placeholder?: string;
+  editorLabel?: string;
+  submitLabel?: string;
 };
 
 const RichTextEditor = ({
@@ -42,6 +44,8 @@ const RichTextEditor = ({
   onUploadImage,
   onUploadAttachment,
   placeholder = 'Write your reply...',
+  editorLabel = 'Reply editor',
+  submitLabel = 'Post Reply',
 }: RichTextEditorProps) => {
   const editorId = useId();
   const fileInputId = useId();
@@ -442,7 +446,7 @@ const RichTextEditor = ({
       ) : null}
 
       <label className="sr-only" htmlFor={editorId}>
-        Reply editor
+        {editorLabel}
       </label>
       <textarea
         ref={textareaRef}
@@ -493,7 +497,7 @@ const RichTextEditor = ({
           type="submit"
           className="bg-brand-primary-solid rounded-md px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600"
         >
-          Post Reply
+          {submitLabel}
         </button>
       </div>
 

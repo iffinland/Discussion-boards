@@ -10,6 +10,7 @@ import {
 
 import Layout from './components/layout/Layout';
 import Home from './pages/Home';
+import TopicPage from './pages/TopicPage';
 import ThreadPage from './pages/ThreadPage';
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
@@ -66,6 +67,15 @@ const App = () => {
       >
         <Routes>
           <Route path="/" element={<Home searchQuery={searchQuery} />} />
+          <Route
+            path="/topic/:id"
+            element={
+              <TopicPage
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+              />
+            }
+          />
           <Route
             path="/thread/:id"
             element={

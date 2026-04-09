@@ -65,6 +65,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const [replyContextPostId, setReplyContextPostId] = useState<string | null>(
     null
   );
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -185,6 +186,12 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       : subTopic?.status === 'locked'
         ? 'This sub-topic is locked.'
         : null;
+
+  useEffect(() => {
+    if (replyTarget) {
+      setIsComposerOpen(true);
+    }
+  }, [replyTarget]);
 
   const handleToggleSubTopicStatus = async () => {
     if (!subTopic) {
@@ -465,7 +472,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           Thread not available
         </h2>
         <p className="text-ui-muted text-sm">This sub-topic is hidden.</p>
-        <Link to="/" className="forum-link text-sm font-medium">
+        <Link
+          to={`/topic/${subTopic.topicId}`}
+          className="forum-link text-sm font-medium"
+        >
           Back to topics
         </Link>
       </div>
@@ -481,7 +491,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p className="text-ui-muted text-sm">
           You do not have access to this sub-topic.
         </p>
-        <Link to="/" className="forum-link text-sm font-medium">
+        <Link
+          to={`/topic/${subTopic.topicId}`}
+          className="forum-link text-sm font-medium"
+        >
           Back to topics
         </Link>
       </div>
@@ -504,13 +517,15 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           <>
             <span className="text-ui-muted">/</span>
             <Link
-              to={`/?topic=${parentTopic.id}`}
+              to={`/topic/${parentTopic.id}`}
               className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
             >
               {parentTopic.title}
             </Link>
           </>
         ) : null}
+        <span className="text-ui-muted">/</span>
+        <span className="text-ui-strong font-semibold">{subTopic.title}</span>
       </nav>
 
       <section className="forum-card-primary p-5">
@@ -597,6 +612,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           >
             <ShareIcon />
             <span>Share Thread</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsComposerOpen((current) => !current)}
+            disabled={isComposerDisabled}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isComposerOpen ? 'Close Reply' : 'Add Reply'}
           </button>
         </div>
       </section>
@@ -691,28 +714,26 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         ) : null}
       </section>
 
-      <ThreadComposer
-        replyText={replyText}
-        replyAttachments={replyAttachments}
-        replyTargetAuthorName={
-          replyTarget
-            ? resolveAuthorDisplayName(replyTarget.authorUserId)
-            : null
-        }
-        replyTargetContent={replyTarget?.content ?? null}
-        onReplyTextChange={setReplyText}
-        onReplyAttachmentsChange={setReplyAttachments}
-        onSubmit={handleSubmitReply}
-        onUploadImage={uploadImageForReply}
-        onUploadAttachment={uploadAttachmentForReply}
-        onCancelReplyTarget={handleCancelReplyTarget}
-        disabled={isComposerDisabled}
-        helperText={composerHelperText}
-      />
-
-      <Link to="/" className="forum-link inline-block text-sm font-medium">
-        Back to topics
-      </Link>
+      {isComposerOpen || replyTarget ? (
+        <ThreadComposer
+          replyText={replyText}
+          replyAttachments={replyAttachments}
+          replyTargetAuthorName={
+            replyTarget
+              ? resolveAuthorDisplayName(replyTarget.authorUserId)
+              : null
+          }
+          replyTargetContent={replyTarget?.content ?? null}
+          onReplyTextChange={setReplyText}
+          onReplyAttachmentsChange={setReplyAttachments}
+          onSubmit={handleSubmitReply}
+          onUploadImage={uploadImageForReply}
+          onUploadAttachment={uploadAttachmentForReply}
+          onCancelReplyTarget={handleCancelReplyTarget}
+          disabled={isComposerDisabled}
+          helperText={composerHelperText}
+        />
+      ) : null}
     </div>
   );
 };

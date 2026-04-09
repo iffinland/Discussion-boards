@@ -1,6 +1,7 @@
 export type ForumMutationResult = {
   ok: boolean;
   error?: string;
+  subTopicId?: string;
 };
 
 export type ForumUploadImageResult = {
