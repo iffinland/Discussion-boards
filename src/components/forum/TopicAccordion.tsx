@@ -1,5 +1,6 @@
 import type { SubTopic, Topic, User } from '../../types';
 
+import ShareIcon from '../common/ShareIcon';
 import SubTopicList from './SubTopicList';
 
 type TopicAccordionProps = {
@@ -138,9 +139,10 @@ const TopicAccordion = ({
           <button
             type="button"
             onClick={() => onShareTopic?.(topic)}
-            className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+            className="bg-surface-card text-ui-strong inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
           >
-            Share
+            <ShareIcon />
+            <span>Share</span>
           </button>
           {canManageTopic ? (
             <button

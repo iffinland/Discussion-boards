@@ -1,4 +1,5 @@
 import AppModal from '../../../components/common/AppModal';
+import ShareIcon from '../../../components/common/ShareIcon';
 
 type PostActionsModalProps = {
   isOpen: boolean;
@@ -72,7 +73,10 @@ const PostActionsModal = ({
             onClose();
           }}
         >
-          Share
+          <span className="inline-flex items-center gap-2">
+            <ShareIcon />
+            <span>Share</span>
+          </span>
         </button>
         <button
           type="button"

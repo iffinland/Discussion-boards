@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import ShareIcon from '../components/common/ShareIcon';
 import ThreadComposer from '../features/forum/components/ThreadComposer';
 import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
 import ThreadPostCard from '../features/forum/components/ThreadPostCard';
@@ -579,9 +580,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           <button
             type="button"
             onClick={handleShareThread}
-            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
           >
-            Share Thread
+            <ShareIcon />
+            <span>Share Thread</span>
           </button>
         </div>
       </section>
