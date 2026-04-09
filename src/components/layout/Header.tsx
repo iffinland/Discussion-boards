@@ -66,13 +66,8 @@ const initialsFromName = (name: string | null) => {
 };
 
 const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
-  const {
-    availableAuthNames,
-    activeAuthName,
-    authenticatedAddress,
-    currentUser,
-    setCurrentUser,
-  } = useForumData();
+  const { availableAuthNames, activeAuthName, currentUser, setCurrentUser } =
+    useForumData();
   const [isNameMenuOpen, setIsNameMenuOpen] = useState(false);
   const [highlightedNameIndex, setHighlightedNameIndex] = useState(0);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
@@ -277,11 +272,6 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                   {activeAuthName ?? currentUser.displayName}
                 </p>
                 <p className="text-ui-muted text-xs">{currentUser.role}</p>
-                {authenticatedAddress ? (
-                  <p className="text-ui-muted max-w-48 truncate text-[11px]">
-                    {authenticatedAddress}
-                  </p>
-                ) : null}
               </div>
               {canOpenNameMenu ? (
                 <span className="text-ui-muted text-xs">
