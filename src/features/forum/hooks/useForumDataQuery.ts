@@ -346,7 +346,7 @@ export const useForumDataQuery = () => {
           displayName: identity,
           address: authenticatedAddress,
           avatarUrl: createAvatarLink(identity),
-          role: resolveRoleForAddress(authenticatedAddress, roleRegistry),
+          role: 'Member',
           avatarColor: 'bg-cyan-600',
           joinedAt: new Date().toISOString(),
         };
@@ -438,7 +438,7 @@ export const useForumDataQuery = () => {
     return () => {
       active = false;
     };
-  }, [activeAuthName, address, isLoadingUser, name, primaryName, roleRegistry]);
+  }, [activeAuthName, address, isLoadingUser, name, primaryName]);
 
   const authenticate = useCallback(async () => {
     await authenticateUser();

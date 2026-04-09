@@ -267,7 +267,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   }, [id, onSearchQueryChange, searchQuery]);
 
   useEffect(() => {
-    if (!id || !isAuthReady || !subTopic) {
+    if (!id || !subTopic) {
       return;
     }
 
@@ -284,7 +284,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     return () => {
       active = false;
     };
-  }, [id, isAuthReady, loadThreadPosts, subTopic]);
+  }, [id, loadThreadPosts, subTopic]);
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
@@ -422,7 +422,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     };
   }, [canLoadMore, filteredThreadPosts.length]);
 
-  if (!isAuthReady) {
+  if (!isAuthReady && !subTopic && subTopics.length === 0) {
     return <ThreadSkeleton />;
   }
 

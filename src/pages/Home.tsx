@@ -551,7 +551,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     );
   };
 
-  if (!isAuthReady) {
+  if (!isAuthReady && topics.length === 0 && subTopics.length === 0) {
     return <HomeSkeleton />;
   }
 
