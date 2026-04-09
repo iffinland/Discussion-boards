@@ -19,10 +19,13 @@ import {
   canAccessSubTopic,
   resolveAccessLabel,
 } from '../services/forum/forumAccess';
+import { resolveRoleForAddress } from '../services/qdn/forumRolesService';
 import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../services/qortal/share';
+import { resolveNameWalletAddress } from '../services/qortal/walletService';
+import type { UserRole } from '../types';
 
 const THREAD_BATCH_SIZE = 12;
 type PostSortMode = 'oldest' | 'newest';
@@ -39,6 +42,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     users,
     currentUser,
     authenticatedAddress,
+    roleRegistry,
     topics,
     subTopics,
     posts,
@@ -68,8 +72,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   );
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [postSortMode, setPostSortMode] = useState<PostSortMode>('oldest');
+  const [authorRolesByUserId, setAuthorRolesByUserId] = useState<
+    Record<string, UserRole>
+  >({});
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const resolvedAuthorAddressRef = useRef<Map<string, string | null>>(
+    new Map()
+  );
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const { subTopic, threadPosts, userMap, resolveAuthorDisplayName } =
@@ -202,6 +212,68 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       setIsComposerOpen(true);
     }
   }, [replyTarget]);
+
+  useEffect(() => {
+    let active = true;
+    const uniqueAuthorIds = [
+      ...new Set(threadPosts.map((post) => post.authorUserId).filter(Boolean)),
+    ];
+
+    if (uniqueAuthorIds.length === 0) {
+      setAuthorRolesByUserId({});
+      return () => {
+        active = false;
+      };
+    }
+
+    const resolveAuthorRoles = async () => {
+      const resolvedEntries = await Promise.all(
+        uniqueAuthorIds.map(async (authorUserId) => {
+          const directRole = resolveRoleForAddress(authorUserId, roleRegistry);
+          if (directRole !== 'Member') {
+            return [authorUserId, directRole] as const;
+          }
+
+          const knownAddress =
+            userMap.get(authorUserId)?.address?.trim() ||
+            resolvedAuthorAddressRef.current.get(authorUserId) ||
+            null;
+          if (knownAddress) {
+            return [
+              authorUserId,
+              resolveRoleForAddress(knownAddress, roleRegistry),
+            ] as const;
+          }
+
+          try {
+            const resolvedAddress =
+              await resolveNameWalletAddress(authorUserId);
+            resolvedAuthorAddressRef.current.set(authorUserId, resolvedAddress);
+
+            return [
+              authorUserId,
+              resolveRoleForAddress(resolvedAddress, roleRegistry),
+            ] as const;
+          } catch {
+            resolvedAuthorAddressRef.current.set(authorUserId, null);
+            return [authorUserId, 'Member'] as const;
+          }
+        })
+      );
+
+      if (!active) {
+        return;
+      }
+
+      setAuthorRolesByUserId(Object.fromEntries(resolvedEntries));
+    };
+
+    void resolveAuthorRoles();
+
+    return () => {
+      active = false;
+    };
+  }, [roleRegistry, threadPosts, userMap]);
 
   const handleToggleSubTopicStatus = async () => {
     if (!subTopic) {
@@ -696,6 +768,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             key={post.id}
             post={post}
             author={userMap.get(post.authorUserId)}
+            authorRole={authorRolesByUserId[post.authorUserId] ?? 'Member'}
             repliedPost={
               post.parentPostId
                 ? (threadPostMap.get(post.parentPostId) ?? null)

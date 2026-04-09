@@ -198,7 +198,7 @@ export const useForumCommands = ({
       if (!isAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and SysOps can create main topics.',
+          error: 'Only admins and Super Admins can create main topics.',
         };
       }
 
@@ -281,7 +281,7 @@ export const useForumCommands = ({
       if (!isAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and SysOps can reorder main topics.',
+          error: 'Only admins and Super Admins can reorder main topics.',
         };
       }
 
@@ -603,7 +603,8 @@ export const useForumCommands = ({
       if (!isModeratorRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only moderators, admins and SysOps can manage sub-topics.',
+          error:
+            'Only moderators, admins and Super Admins can manage sub-topics.',
         };
       }
 
@@ -790,14 +791,15 @@ export const useForumCommands = ({
       ) {
         return {
           ok: false,
-          error: 'Only the primary SysOp can manage forum roles.',
+          error: 'Only the primary Super Admin can manage forum roles.',
         };
       }
 
       if (address === roleRegistry.primarySysOpAddress) {
         return {
           ok: false,
-          error: 'The primary SysOp address is fixed and cannot be reassigned.',
+          error:
+            'The primary Super Admin address is fixed and cannot be reassigned.',
         };
       }
 
@@ -863,14 +865,14 @@ export const useForumCommands = ({
       ) {
         return {
           ok: false,
-          error: 'Only the primary SysOp can manage forum roles.',
+          error: 'Only the primary Super Admin can manage forum roles.',
         };
       }
 
       if (normalizedAddress === roleRegistry.primarySysOpAddress) {
         return {
           ok: false,
-          error: 'The primary SysOp role cannot be removed.',
+          error: 'The primary Super Admin role cannot be removed.',
         };
       }
 

@@ -11,6 +11,12 @@ const roleClasses: Record<UserRole, string> = {
   Moderator: 'border-amber-300 bg-amber-50 text-amber-700',
   Member: 'border-slate-300 bg-slate-50 text-slate-600',
 };
+const roleLabels: Record<UserRole, string> = {
+  SysOp: 'Super Admin',
+  Admin: 'Admin',
+  Moderator: 'Moderator',
+  Member: 'Member',
+};
 
 const UserRoleBadge = ({ role, className = '' }: UserRoleBadgeProps) => {
   return (
@@ -23,7 +29,7 @@ const UserRoleBadge = ({ role, className = '' }: UserRoleBadgeProps) => {
         .filter(Boolean)
         .join(' ')}
     >
-      {role}
+      {roleLabels[role]}
     </span>
   );
 };

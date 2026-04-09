@@ -29,12 +29,12 @@ const topicAccessOptions: Array<{
   {
     value: 'moderators',
     label: 'Moderators+',
-    helper: 'Moderators, admins and SysOps can create sub-topics.',
+    helper: 'Moderators, admins and Super Admins can create sub-topics.',
   },
   {
     value: 'admins',
     label: 'Admins only',
-    helper: 'Only admins and SysOps can create sub-topics.',
+    helper: 'Only admins and Super Admins can create sub-topics.',
   },
   {
     value: 'custom',
@@ -49,6 +49,11 @@ type HomeProps = {
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 const ACTIVE_SUBTOPIC_LIMIT = 8;
+const roleLabelByType: Record<'SysOp' | 'Admin' | 'Moderator', string> = {
+  SysOp: 'Super Admin',
+  Admin: 'Admin',
+  Moderator: 'Moderator',
+};
 
 const Home = ({ searchQuery }: HomeProps) => {
   const navigate = useNavigate();
@@ -322,7 +327,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     }
 
     setRoleAddress('');
-    setRoleFeedback(`${roleType} role updated successfully.`);
+    setRoleFeedback(`${roleLabelByType[roleType]} role updated successfully.`);
   };
 
   const handleRemoveRole = async (address: string) => {
@@ -577,7 +582,7 @@ const Home = ({ searchQuery }: HomeProps) => {
           <article className="forum-card-primary p-4">
             <div className="space-y-1">
               <p className="text-ui-strong text-sm font-semibold">
-                Primary SysOp
+                Primary Super Admin
               </p>
               {renderRoleIdentity(roleRegistry.primarySysOpAddress)}
               <p className="text-ui-muted text-xs break-all">
@@ -601,7 +606,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                 }
                 className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               >
-                <option value="SysOp">SysOp</option>
+                <option value="SysOp">Super Admin</option>
                 <option value="Admin">Admin</option>
                 <option value="Moderator">Moderator</option>
               </select>
@@ -615,7 +620,9 @@ const Home = ({ searchQuery }: HomeProps) => {
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div>
-                <h3 className="text-ui-strong text-sm font-semibold">SysOps</h3>
+                <h3 className="text-ui-strong text-sm font-semibold">
+                  Super Admins
+                </h3>
                 <ul className="mt-2 space-y-2">
                   {roleRegistry.sysOps.map((address) => (
                     <li
@@ -782,7 +789,8 @@ const Home = ({ searchQuery }: HomeProps) => {
                 </form>
               ) : (
                 <p className="text-brand-accent-strong text-xs font-semibold">
-                  Main-topic creation is available only to admins and SysOps.
+                  Main-topic creation is available only to admins and Super
+                  Admins.
                 </p>
               )}
 

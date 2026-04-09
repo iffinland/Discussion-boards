@@ -9,13 +9,14 @@ import {
   formatToTags,
   type RichTextFormatType,
 } from '../../../services/forum/richText';
-import type { Post, User } from '../../../types';
+import type { Post, User, UserRole } from '../../../types';
 import PostAttachmentList from './PostAttachmentList';
 import PostActionsModal from './PostActionsModal';
 
 type ThreadPostCardProps = {
   post: Post;
   author: User | undefined;
+  authorRole: UserRole;
   repliedPost?: Post | null;
   repliedAuthorName?: string | null;
   highlighted?: boolean;
@@ -55,6 +56,7 @@ const getInitials = (name: string) =>
 const ThreadPostCard = ({
   post,
   author,
+  authorRole,
   repliedPost = null,
   repliedAuthorName = null,
   highlighted = false,
@@ -188,7 +190,7 @@ const ThreadPostCard = ({
               <p className="text-ui-strong text-sm font-semibold">
                 {displayName}
               </p>
-              <UserRoleBadge role={author?.role ?? 'Member'} />
+              <UserRoleBadge role={authorRole} />
             </div>
             <p className="text-ui-muted text-xs">
               {formatDateTime(post.createdAt)}
