@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+import UserRoleBadge from '../../../components/common/UserRoleBadge';
 import RichTextContent from '../../../components/forum/RichTextContent';
 import RichTextToolsModal from '../../../components/forum/RichTextToolsModal';
 import {
@@ -183,9 +184,12 @@ const ThreadPostCard = ({
             </div>
           )}
           <div>
-            <p className="text-ui-strong text-sm font-semibold">
-              {displayName}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-ui-strong text-sm font-semibold">
+                {displayName}
+              </p>
+              <UserRoleBadge role={author?.role ?? 'Member'} />
+            </div>
             <p className="text-ui-muted text-xs">
               {formatDateTime(post.createdAt)}
             </p>

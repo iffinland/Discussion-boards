@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 
+import UserRoleBadge from '../common/UserRoleBadge';
 import { useForumData } from '../../hooks/useForumData';
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
@@ -271,7 +272,9 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                 <p className="text-ui-strong text-sm font-semibold">
                   {activeAuthName ?? currentUser.displayName}
                 </p>
-                <p className="text-ui-muted text-xs">{currentUser.role}</p>
+                <div className="mt-1">
+                  <UserRoleBadge role={currentUser.role} />
+                </div>
               </div>
               {canOpenNameMenu ? (
                 <span className="text-ui-muted text-xs">

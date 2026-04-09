@@ -1,3 +1,4 @@
+import UserRoleBadge from '../common/UserRoleBadge';
 import type { SubTopic, User } from '../../types';
 import { resolveAccessLabel } from '../../services/forum/forumAccess';
 
@@ -42,6 +43,7 @@ const SubTopicList = ({
   onManageSubTopic,
 }: SubTopicListProps) => {
   const usernameMap = new Map(users.map((user) => [user.id, user.displayName]));
+  const userMap = new Map(users.map((user) => [user.id, user]));
 
   return (
     <div className="border-brand-primary overflow-hidden rounded-b-lg border-t">
@@ -81,7 +83,16 @@ const SubTopicList = ({
                   </span>
                 </span>
                 <span className="text-brand-primary-strong text-sm">
-                  {usernameMap.get(subTopic.authorUserId) ?? 'Unknown User'}
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span>
+                      {usernameMap.get(subTopic.authorUserId) ?? 'Unknown User'}
+                    </span>
+                    <UserRoleBadge
+                      role={
+                        userMap.get(subTopic.authorUserId)?.role ?? 'Member'
+                      }
+                    />
+                  </span>
                 </span>
                 <span className="text-ui-muted text-sm">
                   {formatDate(subTopic.lastPostAt)}
