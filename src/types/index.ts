@@ -1,4 +1,9 @@
-export type UserRole = 'SysOp' | 'Admin' | 'Moderator' | 'Member';
+export type UserRole =
+  | 'SysOp'
+  | 'SuperAdmin'
+  | 'Admin'
+  | 'Moderator'
+  | 'Member';
 export type TopicStatus = 'open' | 'locked';
 export type TopicVisibility = 'visible' | 'hidden';
 export type TopicAccess = 'everyone' | 'moderators' | 'admins' | 'custom';
@@ -68,6 +73,8 @@ export interface Post {
   createdAt: string;
   editedAt?: string | null;
   likes: number;
+  tips: number;
+  likedByAddresses: string[];
 }
 
 export interface ForumRoleRegistry {

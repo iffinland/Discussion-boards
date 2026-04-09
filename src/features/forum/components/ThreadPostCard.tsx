@@ -23,6 +23,7 @@ type ThreadPostCardProps = {
   replyContextHighlighted?: boolean;
   isOwner: boolean;
   canModerate: boolean;
+  hasLiked: boolean;
   tipCount: number;
   onLike: (postId: string) => void;
   onReply: (post: Post) => void;
@@ -63,6 +64,7 @@ const ThreadPostCard = ({
   replyContextHighlighted = false,
   isOwner,
   canModerate,
+  hasLiked,
   tipCount,
   onLike,
   onReply,
@@ -297,6 +299,7 @@ const ThreadPostCard = ({
         canModerate={canModerate}
         likes={post.likes}
         tipCount={tipCount}
+        hasLiked={hasLiked}
         onClose={() => setIsActionsModalOpen(false)}
         onLike={() => onLike(post.id)}
         onReply={() => onReply(post)}

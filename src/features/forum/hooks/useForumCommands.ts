@@ -78,10 +78,14 @@ const normalizeAddressList = (input: string[]) => {
 };
 
 const isAdminRole = (role: User['role']) =>
-  role === 'Admin' || role === 'SysOp';
+  role === 'Admin' || role === 'SuperAdmin' || role === 'SysOp';
 const isModeratorRole = (role: User['role']) =>
-  role === 'Moderator' || role === 'Admin' || role === 'SysOp';
-const isSuperAdminRole = (role: User['role']) => role === 'SysOp';
+  role === 'Moderator' ||
+  role === 'Admin' ||
+  role === 'SuperAdmin' ||
+  role === 'SysOp';
+const isSuperAdminRole = (role: User['role']) =>
+  role === 'SuperAdmin' || role === 'SysOp';
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 
 const sortTopicsByOrder = (items: Topic[]) =>
@@ -92,7 +96,11 @@ const canCreateSubTopicForTopic = (
   user: User,
   address: string | null
 ) => {
-  if (user.role === 'SysOp' || user.role === 'Admin') {
+  if (
+    user.role === 'SysOp' ||
+    user.role === 'SuperAdmin' ||
+    user.role === 'Admin'
+  ) {
     return true;
   }
 
@@ -199,7 +207,7 @@ export const useForumCommands = ({
       if (!isAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only admins and Super Admins can create main topics.',
+          error: 'Only admins, Super Admins and SysOp can create main topics.',
         };
       }
 
@@ -282,7 +290,7 @@ export const useForumCommands = ({
       if (!isSuperAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only Super Admins can reorder main topics.',
+          error: 'Only Super Admins and SysOp can reorder main topics.',
         };
       }
 
@@ -359,7 +367,7 @@ export const useForumCommands = ({
       if (!isSuperAdminRole(currentUser.role)) {
         return {
           ok: false,
-          error: 'Only Super Admins can reorder pinned sub-topics.',
+          error: 'Only Super Admins and SysOp can reorder pinned sub-topics.',
         };
       }
 
@@ -726,7 +734,7 @@ export const useForumCommands = ({
         return {
           ok: false,
           error:
-            'Only moderators, admins and Super Admins can manage sub-topics.',
+            'Only moderators, admins, Super Admins and SysOp can manage sub-topics.',
         };
       }
 
@@ -895,7 +903,7 @@ export const useForumCommands = ({
   const upsertRoleAssignment = useCallback(
     async (input: {
       address: string;
-      role: 'SysOp' | 'Admin' | 'Moderator';
+      role: 'SuperAdmin' | 'Admin' | 'Moderator';
     }): Promise<ForumMutationResult> => {
       const address = input.address.trim();
 
@@ -913,22 +921,21 @@ export const useForumCommands = ({
       ) {
         return {
           ok: false,
-          error: 'Only the primary Super Admin can manage forum roles.',
+          error: 'Only the primary SysOp can manage forum roles.',
         };
       }
 
       if (address === roleRegistry.primarySysOpAddress) {
         return {
           ok: false,
-          error:
-            'The primary Super Admin address is fixed and cannot be reassigned.',
+          error: 'The primary SysOp address is fixed and cannot be reassigned.',
         };
       }
 
       const nextRegistry: ForumRoleRegistry = {
         ...roleRegistry,
         sysOps:
-          input.role === 'SysOp'
+          input.role === 'SuperAdmin'
             ? normalizeAddressList([...roleRegistry.sysOps, address])
             : roleRegistry.sysOps.filter((entry) => entry !== address),
         admins:
@@ -987,14 +994,14 @@ export const useForumCommands = ({
       ) {
         return {
           ok: false,
-          error: 'Only the primary Super Admin can manage forum roles.',
+          error: 'Only the primary SysOp can manage forum roles.',
         };
       }
 
       if (normalizedAddress === roleRegistry.primarySysOpAddress) {
         return {
           ok: false,
-          error: 'The primary Super Admin role cannot be removed.',
+          error: 'The primary SysOp role cannot be removed.',
         };
       }
 
@@ -1108,6 +1115,8 @@ export const useForumCommands = ({
         attachments,
         createdAt,
         likes: 0,
+        tips: 0,
+        likedByAddresses: [],
       };
 
       try {
@@ -1312,13 +1321,40 @@ export const useForumCommands = ({
         return;
       }
 
+      const actorId = authenticatedAddress?.trim()
+        ? `addr:${authenticatedAddress.trim().toLowerCase()}`
+        : currentUser.id?.trim()
+          ? `user:${currentUser.id.trim().toLowerCase()}`
+          : '';
+      if (!actorId) {
+        return;
+      }
+
       setPosts((current) => {
-        const next = current.map((post) =>
-          post.id === postId ? { ...post, likes: post.likes + 1 } : post
-        );
+        const next = current.map((post) => {
+          if (post.id !== postId) {
+            return post;
+          }
+
+          if (post.likedByAddresses.includes(actorId)) {
+            return post;
+          }
+
+          return {
+            ...post,
+            likes: post.likes + 1,
+            likedByAddresses: [...post.likedByAddresses, actorId],
+          };
+        });
 
         const target = next.find((post) => post.id === postId);
-        if (target) {
+        const original = current.find((post) => post.id === postId);
+        if (
+          target &&
+          original &&
+          (target.likes !== original.likes ||
+            target.likedByAddresses.length !== original.likedByAddresses.length)
+        ) {
           threadPostCache.write(
             target.subTopicId,
             next.filter((post) => post.subTopicId === target.subTopicId)
@@ -1330,7 +1366,83 @@ export const useForumCommands = ({
         return next;
       });
     },
-    [currentUser.username, isAuthenticated, setPosts, syncThreadSearchIndex]
+    [
+      authenticatedAddress,
+      currentUser.id,
+      currentUser.username,
+      isAuthenticated,
+      setPosts,
+      syncThreadSearchIndex,
+    ]
+  );
+
+  const tipPost = useCallback(
+    async (postId: string): Promise<ForumMutationResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      const target = posts.find((post) => post.id === postId);
+      if (!target) {
+        return { ok: false, error: 'Post not found.' };
+      }
+
+      const updatedPost: Post = {
+        ...target,
+        tips: target.tips + 1,
+      };
+
+      try {
+        const nextPosts = posts.map((post) =>
+          post.id === postId ? updatedPost : post
+        );
+        const postResource = forumQdnService.buildPostPublishResource(
+          updatedPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          updatedPost.subTopicId,
+          nextPosts
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+        ]);
+
+        setPosts((current) => {
+          const next = current.map((post) =>
+            post.id === postId ? updatedPost : post
+          );
+          threadPostCache.write(
+            updatedPost.subTopicId,
+            next.filter((post) => post.subTopicId === updatedPost.subTopicId)
+          );
+          return next;
+        });
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [updatedPost.subTopicId]: threadIndexResource.snapshot,
+        }));
+
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to persist tip counter.',
+        };
+      }
+    },
+    [
+      currentUser.username,
+      buildThreadIndexResource,
+      isAuthenticated,
+      posts,
+      setPosts,
+      setThreadSearchIndexes,
+    ]
   );
 
   const uploadPostImage = useCallback(
@@ -1432,6 +1544,7 @@ export const useForumCommands = ({
     updatePost,
     deletePost,
     likePost,
+    tipPost,
     uploadPostImage,
     uploadPostAttachment,
   };

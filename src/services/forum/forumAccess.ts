@@ -1,10 +1,13 @@
 import type { SubTopic, TopicAccess, User } from '../../types';
 
 const isAdminRole = (role: User['role']) =>
-  role === 'Admin' || role === 'SysOp';
+  role === 'Admin' || role === 'SuperAdmin' || role === 'SysOp';
 
 const isModeratorRole = (role: User['role']) =>
-  role === 'Moderator' || role === 'Admin' || role === 'SysOp';
+  role === 'Moderator' ||
+  role === 'Admin' ||
+  role === 'SuperAdmin' ||
+  role === 'SysOp';
 
 export const resolveAccessLabel = (access: TopicAccess) => {
   switch (access) {

@@ -255,7 +255,7 @@ export const resolveRoleForAddress = (
   }
 
   if (registry.sysOps.includes(normalized)) {
-    return 'SysOp';
+    return 'SuperAdmin';
   }
 
   if (registry.admins.includes(normalized)) {

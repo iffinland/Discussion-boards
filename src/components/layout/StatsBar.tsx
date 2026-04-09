@@ -16,7 +16,9 @@ const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
   ).size;
   const placeholder = location.pathname.startsWith('/thread/')
     ? 'Search posts in this thread'
-    : 'Search main topics and sub-topics';
+    : location.pathname.startsWith('/topic/')
+      ? 'Search sub-topics in this topic'
+      : 'Search topics, sub-topics and posts';
 
   return (
     <div className="bg-forum-stats border-brand-primary border-b">

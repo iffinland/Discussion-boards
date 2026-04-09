@@ -6,13 +6,15 @@ type UserRoleBadgeProps = {
 };
 
 const roleClasses: Record<UserRole, string> = {
-  SysOp: 'border-rose-300 bg-rose-50 text-rose-700',
+  SysOp: 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700',
+  SuperAdmin: 'border-rose-300 bg-rose-50 text-rose-700',
   Admin: 'border-cyan-300 bg-cyan-50 text-cyan-700',
   Moderator: 'border-amber-300 bg-amber-50 text-amber-700',
   Member: 'border-slate-300 bg-slate-50 text-slate-600',
 };
 const roleLabels: Record<UserRole, string> = {
-  SysOp: 'Super Admin',
+  SysOp: 'SysOp',
+  SuperAdmin: 'Super Admin',
   Admin: 'Admin',
   Moderator: 'Moderator',
   Member: 'Member',

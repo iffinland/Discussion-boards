@@ -57,11 +57,11 @@ const sortSubTopics = (items: SubTopic[]) =>
 const canCreateSubTopicForTopic = (
   topicAccess: TopicAccess,
   topicStatus: SubTopic['status'] | 'open' | 'locked',
-  role: 'SysOp' | 'Admin' | 'Moderator' | 'Member',
+  role: 'SysOp' | 'SuperAdmin' | 'Admin' | 'Moderator' | 'Member',
   address: string | null,
   allowedAddresses: string[]
 ) => {
-  if (role === 'SysOp' || role === 'Admin') {
+  if (role === 'SysOp' || role === 'SuperAdmin' || role === 'Admin') {
     return true;
   }
 
@@ -148,7 +148,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   const topicId = topic?.id ?? null;
   const canModerate = currentUser.role !== 'Member';
   const canReorderPinnedSubTopics =
-    currentUser.role === 'SysOp' && searchQuery.trim().length === 0;
+    (currentUser.role === 'SysOp' || currentUser.role === 'SuperAdmin') &&
+    searchQuery.trim().length === 0;
   const canCreateHere = topic
     ? canCreateSubTopicForTopic(
         topic.subTopicAccess,
@@ -649,10 +650,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         aria-label="Breadcrumb"
         className="flex flex-wrap items-center gap-2 text-sm"
       >
-        <Link
-          to="/"
-          className="forum-link text-sm font-semibold"
-        >
+        <Link to="/" className="forum-link text-sm font-semibold">
           Home
         </Link>
         <span className="text-ui-muted">/</span>
@@ -688,7 +686,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             </button>
           </div>
         </div>
-
       </section>
 
       {isCreateOpen ? (

@@ -10,11 +10,22 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForumData } from '../hooks/useForumData';
 import { canAccessSubTopic } from '../services/forum/forumAccess';
 import {
+  buildForumStructureSearchIndex,
+  createSearchHaystack,
+  searchForumStructure,
+  tokenizeSearchQuery,
+} from '../services/forum/forumSearch';
+import { mapWithConcurrency } from '../services/qdn/qdnReadiness';
+import {
+  forumSearchIndexService,
+  type ThreadSearchSnapshot,
+} from '../services/qdn/forumSearchIndexService';
+import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../services/qortal/share';
 import { getAccountNames } from '../services/qortal/walletService';
-import type { Topic, TopicAccess } from '../types';
+import type { SubTopic, Topic, TopicAccess } from '../types';
 
 const parseAddressInput = (value: string) =>
   value
@@ -28,6 +39,23 @@ const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
   next.splice(toIndex, 0, moved);
   return next;
 };
+
+const sortSubTopics = (items: SubTopic[]) =>
+  [...items].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+
+    if (a.isPinned && b.isPinned) {
+      const aPinnedAt = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+      const bPinnedAt = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+      if (aPinnedAt !== bPinnedAt) {
+        return aPinnedAt - bPinnedAt;
+      }
+    }
+
+    return new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime();
+  });
 
 const topicAccessOptions: Array<{
   value: TopicAccess;
@@ -60,15 +88,22 @@ type HomeProps = {
   searchQuery: string;
 };
 
+type DisplayTopic = Topic & {
+  subTopicCount: number;
+  matchedSubTopics: SubTopic[];
+  matchedPostCount: number;
+};
+
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 const ACTIVE_SUBTOPIC_LIMIT = 8;
-const roleLabelByType: Record<'SysOp' | 'Admin' | 'Moderator', string> = {
-  SysOp: 'Super Admin',
+const roleLabelByType: Record<'SuperAdmin' | 'Admin' | 'Moderator', string> = {
+  SuperAdmin: 'Super Admin',
   Admin: 'Admin',
   Moderator: 'Moderator',
 };
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const MINUTE_IN_MS = 60 * 1000;
+const HOUR_IN_MS = 60 * MINUTE_IN_MS;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const formatActiveTopicTime = (value: string, nowMs: number) => {
   const parsedMs = new Date(value).getTime();
@@ -77,18 +112,22 @@ const formatActiveTopicTime = (value: string, nowMs: number) => {
   }
 
   const elapsedMs = Math.max(0, nowMs - parsedMs);
-  if (elapsedMs < DAY_IN_MS) {
-    const totalMinutes = Math.floor(elapsedMs / MINUTE_IN_MS);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ago`;
+  if (elapsedMs < MINUTE_IN_MS) {
+    return 'just now';
   }
 
-  return new Date(parsedMs).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  if (elapsedMs < HOUR_IN_MS) {
+    const minutes = Math.floor(elapsedMs / MINUTE_IN_MS);
+    return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  }
+
+  if (elapsedMs < DAY_IN_MS) {
+    const hours = Math.floor(elapsedMs / HOUR_IN_MS);
+    return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  }
+
+  const days = Math.floor(elapsedMs / DAY_IN_MS);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
 };
 
 const Home = ({ searchQuery }: HomeProps) => {
@@ -134,9 +173,9 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [managedTopicAllowedAddresses, setManagedTopicAllowedAddresses] =
     useState('');
   const [roleAddress, setRoleAddress] = useState('');
-  const [roleType, setRoleType] = useState<'SysOp' | 'Admin' | 'Moderator'>(
-    'Admin'
-  );
+  const [roleType, setRoleType] = useState<
+    'SuperAdmin' | 'Admin' | 'Moderator'
+  >('Admin');
   const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
   const [roleNamesByAddress, setRoleNamesByAddress] = useState<
     Record<string, string>
@@ -146,11 +185,23 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [activeTopicsNowMs, setActiveTopicsNowMs] = useState<number>(() =>
     Date.now()
   );
+  const [searchThreadIndexes, setSearchThreadIndexes] = useState<
+    Record<string, ThreadSearchSnapshot>
+  >({});
+  const [searchThreadIndexFailures, setSearchThreadIndexFailures] = useState<
+    Record<string, true>
+  >({});
 
-  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SysOp';
+  const isAdmin =
+    currentUser.role === 'Admin' ||
+    currentUser.role === 'SuperAdmin' ||
+    currentUser.role === 'SysOp';
   const isSysOp = currentUser.role === 'SysOp';
+  const isSuperAdmin = currentUser.role === 'SuperAdmin';
   const canModerate = currentUser.role !== 'Member';
-  const canReorderTopicsByDrag = isSysOp && searchQuery.trim().length === 0;
+  const normalizedSearchQuery = searchQuery.trim();
+  const hasActiveSearch = normalizedSearchQuery.length > 0;
+  const canReorderTopicsByDrag = (isSysOp || isSuperAdmin) && !hasActiveSearch;
 
   const topicQueryParam = searchParams.get('topic');
   useEffect(() => {
@@ -166,27 +217,280 @@ const Home = ({ searchQuery }: HomeProps) => {
     navigate(`/topic/${topicQueryParam}`, { replace: true });
   }, [navigate, topicQueryParam, topics]);
 
-  const filteredTopics = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase();
+  const visibleTopics = useMemo(
+    () =>
+      [...topics]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .filter((topic) => canModerate || topic.visibility !== 'hidden'),
+    [canModerate, topics]
+  );
+  const visibleSubTopics = useMemo(
+    () =>
+      subTopics.filter(
+        (subTopic) =>
+          (canModerate || subTopic.visibility !== 'hidden') &&
+          (canModerate ||
+            canAccessSubTopic(subTopic, currentUser, authenticatedAddress))
+      ),
+    [authenticatedAddress, canModerate, currentUser, subTopics]
+  );
+  const subTopicsByTopicId = useMemo(() => {
+    const grouped = new Map<string, SubTopic[]>();
 
-    return [...topics]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .filter((topic) => canModerate || topic.visibility !== 'hidden')
-      .filter((topic) => {
-        if (!normalizedSearch) {
-          return true;
+    visibleSubTopics.forEach((subTopic) => {
+      const current = grouped.get(subTopic.topicId) ?? [];
+      current.push(subTopic);
+      grouped.set(subTopic.topicId, current);
+    });
+
+    grouped.forEach((items, topicId) => {
+      grouped.set(topicId, sortSubTopics(items));
+    });
+
+    return grouped;
+  }, [visibleSubTopics]);
+
+  const searchableThreadIndexes = useMemo(
+    () => ({
+      ...searchThreadIndexes,
+      ...threadSearchIndexes,
+    }),
+    [searchThreadIndexes, threadSearchIndexes]
+  );
+
+  useEffect(() => {
+    if (!hasActiveSearch || visibleSubTopics.length === 0) {
+      return;
+    }
+
+    const missingSubTopicIds = visibleSubTopics
+      .map((subTopic) => subTopic.id)
+      .filter(
+        (subTopicId) =>
+          !searchableThreadIndexes[subTopicId] &&
+          !searchThreadIndexFailures[subTopicId]
+      );
+
+    if (missingSubTopicIds.length === 0) {
+      return;
+    }
+
+    let active = true;
+
+    const loadMissingThreadIndexes = async () => {
+      const resolved = await mapWithConcurrency(
+        missingSubTopicIds,
+        async (subTopicId) => {
+          try {
+            const snapshot =
+              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            return [subTopicId, snapshot] as const;
+          } catch {
+            return [subTopicId, null] as const;
+          }
+        },
+        4
+      );
+
+      if (!active) {
+        return;
+      }
+
+      const nextIndexes: Record<string, ThreadSearchSnapshot> = {};
+      const failedSubTopicIds: string[] = [];
+
+      resolved.forEach(([subTopicId, snapshot]) => {
+        if (!snapshot) {
+          failedSubTopicIds.push(subTopicId);
+          return;
         }
 
-        const haystack = `${topic.title} ${topic.description}`.toLowerCase();
-        return haystack.includes(normalizedSearch);
-      })
-      .map((topic) => ({
+        nextIndexes[subTopicId] = snapshot;
+      });
+
+      if (Object.keys(nextIndexes).length > 0) {
+        setSearchThreadIndexes((current) => ({
+          ...current,
+          ...nextIndexes,
+        }));
+      }
+
+      if (failedSubTopicIds.length > 0) {
+        setSearchThreadIndexFailures((current) => ({
+          ...current,
+          ...Object.fromEntries(failedSubTopicIds.map((id) => [id, true])),
+        }));
+      }
+    };
+
+    void loadMissingThreadIndexes();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    hasActiveSearch,
+    searchableThreadIndexes,
+    searchThreadIndexFailures,
+    visibleSubTopics,
+  ]);
+
+  const structureTopics = useMemo(
+    () =>
+      visibleTopics.map((topic) => ({
         ...topic,
-        subTopicCount: subTopics.filter(
-          (subTopic) => subTopic.topicId === topic.id
-        ).length,
+        subTopics: subTopicsByTopicId.get(topic.id) ?? [],
+      })),
+    [subTopicsByTopicId, visibleTopics]
+  );
+  const structureSearchIndex = useMemo(
+    () =>
+      buildForumStructureSearchIndex(visibleTopics, visibleSubTopics, users),
+    [users, visibleSubTopics, visibleTopics]
+  );
+  const structureSearchResult = useMemo(
+    () =>
+      searchForumStructure(structureSearchIndex, structureTopics, searchQuery),
+    [searchQuery, structureSearchIndex, structureTopics]
+  );
+
+  const postMatchCountBySubTopicId = useMemo(() => {
+    if (!hasActiveSearch) {
+      return {} as Record<string, number>;
+    }
+
+    const tokens = tokenizeSearchQuery(searchQuery);
+    if (tokens.length === 0) {
+      return {} as Record<string, number>;
+    }
+
+    const userMap = new Map(users.map((user) => [user.id, user.displayName]));
+    const matches = (content: string, authorUserId: string) => {
+      const haystack = createSearchHaystack([
+        content,
+        userMap.get(authorUserId) ?? authorUserId,
+        authorUserId,
+      ]);
+      return tokens.every((token) => haystack.includes(token));
+    };
+
+    const counts: Record<string, number> = {};
+    const seenPostIds = new Set<string>();
+
+    posts.forEach((post) => {
+      if (!matches(post.content, post.authorUserId)) {
+        return;
+      }
+
+      counts[post.subTopicId] = (counts[post.subTopicId] ?? 0) + 1;
+      seenPostIds.add(post.id);
+    });
+
+    Object.entries(searchableThreadIndexes).forEach(
+      ([subTopicId, snapshot]) => {
+        snapshot.posts.forEach((post) => {
+          if (seenPostIds.has(post.postId)) {
+            return;
+          }
+
+          if (!matches(post.content, post.authorUserId)) {
+            return;
+          }
+
+          counts[subTopicId] = (counts[subTopicId] ?? 0) + 1;
+          seenPostIds.add(post.postId);
+        });
+      }
+    );
+
+    return counts;
+  }, [hasActiveSearch, posts, searchQuery, searchableThreadIndexes, users]);
+
+  const filteredTopics = useMemo<DisplayTopic[]>(() => {
+    if (!hasActiveSearch) {
+      return visibleTopics.map((topic) => ({
+        ...topic,
+        subTopicCount: subTopicsByTopicId.get(topic.id)?.length ?? 0,
+        matchedSubTopics: [],
+        matchedPostCount: 0,
       }));
-  }, [canModerate, searchQuery, subTopics, topics]);
+    }
+
+    const structureTopicMap = new Map(
+      structureSearchResult.topics.map((topic) => [topic.id, topic])
+    );
+    const postMatchedSubTopicIds = new Set(
+      Object.entries(postMatchCountBySubTopicId)
+        .filter(([, count]) => count > 0)
+        .map(([subTopicId]) => subTopicId)
+    );
+    const postMatchedTopicIds = new Set(
+      visibleSubTopics
+        .filter((subTopic) => postMatchedSubTopicIds.has(subTopic.id))
+        .map((subTopic) => subTopic.topicId)
+    );
+    const topicIdsToInclude = new Set([
+      ...structureTopicMap.keys(),
+      ...postMatchedTopicIds,
+    ]);
+
+    return visibleTopics
+      .filter((topic) => topicIdsToInclude.has(topic.id))
+      .map((topic) => {
+        const allTopicSubTopics = subTopicsByTopicId.get(topic.id) ?? [];
+        const structureMatchedSubTopics =
+          structureTopicMap.get(topic.id)?.subTopics ?? [];
+        const matchedSubTopicsById = new Map(
+          structureMatchedSubTopics.map((subTopic) => [subTopic.id, subTopic])
+        );
+
+        allTopicSubTopics.forEach((subTopic) => {
+          if (!postMatchedSubTopicIds.has(subTopic.id)) {
+            return;
+          }
+          matchedSubTopicsById.set(subTopic.id, subTopic);
+        });
+
+        const matchedSubTopics = sortSubTopics([
+          ...matchedSubTopicsById.values(),
+        ]);
+        const matchedPostCount = matchedSubTopics.reduce(
+          (count, subTopic) =>
+            count + (postMatchCountBySubTopicId[subTopic.id] ?? 0),
+          0
+        );
+
+        return {
+          ...topic,
+          subTopicCount: allTopicSubTopics.length,
+          matchedSubTopics,
+          matchedPostCount,
+        };
+      });
+  }, [
+    hasActiveSearch,
+    postMatchCountBySubTopicId,
+    structureSearchResult.topics,
+    subTopicsByTopicId,
+    visibleSubTopics,
+    visibleTopics,
+  ]);
+  const matchedSubTopicCount = useMemo(
+    () =>
+      filteredTopics.reduce(
+        (count, topic) => count + topic.matchedSubTopics.length,
+        0
+      ),
+    [filteredTopics]
+  );
+  const matchedPostCount = useMemo(
+    () =>
+      filteredTopics.reduce(
+        (count, topic) => count + topic.matchedPostCount,
+        0
+      ),
+    [filteredTopics]
+  );
 
   const activeSubTopics = useMemo(() => {
     const userMap = new Map(users.map((user) => [user.id, user.displayName]));
@@ -531,6 +835,16 @@ const Home = ({ searchQuery }: HomeProps) => {
                   className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
                 >
                   <p className="text-ui-strong text-sm font-semibold">
+                    {subTopic.isPinned ? (
+                      <span className="mr-2 inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 align-middle">
+                        Pinned
+                      </span>
+                    ) : null}
+                    {subTopic.status === 'locked' ? (
+                      <span className="mr-2 inline-flex rounded-md border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 align-middle">
+                        Locked
+                      </span>
+                    ) : null}
                     {subTopic.isSolved ? (
                       <span className="mr-2 inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
                         Solved
@@ -557,9 +871,10 @@ const Home = ({ searchQuery }: HomeProps) => {
         <h2 className="text-brand-primary text-lg font-semibold">
           Main Topics
         </h2>
-        {searchQuery.trim() ? (
+        {hasActiveSearch ? (
           <p className="text-ui-muted text-sm">
-            Search results: {filteredTopics.length} main topics.
+            Search results: {filteredTopics.length} main topics,{' '}
+            {matchedSubTopicCount} sub-topics, {matchedPostCount} posts.
           </p>
         ) : canReorderTopicsByDrag ? (
           <p className="text-ui-muted text-sm">
@@ -613,6 +928,12 @@ const Home = ({ searchQuery }: HomeProps) => {
                   <p className="text-ui-muted mt-2 text-xs">
                     {topic.subTopicCount} sub-topics
                   </p>
+                  {hasActiveSearch ? (
+                    <p className="text-ui-muted mt-1 text-xs">
+                      {topic.matchedSubTopics.length} matching sub-topics •{' '}
+                      {topic.matchedPostCount} matching posts
+                    </p>
+                  ) : null}
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -641,6 +962,42 @@ const Home = ({ searchQuery }: HomeProps) => {
                   ) : null}
                 </div>
               </div>
+
+              {hasActiveSearch && topic.matchedSubTopics.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-ui-muted text-xs font-semibold">
+                    Matching Sub-Topics
+                  </p>
+                  <ul className="space-y-2">
+                    {topic.matchedSubTopics.map((subTopic) => (
+                      <li key={subTopic.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenThread(subTopic.id)}
+                          className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
+                        >
+                          <p className="text-ui-strong text-sm font-semibold">
+                            {subTopic.title}
+                          </p>
+                          <p className="text-ui-muted text-xs">
+                            {subTopic.description}
+                          </p>
+                          {(postMatchCountBySubTopicId[subTopic.id] ?? 0) >
+                          0 ? (
+                            <p className="text-ui-muted mt-1 text-[11px] font-semibold">
+                              {postMatchCountBySubTopicId[subTopic.id]} matching
+                              post
+                              {postMatchCountBySubTopicId[subTopic.id] === 1
+                                ? ''
+                                : 's'}
+                            </p>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </article>
 
             {managedTopicId === topic.id ? (
@@ -739,10 +1096,14 @@ const Home = ({ searchQuery }: HomeProps) => {
         {filteredTopics.length === 0 ? (
           <div className="forum-card p-5">
             <p className="text-ui-strong text-sm font-semibold">
-              No main topics found
+              {hasActiveSearch
+                ? 'No matching results found'
+                : 'No main topics found'}
             </p>
             <p className="text-ui-muted mt-1 text-sm">
-              Create the first main topic to start forum structure.
+              {hasActiveSearch
+                ? 'Try a different search query.'
+                : 'Create the first main topic to start forum structure.'}
             </p>
           </div>
         ) : null}
@@ -757,7 +1118,7 @@ const Home = ({ searchQuery }: HomeProps) => {
           <article className="forum-card-primary p-4">
             <div className="space-y-1">
               <p className="text-ui-strong text-sm font-semibold">
-                Primary Super Admin
+                Primary SysOp
               </p>
               {renderRoleIdentity(roleRegistry.primarySysOpAddress)}
               <p className="text-ui-muted text-xs break-all">
@@ -776,12 +1137,12 @@ const Home = ({ searchQuery }: HomeProps) => {
                 value={roleType}
                 onChange={(event) =>
                   setRoleType(
-                    event.target.value as 'SysOp' | 'Admin' | 'Moderator'
+                    event.target.value as 'SuperAdmin' | 'Admin' | 'Moderator'
                   )
                 }
                 className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               >
-                <option value="SysOp">Super Admin</option>
+                <option value="SuperAdmin">Super Admin</option>
                 <option value="Admin">Admin</option>
                 <option value="Moderator">Moderator</option>
               </select>

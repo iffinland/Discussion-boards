@@ -102,7 +102,7 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
-    role: 'SysOp' | 'Admin' | 'Moderator';
+    role: 'SuperAdmin' | 'Admin' | 'Moderator';
   }) => Promise<ForumMutationResult>;
   removeRoleAssignment: (address: string) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
@@ -113,6 +113,7 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   deletePost: (postId: string) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
+  tipPost: (postId: string) => Promise<ForumMutationResult>;
   isThreadPostsLoading: boolean;
   loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
 };
@@ -143,7 +144,9 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     attachments: post.attachments,
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
-    likes: 0,
+    likes: post.likes,
+    tips: post.tips,
+    likedByAddresses: post.likedByAddresses,
   }));
 };
 
@@ -189,6 +192,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     updatePost,
     deletePost,
     likePost,
+    tipPost,
   } = useForumCommands({
     currentUser,
     isAuthenticated,
@@ -324,6 +328,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       updatePost,
       deletePost,
       likePost,
+      tipPost,
       isThreadPostsLoading,
       loadThreadPosts,
     }),
@@ -359,6 +364,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       updatePost,
       deletePost,
       likePost,
+      tipPost,
       isThreadPostsLoading,
       loadThreadPosts,
     ]

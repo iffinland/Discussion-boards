@@ -62,6 +62,9 @@ export type ThreadSearchSnapshot = {
     attachments: PostAttachment[];
     createdAt: string;
     editedAt?: string | null;
+    likes: number;
+    tips: number;
+    likedByAddresses: string[];
   }>;
 };
 
@@ -146,6 +149,31 @@ const sanitizePostAttachments = (value: unknown): PostAttachment[] => {
           attachment.filename
       )
     );
+};
+
+const sanitizeStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  value.forEach((entry) => {
+    if (typeof entry !== 'string') {
+      return;
+    }
+
+    const normalized = entry.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    next.push(normalized);
+  });
+
+  return next;
 };
 
 const sleep = async (durationMs: number) => {
@@ -364,6 +392,15 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
             typeof item.editedAt === 'string' || item.editedAt === null
               ? item.editedAt
               : null,
+          likes:
+            typeof item.likes === 'number' && Number.isFinite(item.likes)
+              ? item.likes
+              : 0,
+          tips:
+            typeof item.tips === 'number' && Number.isFinite(item.tips)
+              ? item.tips
+              : 0,
+          likedByAddresses: sanitizeStringList(item.likedByAddresses),
         }))
         .filter((item) => item.postId),
     },
@@ -582,6 +619,9 @@ export const forumSearchIndexService = {
             attachments: post.attachments,
             createdAt: post.createdAt,
             editedAt: post.editedAt ?? null,
+            likes: post.likes,
+            tips: post.tips,
+            likedByAddresses: post.likedByAddresses,
           })),
       },
     };

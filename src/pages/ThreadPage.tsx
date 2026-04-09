@@ -56,6 +56,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     updatePost,
     deletePost,
     likePost,
+    tipPost,
     isThreadPostsLoading,
     loadThreadPosts,
     isAuthReady,
@@ -101,7 +102,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     setReplyText,
     setReplyAttachments,
     feedback,
-    tipsByPostId,
     isTipModalOpen,
     tipAmount,
     tipRecipientName,
@@ -130,6 +130,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     uploadPostAttachment,
     updatePost,
     deletePost,
+    tipPost,
     resolveAuthorDisplayName,
   });
 
@@ -195,6 +196,19 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     ? canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
     : false;
   const hasActiveSearch = tokenizeSearchQuery(deferredSearchQuery).length > 0;
+  const likeActorId = useMemo(() => {
+    const normalizedAddress = authenticatedAddress?.trim().toLowerCase();
+    if (normalizedAddress) {
+      return `addr:${normalizedAddress}`;
+    }
+
+    const normalizedUserId = currentUser.id?.trim().toLowerCase();
+    if (normalizedUserId) {
+      return `user:${normalizedUserId}`;
+    }
+
+    return '';
+  }, [authenticatedAddress, currentUser.id]);
   const isComposerDisabled =
     !hasSubTopicAccess ||
     subTopic?.status === 'locked' ||
@@ -369,10 +383,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    if (searchQuery) {
-      onSearchQueryChange('');
-    }
-  }, [id, onSearchQueryChange, searchQuery]);
+    onSearchQueryChange('');
+  }, [id, onSearchQueryChange]);
 
   useEffect(() => {
     if (!id || !subTopic) {
@@ -589,10 +601,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         aria-label="Breadcrumb"
         className="flex flex-wrap items-center gap-2 text-sm"
       >
-        <Link
-          to="/"
-          className="forum-link text-sm font-semibold"
-        >
+        <Link to="/" className="forum-link text-sm font-semibold">
           Home
         </Link>
         {parentTopic ? (
@@ -785,7 +794,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             replyContextHighlighted={replyContextPostId === post.parentPostId}
             isOwner={post.authorUserId === currentUser.id}
             canModerate={canModerate}
-            tipCount={tipsByPostId[post.id] ?? 0}
+            hasLiked={
+              likeActorId ? post.likedByAddresses.includes(likeActorId) : false
+            }
+            tipCount={post.tips}
             onLike={likePost}
             onReply={handleReplyToPost}
             onShare={handleSharePost}

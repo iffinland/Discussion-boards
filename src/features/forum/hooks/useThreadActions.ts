@@ -31,6 +31,7 @@ type UseThreadActionsParams = {
     content: string;
   }) => Promise<ForumMutationResult>;
   deletePost: (postId: string) => Promise<ForumMutationResult>;
+  tipPost: (postId: string) => Promise<ForumMutationResult>;
   resolveAuthorDisplayName: (authorUserId: string) => string;
 };
 
@@ -41,6 +42,7 @@ export const useThreadActions = ({
   uploadPostAttachment,
   updatePost,
   deletePost,
+  tipPost,
   resolveAuthorDisplayName,
 }: UseThreadActionsParams) => {
   const [replyText, setReplyText] = useState('');
@@ -48,7 +50,6 @@ export const useThreadActions = ({
   const [replyAttachments, setReplyAttachments] = useState<PostAttachment[]>(
     []
   );
-  const [tipsByPostId, setTipsByPostId] = useState<Record<string, number>>({});
   const [isTipModalOpen, setIsTipModalOpen] = useState(false);
   const [tipAmount, setTipAmount] = useState('0');
   const [tipRecipientName, setTipRecipientName] = useState('');
@@ -252,10 +253,14 @@ export const useThreadActions = ({
       });
 
       if (tipTargetPostId) {
-        setTipsByPostId((current) => ({
-          ...current,
-          [tipTargetPostId]: (current[tipTargetPostId] ?? 0) + 1,
-        }));
+        const tipPersistResult = await tipPost(tipTargetPostId);
+        if (!tipPersistResult.ok) {
+          setFeedback(
+            tipPersistResult.error ??
+              `Tip sent to @${trimmedRecipientName}, but counter sync failed.`
+          );
+          return;
+        }
       }
 
       setIsTipModalOpen(false);
@@ -282,6 +287,7 @@ export const useThreadActions = ({
     tipAmount,
     tipRecipientAddress,
     tipRecipientName,
+    tipPost,
     tipTargetPostId,
   ]);
 
@@ -316,7 +322,6 @@ export const useThreadActions = ({
     setReplyText,
     setReplyAttachments,
     feedback,
-    tipsByPostId,
     isTipModalOpen,
     tipAmount,
     tipRecipientName,

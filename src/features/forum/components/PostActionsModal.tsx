@@ -7,6 +7,7 @@ type PostActionsModalProps = {
   canModerate: boolean;
   likes: number;
   tipCount: number;
+  hasLiked: boolean;
   onClose: () => void;
   onLike: () => void;
   onReply: () => void;
@@ -28,6 +29,7 @@ const PostActionsModal = ({
   canModerate,
   likes,
   tipCount,
+  hasLiked,
   onClose,
   onLike,
   onReply,
@@ -48,12 +50,13 @@ const PostActionsModal = ({
         <button
           type="button"
           className={actionButtonClass}
+          disabled={hasLiked}
           onClick={() => {
             onLike();
             onClose();
           }}
         >
-          Like ({likes})
+          {hasLiked ? `Liked (${likes})` : `Like (${likes})`}
         </button>
         <button
           type="button"

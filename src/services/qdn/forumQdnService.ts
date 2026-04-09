@@ -443,7 +443,10 @@ const isPost = (value: unknown): value is Post => {
     (typeof value.editedAt === 'string' ||
       value.editedAt === null ||
       value.editedAt === undefined) &&
-    typeof value.likes === 'number'
+    (typeof value.likes === 'number' || value.likes === undefined) &&
+    (typeof value.tips === 'number' || value.tips === undefined) &&
+    (Array.isArray(value.likedByAddresses) ||
+      value.likedByAddresses === undefined)
   );
 };
 
@@ -501,6 +504,15 @@ const parsePostPayload = (raw: unknown): PostPayload | null => {
     post: {
       ...raw.post,
       attachments: sanitizePostAttachments(raw.post.attachments),
+      likes:
+        typeof raw.post.likes === 'number' && Number.isFinite(raw.post.likes)
+          ? raw.post.likes
+          : 0,
+      tips:
+        typeof raw.post.tips === 'number' && Number.isFinite(raw.post.tips)
+          ? raw.post.tips
+          : 0,
+      likedByAddresses: sanitizeAddressList(raw.post.likedByAddresses),
     },
   };
 };

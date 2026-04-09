@@ -26,7 +26,10 @@ const isValidPost = (value: unknown): value is Post => {
     typeof maybePost.authorUserId === 'string' &&
     typeof maybePost.content === 'string' &&
     typeof maybePost.createdAt === 'string' &&
-    typeof maybePost.likes === 'number'
+    (typeof maybePost.likes === 'number' || maybePost.likes === undefined) &&
+    (typeof maybePost.tips === 'number' || maybePost.tips === undefined) &&
+    (Array.isArray(maybePost.likedByAddresses) ||
+      maybePost.likedByAddresses === undefined)
   );
 };
 
@@ -95,7 +98,16 @@ const readCacheEntry = (subTopicId: string): ThreadPostCacheEntry | null => {
       return null;
     }
 
-    const validPosts = parsed.posts.filter(isValidPost);
+    const validPosts = parsed.posts.filter(isValidPost).map((post) => ({
+      ...post,
+      likes: typeof post.likes === 'number' ? post.likes : 0,
+      tips: typeof post.tips === 'number' ? post.tips : 0,
+      likedByAddresses: Array.isArray(post.likedByAddresses)
+        ? post.likedByAddresses.filter(
+            (value): value is string => typeof value === 'string'
+          )
+        : [],
+    }));
     return {
       cachedAt: parsed.cachedAt,
       posts: validPosts,

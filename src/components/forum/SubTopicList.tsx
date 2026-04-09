@@ -34,6 +34,8 @@ const formatDate = (date: string) =>
     year: 'numeric',
   });
 const SUB_TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+const statusBadgeBaseClass =
+  'mr-2 inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold align-middle';
 
 const truncateDescription = (value: string) => {
   const trimmed = value.trim();
@@ -120,6 +122,20 @@ const SubTopicList = ({
                       draggedPinnedSubTopicId === subTopic.id ? (
                         <span className="text-ui-muted mr-2 inline-flex align-middle text-[11px] font-semibold">
                           Dragging...
+                        </span>
+                      ) : null}
+                      {subTopic.isPinned ? (
+                        <span
+                          className={`${statusBadgeBaseClass} border-amber-300 bg-amber-50 text-amber-700`}
+                        >
+                          Pinned
+                        </span>
+                      ) : null}
+                      {subTopic.status === 'locked' ? (
+                        <span
+                          className={`${statusBadgeBaseClass} border-rose-300 bg-rose-50 text-rose-700`}
+                        >
+                          Locked
                         </span>
                       ) : null}
                       {subTopic.title}
