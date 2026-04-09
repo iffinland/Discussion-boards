@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useForumData } from '../hooks/useForumData';
+import { canAccessSubTopic } from '../services/forum/forumAccess';
 import {
   buildQortalShareLink,
   copyToClipboard,
@@ -47,6 +48,7 @@ type HomeProps = {
 };
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+const ACTIVE_SUBTOPIC_LIMIT = 8;
 
 const Home = ({ searchQuery }: HomeProps) => {
   const navigate = useNavigate();
@@ -55,6 +57,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     currentUser,
     authenticatedAddress,
     roleRegistry,
+    users,
     topics,
     subTopics,
     createTopic,
@@ -135,6 +138,27 @@ const Home = ({ searchQuery }: HomeProps) => {
       }));
   }, [canModerate, searchQuery, subTopics, topics]);
 
+  const activeSubTopics = useMemo(() => {
+    const userMap = new Map(users.map((user) => [user.id, user.displayName]));
+
+    return [...subTopics]
+      .filter((subTopic) => canModerate || subTopic.visibility !== 'hidden')
+      .filter(
+        (subTopic) =>
+          canModerate ||
+          canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
+      )
+      .slice(0, ACTIVE_SUBTOPIC_LIMIT)
+      .map((subTopic) => ({
+        ...subTopic,
+        authorName: userMap.get(subTopic.authorUserId) ?? 'Unknown User',
+      }));
+  }, [authenticatedAddress, canModerate, currentUser, subTopics, users]);
+
   useEffect(() => {
     let active = true;
 
@@ -203,6 +227,10 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   const handleOpenTopic = (topicId: string) => {
     navigate(`/topic/${topicId}`);
+  };
+
+  const handleOpenThread = (subTopicId: string) => {
+    navigate(`/thread/${subTopicId}`);
   };
 
   const handleShareTopic = async (topic: Topic) => {
@@ -318,6 +346,42 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   return (
     <div className="space-y-6">
+      <section className="forum-card-accent p-5">
+        <h2 className="text-brand-accent text-base font-semibold">
+          Active Topics
+        </h2>
+        {activeSubTopics.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {activeSubTopics.map((subTopic) => (
+              <li key={subTopic.id}>
+                <button
+                  type="button"
+                  onClick={() => handleOpenThread(subTopic.id)}
+                  className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
+                >
+                  <p className="text-ui-strong text-sm font-semibold">
+                    {subTopic.isSolved ? (
+                      <span className="mr-2 inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
+                        Solved
+                      </span>
+                    ) : null}
+                    {subTopic.title}
+                  </p>
+                  <p className="text-ui-muted text-xs">
+                    {subTopic.authorName} • Last activity{' '}
+                    {new Date(subTopic.lastPostAt).toLocaleDateString('en-US')}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-ui-muted mt-3 text-sm">
+            No active sub-topics available yet.
+          </p>
+        )}
+      </section>
+
       <section className="space-y-3">
         <h2 className="text-brand-primary text-lg font-semibold">
           Main Topics
