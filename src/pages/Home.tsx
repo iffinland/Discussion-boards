@@ -532,7 +532,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                 >
                   <p className="text-ui-strong text-sm font-semibold">
                     {subTopic.isSolved ? (
-                      <span className="mr-2 inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
+                      <span className="mr-2 inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
                         Solved
                       </span>
                     ) : null}
@@ -570,7 +570,7 @@ const Home = ({ searchQuery }: HomeProps) => {
           <p
             className={
               managementFeedback.toLowerCase().includes('copied')
-                ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+                ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
                 : 'text-ui-muted text-sm'
             }
           >
@@ -614,11 +614,11 @@ const Home = ({ searchQuery }: HomeProps) => {
                     {topic.subTopicCount} sub-topics
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+                    <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-0.5 text-[11px] font-semibold">
                       {topic.status === 'locked' ? 'Locked' : 'Open'}
                     </span>
                     {topic.visibility === 'hidden' ? (
-                      <span className="text-ui-muted rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold">
+                      <span className="text-ui-muted rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold">
                         Hidden
                       </span>
                     ) : null}

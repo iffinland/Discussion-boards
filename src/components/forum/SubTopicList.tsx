@@ -45,13 +45,13 @@ const truncateDescription = (value: string) => {
 };
 
 const PinnedBadge = () => (
-  <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+  <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold">
     Pinned
   </span>
 );
 
 const SolvedBadge = () => (
-  <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+  <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
     Solved
   </span>
 );
@@ -197,7 +197,7 @@ const SubTopicList = ({
                       {subTopic.allowedAddresses.slice(0, 3).map((address) => (
                         <span
                           key={address}
-                          className="text-ui-muted inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
+                          className="text-ui-muted inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
                           title={address}
                         >
                           {walletNamesByAddress[address] || address}

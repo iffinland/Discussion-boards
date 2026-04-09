@@ -591,7 +591,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       >
         <Link
           to="/"
-          className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
+          className="forum-link text-sm font-semibold"
         >
           Home
         </Link>
@@ -600,7 +600,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             <span className="text-ui-muted">/</span>
             <Link
               to={`/topic/${parentTopic.id}`}
-              className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
+              className="forum-link text-sm font-semibold"
             >
               {parentTopic.title}
             </Link>
@@ -613,7 +613,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       <section className="forum-card-primary p-5">
         <h2 className="text-ui-strong text-2xl font-semibold">
           {subTopic.isPinned ? (
-            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent mr-3 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold align-middle">
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent mr-3 inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold align-middle">
               Pinned
             </span>
           ) : null}
@@ -626,26 +626,26 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             : `${threadPosts.length} posts in this thread`}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
+          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-1 text-xs font-semibold">
             {subTopic.status === 'locked' ? 'Locked' : 'Open'}
           </span>
           {subTopic.isPinned ? (
-            <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
+            <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-1 text-xs font-semibold">
               Pinned
             </span>
           ) : null}
           {subTopic.isSolved ? (
-            <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+            <span className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
               Solved
             </span>
           ) : null}
           {subTopic.access !== 'everyone' ? (
-            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-md border px-2 py-1 text-xs font-semibold">
               Access: {resolveAccessLabel(subTopic.access)}
             </span>
           ) : null}
           {subTopic.visibility === 'hidden' ? (
-            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-1 text-xs font-semibold">
+            <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-md border px-2 py-1 text-xs font-semibold">
               Hidden
             </span>
           ) : null}
@@ -723,7 +723,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p
           className={
             feedback.toLowerCase().includes('copied')
-              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
               : 'text-ui-muted text-xs'
           }
         >
@@ -734,7 +734,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p
           className={
             moderationFeedback.toLowerCase().includes('copied')
-              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
               : 'text-ui-muted text-xs'
           }
         >

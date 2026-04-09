@@ -111,10 +111,10 @@ const TopicAccordion = ({
             </h3>
             <p className="text-ui-muted mt-1 text-sm">{topic.description}</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+              <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-0.5 text-[11px] font-semibold">
                 {topic.status === 'locked' ? 'Locked' : 'Open'}
               </span>
-              <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+              <span className="bg-brand-accent-soft text-brand-accent-strong border-brand-accent rounded-md border px-2 py-0.5 text-[11px] font-semibold">
                 {topic.subTopicAccess === 'everyone' && 'Sub-topics: Everyone'}
                 {topic.subTopicAccess === 'moderators' &&
                   'Sub-topics: Moderators+'}
@@ -132,7 +132,7 @@ const TopicAccordion = ({
                   {topic.allowedAddresses.slice(0, 3).map((address) => (
                     <span
                       key={address}
-                      className="text-ui-muted inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
+                      className="text-ui-muted inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
                       title={address}
                     >
                       {walletNamesByAddress[address] || address}

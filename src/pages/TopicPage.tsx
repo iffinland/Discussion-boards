@@ -651,7 +651,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       >
         <Link
           to="/"
-          className="text-brand-primary font-semibold transition hover:text-cyan-700 hover:underline"
+          className="forum-link text-sm font-semibold"
         >
           Home
         </Link>
@@ -690,16 +690,16 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-full border px-2 py-1 text-xs font-semibold">
+          <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-1 text-xs font-semibold">
             {topic.status === 'locked' ? 'Locked' : 'Open'}
           </span>
           {topic.visibility === 'hidden' ? (
-            <span className="text-ui-muted rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
+            <span className="text-ui-muted rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
               Hidden
             </span>
           ) : null}
           {topic.subTopicAccess !== 'everyone' ? (
-            <span className="text-ui-muted rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
+            <span className="text-ui-muted rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold">
               Sub-topic access: {resolveAccessLabel(topic.subTopicAccess)}
             </span>
           ) : null}
@@ -758,7 +758,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         <p
           className={
             managementFeedback.toLowerCase().includes('copied')
-              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
+              ? 'fixed right-4 top-24 z-50 inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-lg'
               : 'text-ui-muted text-xs'
           }
         >
