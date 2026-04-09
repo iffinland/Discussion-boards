@@ -119,8 +119,6 @@ export const useForumDataQuery = () => {
     Record<string, ThreadSearchSnapshot>
   >({});
   const loadedIdentityRef = useRef<string | null>(null);
-  const authAttemptInFlightRef = useRef(false);
-  const lastAuthAttemptAtRef = useRef(0);
   const authMode: ForumAuthMode = 'qortal';
 
   const currentUser = useMemo(() => {
@@ -235,33 +233,89 @@ export const useForumDataQuery = () => {
     }
 
     if (!identity) {
-      setUsers([GUEST_USER]);
-      setTopics([]);
-      setSubTopics([]);
-      setPosts([]);
-      setCurrentUserId(GUEST_USER.id);
-      setAuthenticatedAddress(null);
-      setRoleRegistry(createDefaultRoleRegistry());
-
-      const now = Date.now();
-      const canRetry =
-        !authAttemptInFlightRef.current &&
-        now - lastAuthAttemptAtRef.current >= 5000;
-
-      if (canRetry) {
-        authAttemptInFlightRef.current = true;
-        lastAuthAttemptAtRef.current = now;
-        setIsAuthReady(false);
-        void authenticateUser()
-          .catch(() => undefined)
-          .finally(() => {
-            authAttemptInFlightRef.current = false;
-          });
-      } else {
+      if (loadedIdentityRef.current === GUEST_USER.id) {
         setIsAuthReady(true);
+        return () => {
+          active = false;
+        };
       }
 
-      loadedIdentityRef.current = null;
+      const bootstrapGuestData = async () => {
+        try {
+          setIsAuthReady(false);
+
+          const [structureResult, registryResult, topicDirectoryIndexResult] =
+            await Promise.allSettled([
+              forumQdnService.loadForumStructure(),
+              forumRolesService.loadRoleRegistry(),
+              forumSearchIndexService.loadTopicDirectoryIndex(),
+            ]);
+
+          if (!active) {
+            return;
+          }
+
+          const nextRoleRegistry =
+            registryResult.status === 'fulfilled'
+              ? registryResult.value
+              : createDefaultRoleRegistry();
+
+          setAuthenticatedAddress(null);
+          setRoleRegistry(nextRoleRegistry);
+          setTopicDirectoryIndex(
+            topicDirectoryIndexResult.status === 'fulfilled'
+              ? topicDirectoryIndexResult.value
+              : null
+          );
+          setThreadSearchIndexes({});
+
+          if (structureResult.status !== 'fulfilled') {
+            setUsers([GUEST_USER]);
+            setTopics([]);
+            setSubTopics([]);
+            setPosts([]);
+            setCurrentUserId(GUEST_USER.id);
+            loadedIdentityRef.current = GUEST_USER.id;
+            return;
+          }
+
+          const remoteData = structureResult.value;
+          const mergedUsers = mergeUsersFromForumData(
+            [GUEST_USER],
+            remoteData.topics,
+            remoteData.subTopics,
+            []
+          );
+
+          setUsers(mergedUsers);
+          setTopics(remoteData.topics);
+          setSubTopics(remoteData.subTopics);
+          setPosts([]);
+          setCurrentUserId(GUEST_USER.id);
+          loadedIdentityRef.current = GUEST_USER.id;
+        } catch {
+          if (!active) {
+            return;
+          }
+
+          setUsers([GUEST_USER]);
+          setTopics([]);
+          setSubTopics([]);
+          setPosts([]);
+          setCurrentUserId(GUEST_USER.id);
+          setAuthenticatedAddress(null);
+          setRoleRegistry(createDefaultRoleRegistry());
+          setTopicDirectoryIndex(null);
+          setThreadSearchIndexes({});
+          loadedIdentityRef.current = GUEST_USER.id;
+        } finally {
+          if (active) {
+            setIsAuthReady(true);
+          }
+        }
+      };
+
+      void bootstrapGuestData();
       return () => {
         active = false;
       };
@@ -384,15 +438,7 @@ export const useForumDataQuery = () => {
     return () => {
       active = false;
     };
-  }, [
-    activeAuthName,
-    address,
-    authenticateUser,
-    isLoadingUser,
-    name,
-    primaryName,
-    roleRegistry,
-  ]);
+  }, [activeAuthName, address, isLoadingUser, name, primaryName, roleRegistry]);
 
   const authenticate = useCallback(async () => {
     await authenticateUser();
