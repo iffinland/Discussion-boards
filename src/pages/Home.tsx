@@ -20,6 +20,10 @@ import {
   searchForumStructure,
   tokenizeSearchQuery,
 } from '../services/forum/forumSearch';
+import {
+  buildQortalShareLink,
+  copyToClipboard,
+} from '../services/qortal/share';
 import type { SubTopic, Topic, TopicAccess } from '../types';
 
 const parseAddressInput = (value: string) =>
@@ -311,6 +315,22 @@ const Home = ({ searchQuery }: HomeProps) => {
 
   const handleOpenThread = (subTopicId: string) => {
     navigate(`/thread/${subTopicId}`);
+  };
+
+  const handleShareTopic = async (topic: Topic) => {
+    const shareUrl = buildQortalShareLink(`/?topic=${topic.id}`);
+
+    try {
+      await copyToClipboard(shareUrl);
+      setManagementFeedback('Main topic link copied to clipboard.');
+      window.setTimeout(() => {
+        setManagementFeedback((current) =>
+          current === 'Main topic link copied to clipboard.' ? null : current
+        );
+      }, 2400);
+    } catch {
+      setManagementFeedback('Unable to copy main topic link to clipboard.');
+    }
   };
 
   const handleTopicDragStart = (topicId: string) => {
@@ -770,6 +790,7 @@ const Home = ({ searchQuery }: HomeProps) => {
               onDropTopic={handleTopicDrop}
               canManageTopic={isAdmin}
               canManageSubTopics={canModerate}
+              onShareTopic={handleShareTopic}
               onManageTopic={handleOpenTopicManager}
               onManageSubTopic={handleOpenSubTopicManager}
               onToggleSubTopicPin={handleToggleSubTopicPin}

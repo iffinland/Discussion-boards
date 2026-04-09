@@ -17,6 +17,7 @@ type TopicAccordionProps = {
   onDropTopic?: (topicId: string) => void;
   canManageTopic?: boolean;
   canManageSubTopics?: boolean;
+  onShareTopic?: (topic: Topic) => void;
   onManageTopic?: (topic: Topic) => void;
   onManageSubTopic?: (subTopic: SubTopic) => void;
   onToggleSubTopicPin?: (subTopic: SubTopic) => void;
@@ -39,6 +40,7 @@ const TopicAccordion = ({
   onDropTopic,
   canManageTopic = false,
   canManageSubTopics = false,
+  onShareTopic,
   onManageTopic,
   onManageSubTopic,
   onToggleSubTopicPin,
@@ -133,6 +135,13 @@ const TopicAccordion = ({
         </button>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onShareTopic?.(topic)}
+            className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+          >
+            Share
+          </button>
           {canManageTopic ? (
             <button
               type="button"
