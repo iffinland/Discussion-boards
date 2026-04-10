@@ -4,8 +4,8 @@ This guide explains how to use the workspace backup and restore scripts.
 
 ## Location
 
-- Backups are stored in `~/REACT-PROJECTS/_workspace_backups/NodeFM`
-- Backup filenames follow `nodefm-workspace-YYYY-MM-DD_HH-MM-SS.tar.gz`
+- Backups are stored in `~/VS-Code-Projects/REACT-PROJECTS/_workspace_backups/Discussion_Boards`
+- Backup filenames follow `discussion-boards-workspace-YYYY-MM-DD_HH-MM-SS.tar.gz`
 
 ## Create a backup
 
