@@ -1048,6 +1048,13 @@ export const useForumCommands = ({
         };
       }
 
+      if (isSuperAdmin && input.role === 'SuperAdmin') {
+        return {
+          ok: false,
+          error: 'Only SysOp can assign Super Admin role.',
+        };
+      }
+
       const nextRegistry: ForumRoleRegistry = {
         ...roleRegistry,
         sysOps:
@@ -1147,6 +1154,13 @@ export const useForumCommands = ({
           ok: false,
           error:
             'Super Admin can only remove Super Admin, Admin or Moderator roles.',
+        };
+      }
+
+      if (isSuperAdmin && isTargetSuperAdmin) {
+        return {
+          ok: false,
+          error: 'Only SysOp can remove Super Admin role.',
         };
       }
 

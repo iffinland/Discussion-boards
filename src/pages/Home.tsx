@@ -214,6 +214,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     currentUser.role === 'SysOp' ||
     currentUser.role === 'SuperAdmin' ||
     currentUser.role === 'Admin';
+  const canCreateMainTopics = isAdmin;
   const assignableRoleOptions = useMemo(() => {
     if (isSysOp) {
       return [
@@ -225,7 +226,6 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     if (isSuperAdmin) {
       return [
-        { value: 'SuperAdmin' as const, label: 'Super Admin' },
         { value: 'Admin' as const, label: 'Admin' },
         { value: 'Moderator' as const, label: 'Moderator' },
       ];
@@ -1387,7 +1387,7 @@ const Home = ({ searchQuery }: HomeProps) => {
                       className="bg-surface-card border-brand-primary flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                     >
                       {renderRoleIdentity(address)}
-                      {isSysOp || isSuperAdmin ? (
+                      {isSysOp ? (
                         <button
                           type="button"
                           onClick={() => handleRemoveRole(address)}
@@ -1454,33 +1454,33 @@ const Home = ({ searchQuery }: HomeProps) => {
         </section>
       ) : null}
 
-      <section className="space-y-3 pt-2">
-        <h2 className="text-brand-primary text-lg font-semibold">
-          Create Content
-        </h2>
+      {canCreateMainTopics ? (
+        <section className="space-y-3 pt-2">
+          <h2 className="text-brand-primary text-lg font-semibold">
+            Create Content
+          </h2>
 
-        <article className="forum-card-primary overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setOpenCreatePanel((current) => !current)}
-            className="flex w-full items-center justify-between px-4 py-3 text-left"
-          >
-            <div>
-              <h3 className="text-brand-primary text-sm font-semibold">
-                Create Main Topic
-              </h3>
-              <p className="text-ui-muted mt-0.5 text-xs">
-                Admin only main-topic creation.
-              </p>
-            </div>
-            <span className="text-ui-muted text-xs font-semibold">
-              {openCreatePanel ? 'Close' : 'Open'}
-            </span>
-          </button>
+          <article className="forum-card-primary overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setOpenCreatePanel((current) => !current)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+            >
+              <div>
+                <h3 className="text-brand-primary text-sm font-semibold">
+                  Create Main Topic
+                </h3>
+                <p className="text-ui-muted mt-0.5 text-xs">
+                  Admin only main-topic creation.
+                </p>
+              </div>
+              <span className="text-ui-muted text-xs font-semibold">
+                {openCreatePanel ? 'Close' : 'Open'}
+              </span>
+            </button>
 
-          {openCreatePanel ? (
-            <div className="border-brand-primary bg-brand-primary-soft border-t px-4 py-4">
-              {isAdmin ? (
+            {openCreatePanel ? (
+              <div className="border-brand-primary bg-brand-primary-soft border-t px-4 py-4">
                 <form className="space-y-2" onSubmit={handleCreateTopic}>
                   <input
                     value={topicTitle}
@@ -1547,20 +1547,15 @@ const Home = ({ searchQuery }: HomeProps) => {
                     Create Topic
                   </button>
                 </form>
-              ) : (
-                <p className="text-brand-accent-strong text-xs font-semibold">
-                  Main-topic creation is available only to admins and Super
-                  Admins.
-                </p>
-              )}
 
-              {topicFeedback ? (
-                <p className="text-ui-muted mt-2 text-xs">{topicFeedback}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </article>
-      </section>
+                {topicFeedback ? (
+                  <p className="text-ui-muted mt-2 text-xs">{topicFeedback}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </article>
+        </section>
+      ) : null}
     </div>
   );
 };
