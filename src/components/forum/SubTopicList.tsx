@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react';
+import { memo, useMemo, type DragEvent } from 'react';
 
 import UserRoleBadge from '../common/UserRoleBadge';
 import type { SubTopic, User } from '../../types';
@@ -65,8 +65,14 @@ const SubTopicList = ({
   onPinnedDrop,
   onPinnedDragEnd,
 }: SubTopicListProps) => {
-  const usernameMap = new Map(users.map((user) => [user.id, user.displayName]));
-  const userMap = new Map(users.map((user) => [user.id, user]));
+  const usernameMap = useMemo(
+    () => new Map(users.map((user) => [user.id, user.displayName])),
+    [users]
+  );
+  const userMap = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  );
 
   return (
     <div className="space-y-2">
@@ -235,4 +241,4 @@ const SubTopicList = ({
   );
 };
 
-export default SubTopicList;
+export default memo(SubTopicList);

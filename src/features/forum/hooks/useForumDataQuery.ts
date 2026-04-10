@@ -18,6 +18,7 @@ import {
   resolveRoleForAddress,
 } from '../../../services/qdn/forumRolesService';
 import { isQortalRequestAvailable } from '../../../services/qortal/qortalClient';
+import { perfDebugTimeStart } from '../../../services/perf/perfDebug';
 import type {
   ForumRoleRegistry,
   Post,
@@ -27,6 +28,11 @@ import type {
 } from '../../../types';
 
 type ForumAuthMode = 'qortal';
+type BootstrapSession = {
+  user: User;
+  authenticatedAddress: string | null;
+  identityKey: string;
+};
 
 const GUEST_USER: User = {
   id: 'qortal-guest',
@@ -38,6 +44,9 @@ const GUEST_USER: User = {
   avatarColor: 'bg-slate-400',
   joinedAt: new Date(0).toISOString(),
 };
+
+const STRUCTURE_REFRESH_IDLE_TIMEOUT_MS = 1500;
+const STRUCTURE_REFRESH_FALLBACK_DELAY_MS = 300;
 
 const toUniqueNames = (input: Array<string | null | undefined>) => {
   const seen = new Set<string>();
@@ -96,6 +105,53 @@ const mergeUsersFromForumData = (
   return nextUsers;
 };
 
+const toForumStructureFromTopicDirectory = (
+  snapshot: TopicDirectorySnapshot
+) => {
+  const fallbackCreatedAt = new Date(0).toISOString();
+
+  const topicsFromIndex: Topic[] = snapshot.topics.map((topic) => ({
+    id: topic.topicId,
+    title: topic.title,
+    description: topic.description,
+    createdByUserId: 'qdn-index',
+    createdAt: fallbackCreatedAt,
+    sortOrder: topic.sortOrder,
+    status: topic.status,
+    visibility: topic.visibility,
+    subTopicAccess: topic.subTopicAccess,
+    allowedAddresses: topic.allowedAddresses,
+  }));
+
+  const subTopicsFromIndex: SubTopic[] = snapshot.subTopics.map((subTopic) => ({
+    id: subTopic.subTopicId,
+    topicId: subTopic.topicId,
+    title: subTopic.title,
+    description: subTopic.description,
+    authorUserId: subTopic.authorUserId || 'qdn-index',
+    createdAt: subTopic.lastPostAt || fallbackCreatedAt,
+    lastPostAt: subTopic.lastPostAt || fallbackCreatedAt,
+    isPinned: subTopic.isPinned,
+    pinnedAt: subTopic.pinnedAt,
+    isSolved: subTopic.isSolved,
+    solvedAt: subTopic.solvedAt,
+    solvedByUserId: subTopic.solvedByUserId,
+    access: subTopic.access,
+    allowedAddresses: subTopic.allowedAddresses,
+    status: subTopic.status,
+    visibility: subTopic.visibility,
+    lastModerationAction: subTopic.lastModerationAction ?? null,
+    lastModerationReason: subTopic.lastModerationReason ?? null,
+    lastModeratedByUserId: subTopic.lastModeratedByUserId ?? null,
+    lastModeratedAt: subTopic.lastModeratedAt ?? null,
+  }));
+
+  return {
+    topics: topicsFromIndex,
+    subTopics: subTopicsFromIndex,
+  };
+};
+
 export const useForumDataQuery = () => {
   const auth = useAuth();
   const { address, name, primaryName, isLoadingUser, authenticateUser } = auth;
@@ -119,6 +175,8 @@ export const useForumDataQuery = () => {
     Record<string, ThreadSearchSnapshot>
   >({});
   const loadedIdentityRef = useRef<string | null>(null);
+  const backgroundStructureRefreshRef = useRef<string | null>(null);
+  const hydratedStructureIdentityRef = useRef<string | null>(null);
   const authMode: ForumAuthMode = 'qortal';
 
   const currentUser = useMemo(() => {
@@ -194,6 +252,98 @@ export const useForumDataQuery = () => {
     };
   }, [address, name, primaryName]);
 
+  const applyForumStructure = useCallback(
+    (baseUsers: User[], nextTopics: Topic[], nextSubTopics: SubTopic[]) => {
+      setTopics(nextTopics);
+      setSubTopics(nextSubTopics);
+      setUsers(
+        mergeUsersFromForumData(baseUsers, nextTopics, nextSubTopics, [])
+      );
+      setPosts([]);
+    },
+    []
+  );
+
+  const scheduleStructureRefresh = useCallback(
+    (
+      session: BootstrapSession,
+      roleRegistryForRefresh: ForumRoleRegistry,
+      preserveThreadIndexes: boolean
+    ) => {
+      if (backgroundStructureRefreshRef.current === session.identityKey) {
+        return () => undefined;
+      }
+
+      backgroundStructureRefreshRef.current = session.identityKey;
+      const maybeWindow = window as Window & {
+        requestIdleCallback?: (
+          callback: IdleRequestCallback,
+          options?: IdleRequestOptions
+        ) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      let cancelled = false;
+
+      const runRefresh = async () => {
+        try {
+          const remoteData = await forumQdnService.loadForumStructureCached();
+          if (cancelled || loadedIdentityRef.current !== session.identityKey) {
+            return;
+          }
+
+          setAuthenticatedAddress(session.authenticatedAddress);
+          setRoleRegistry(roleRegistryForRefresh);
+          setCurrentUserId(session.user.id);
+          applyForumStructure(
+            [session.user],
+            remoteData.topics,
+            remoteData.subTopics
+          );
+          hydratedStructureIdentityRef.current = session.identityKey;
+          if (!preserveThreadIndexes) {
+            setThreadSearchIndexes({});
+          }
+        } finally {
+          if (backgroundStructureRefreshRef.current === session.identityKey) {
+            backgroundStructureRefreshRef.current = null;
+          }
+        }
+      };
+
+      if (typeof maybeWindow.requestIdleCallback === 'function') {
+        const idleId = maybeWindow.requestIdleCallback(
+          () => {
+            void runRefresh();
+          },
+          { timeout: STRUCTURE_REFRESH_IDLE_TIMEOUT_MS }
+        );
+
+        return () => {
+          cancelled = true;
+          if (typeof maybeWindow.cancelIdleCallback === 'function') {
+            maybeWindow.cancelIdleCallback(idleId);
+          }
+          if (backgroundStructureRefreshRef.current === session.identityKey) {
+            backgroundStructureRefreshRef.current = null;
+          }
+        };
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        void runRefresh();
+      }, STRUCTURE_REFRESH_FALLBACK_DELAY_MS);
+
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timeoutId);
+        if (backgroundStructureRefreshRef.current === session.identityKey) {
+          backgroundStructureRefreshRef.current = null;
+        }
+      };
+    },
+    [applyForumStructure]
+  );
+
   useEffect(() => {
     let active = true;
     const hasAuthSignal = Boolean(
@@ -212,6 +362,10 @@ export const useForumDataQuery = () => {
       setAvailableAuthNames([]);
       setActiveAuthName(null);
       setRoleRegistry(createDefaultRoleRegistry());
+      setTopicDirectoryIndex(null);
+      setThreadSearchIndexes({});
+      backgroundStructureRefreshRef.current = null;
+      hydratedStructureIdentityRef.current = null;
       setIsAuthReady(true);
       return () => {
         active = false;
@@ -232,96 +386,9 @@ export const useForumDataQuery = () => {
       };
     }
 
-    if (!identity) {
-      if (loadedIdentityRef.current === GUEST_USER.id) {
-        setIsAuthReady(true);
-        return () => {
-          active = false;
-        };
-      }
+    const identityKey = identity || GUEST_USER.id;
 
-      const bootstrapGuestData = async () => {
-        try {
-          setIsAuthReady(false);
-
-          const [structureResult, registryResult, topicDirectoryIndexResult] =
-            await Promise.allSettled([
-              forumQdnService.loadForumStructure(),
-              forumRolesService.loadRoleRegistry(),
-              forumSearchIndexService.loadTopicDirectoryIndex(),
-            ]);
-
-          if (!active) {
-            return;
-          }
-
-          const nextRoleRegistry =
-            registryResult.status === 'fulfilled'
-              ? registryResult.value
-              : createDefaultRoleRegistry();
-
-          setAuthenticatedAddress(null);
-          setRoleRegistry(nextRoleRegistry);
-          setTopicDirectoryIndex(
-            topicDirectoryIndexResult.status === 'fulfilled'
-              ? topicDirectoryIndexResult.value
-              : null
-          );
-          setThreadSearchIndexes({});
-
-          if (structureResult.status !== 'fulfilled') {
-            setUsers([GUEST_USER]);
-            setTopics([]);
-            setSubTopics([]);
-            setPosts([]);
-            setCurrentUserId(GUEST_USER.id);
-            loadedIdentityRef.current = GUEST_USER.id;
-            return;
-          }
-
-          const remoteData = structureResult.value;
-          const mergedUsers = mergeUsersFromForumData(
-            [GUEST_USER],
-            remoteData.topics,
-            remoteData.subTopics,
-            []
-          );
-
-          setUsers(mergedUsers);
-          setTopics(remoteData.topics);
-          setSubTopics(remoteData.subTopics);
-          setPosts([]);
-          setCurrentUserId(GUEST_USER.id);
-          loadedIdentityRef.current = GUEST_USER.id;
-        } catch {
-          if (!active) {
-            return;
-          }
-
-          setUsers([GUEST_USER]);
-          setTopics([]);
-          setSubTopics([]);
-          setPosts([]);
-          setCurrentUserId(GUEST_USER.id);
-          setAuthenticatedAddress(null);
-          setRoleRegistry(createDefaultRoleRegistry());
-          setTopicDirectoryIndex(null);
-          setThreadSearchIndexes({});
-          loadedIdentityRef.current = GUEST_USER.id;
-        } finally {
-          if (active) {
-            setIsAuthReady(true);
-          }
-        }
-      };
-
-      void bootstrapGuestData();
-      return () => {
-        active = false;
-      };
-    }
-
-    if (loadedIdentityRef.current === identity) {
+    if (loadedIdentityRef.current === identityKey) {
       setIsAuthReady(true);
       return () => {
         active = false;
@@ -329,92 +396,126 @@ export const useForumDataQuery = () => {
     }
 
     const bootstrapQdnData = async () => {
-      let qortalUser: User | null = null;
+      const endTiming = perfDebugTimeStart('initial-forum-data-load', {
+        identityKey,
+        mode: identity ? 'authenticated' : 'guest',
+      });
+      let session: BootstrapSession | null = null;
 
       try {
         setIsAuthReady(false);
 
-        const authenticatedAddress =
-          address?.trim() ||
-          (await getUserAccount()
-            .then((account) => account.address?.trim() ?? '')
-            .catch(() => ''));
+        const authenticatedAddressPromise = identity
+          ? address?.trim()
+            ? Promise.resolve(address.trim())
+            : getUserAccount()
+                .then((account) => account.address?.trim() ?? '')
+                .catch(() => '')
+          : Promise.resolve('');
 
-        qortalUser = {
-          id: identity,
-          username: identity,
-          displayName: identity,
-          address: authenticatedAddress,
-          avatarUrl: createAvatarLink(identity),
-          role: 'Member',
-          avatarColor: 'bg-cyan-600',
-          joinedAt: new Date().toISOString(),
-        };
-
-        const [structureResult, registryResult, topicDirectoryIndexResult] =
+        const [registryResult, topicDirectoryIndexResult, addressResult] =
           await Promise.allSettled([
-            forumQdnService.loadForumStructure(),
             forumRolesService.loadRoleRegistry(),
             forumSearchIndexService.loadTopicDirectoryIndex(),
+            authenticatedAddressPromise,
           ]);
+
+        if (!active) {
+          return;
+        }
+
         const nextRoleRegistry =
           registryResult.status === 'fulfilled'
             ? registryResult.value
             : createDefaultRoleRegistry();
-
-        qortalUser = {
-          ...qortalUser,
-          role: resolveRoleForAddress(authenticatedAddress, nextRoleRegistry),
-        };
-
-        setAuthenticatedAddress(authenticatedAddress || null);
-        setRoleRegistry(nextRoleRegistry);
-        setTopicDirectoryIndex(
+        const nextTopicDirectoryIndex =
           topicDirectoryIndexResult.status === 'fulfilled'
             ? topicDirectoryIndexResult.value
-            : null
-        );
+            : null;
+        const nextAuthenticatedAddress =
+          identity && addressResult.status === 'fulfilled'
+            ? addressResult.value || null
+            : null;
+
+        const nextUser = identity
+          ? {
+              id: identity,
+              username: identity,
+              displayName: identity,
+              address: nextAuthenticatedAddress,
+              avatarUrl: createAvatarLink(identity),
+              role: 'Member' as const,
+              avatarColor: 'bg-cyan-600',
+              joinedAt: new Date().toISOString(),
+            }
+          : GUEST_USER;
+
+        session = {
+          identityKey,
+          authenticatedAddress: nextAuthenticatedAddress,
+          user: identity
+            ? {
+                ...nextUser,
+                role: resolveRoleForAddress(
+                  nextAuthenticatedAddress,
+                  nextRoleRegistry
+                ),
+              }
+            : GUEST_USER,
+        };
+
+        setAuthenticatedAddress(session.authenticatedAddress);
+        setRoleRegistry(nextRoleRegistry);
+        setTopicDirectoryIndex(nextTopicDirectoryIndex);
         setThreadSearchIndexes({});
-        setUsers([qortalUser]);
-        setCurrentUserId(qortalUser.id);
+        setCurrentUserId(session.user.id);
+        loadedIdentityRef.current = identityKey;
+        hydratedStructureIdentityRef.current = null;
 
-        if (!active) {
-          return;
+        if (nextTopicDirectoryIndex) {
+          const indexedStructure = toForumStructureFromTopicDirectory(
+            nextTopicDirectoryIndex
+          );
+          applyForumStructure(
+            [session.user],
+            indexedStructure.topics,
+            indexedStructure.subTopics
+          );
+          endTiming({
+            usedTopicDirectoryIndex: true,
+            topicCount: indexedStructure.topics.length,
+            subTopicCount: indexedStructure.subTopics.length,
+          });
+          setIsAuthReady(true);
+        } else {
+          const remoteData = await forumQdnService.loadForumStructureCached();
+          if (!active) {
+            return;
+          }
+
+          applyForumStructure(
+            [session.user],
+            remoteData.topics,
+            remoteData.subTopics
+          );
+          hydratedStructureIdentityRef.current = identityKey;
+          endTiming({
+            usedTopicDirectoryIndex: false,
+            topicCount: remoteData.topics.length,
+            subTopicCount: remoteData.subTopics.length,
+          });
+          setIsAuthReady(true);
         }
-
-        if (structureResult.status !== 'fulfilled') {
-          setTopics([]);
-          setSubTopics([]);
-          setPosts([]);
-          setThreadSearchIndexes({});
-          loadedIdentityRef.current = identity;
-          return;
-        }
-
-        const remoteData = structureResult.value;
-        const mergedUsers = mergeUsersFromForumData(
-          [qortalUser],
-          remoteData.topics,
-          remoteData.subTopics,
-          []
-        );
-
-        setUsers(mergedUsers);
-        setTopics(remoteData.topics);
-        setSubTopics(remoteData.subTopics);
-        setPosts([]);
-        setThreadSearchIndexes({});
-        setCurrentUserId(qortalUser.id);
-        loadedIdentityRef.current = identity;
       } catch {
+        endTiming({ error: true });
         if (!active) {
           return;
         }
 
-        if (qortalUser) {
-          setAuthenticatedAddress(qortalUser.address?.trim() ?? null);
-          setUsers([qortalUser]);
-          setCurrentUserId(qortalUser.id);
+        if (session && session.user.id !== GUEST_USER.id) {
+          setAuthenticatedAddress(session.authenticatedAddress);
+          setUsers([session.user]);
+          setCurrentUserId(session.user.id);
         } else {
           setAuthenticatedAddress(null);
           setUsers([GUEST_USER]);
@@ -423,13 +524,12 @@ export const useForumDataQuery = () => {
         setTopics([]);
         setSubTopics([]);
         setPosts([]);
+        setRoleRegistry(createDefaultRoleRegistry());
         setTopicDirectoryIndex(null);
         setThreadSearchIndexes({});
-        loadedIdentityRef.current = qortalUser ? identity : null;
-      } finally {
-        if (active) {
-          setIsAuthReady(true);
-        }
+        hydratedStructureIdentityRef.current = null;
+        loadedIdentityRef.current = session ? identityKey : null;
+        setIsAuthReady(true);
       }
     };
 
@@ -438,7 +538,44 @@ export const useForumDataQuery = () => {
     return () => {
       active = false;
     };
-  }, [activeAuthName, address, isLoadingUser, name, primaryName]);
+  }, [
+    activeAuthName,
+    address,
+    applyForumStructure,
+    isLoadingUser,
+    name,
+    primaryName,
+  ]);
+
+  useEffect(() => {
+    const identityKey = loadedIdentityRef.current;
+
+    if (
+      !isAuthReady ||
+      !topicDirectoryIndex ||
+      !identityKey ||
+      hydratedStructureIdentityRef.current === identityKey
+    ) {
+      return;
+    }
+
+    return scheduleStructureRefresh(
+      {
+        identityKey,
+        user: currentUser.id === GUEST_USER.id ? GUEST_USER : currentUser,
+        authenticatedAddress,
+      },
+      roleRegistry,
+      false
+    );
+  }, [
+    authenticatedAddress,
+    currentUser,
+    isAuthReady,
+    roleRegistry,
+    scheduleStructureRefresh,
+    topicDirectoryIndex,
+  ]);
 
   const authenticate = useCallback(async () => {
     await authenticateUser();

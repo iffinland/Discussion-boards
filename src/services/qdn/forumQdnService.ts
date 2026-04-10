@@ -10,6 +10,7 @@ import {
   type QortalResourceToPublish,
 } from '../qortal/qortalClient';
 import { getUserAccount } from '../qortal/walletService';
+import { perfDebugTimeStart } from '../perf/perfDebug';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_IMAGE_SERVICE =
@@ -26,6 +27,7 @@ const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
 const IMAGE_PUBLISH_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_SAFE_QDN_IDENTIFIER_LENGTH = 64;
+const FORUM_STRUCTURE_CACHE_TTL_MS = 30 * 1000;
 const imageUrlCache = new Map<string, string>();
 
 interface SearchQdnResourceResult {
@@ -73,6 +75,21 @@ type PostPayload = {
   status: EntityStatus;
   updatedAt: number;
   post: Post;
+};
+
+type ForumStructureSnapshot = {
+  topics: Topic[];
+  subTopics: SubTopic[];
+};
+
+let forumStructureCache: {
+  value: ForumStructureSnapshot | null;
+  updatedAt: number;
+  inflight: Promise<ForumStructureSnapshot> | null;
+} = {
+  value: null,
+  updatedAt: 0,
+  inflight: null,
 };
 
 const encodeBase64Json = (value: unknown): string => {
@@ -581,6 +598,7 @@ const toPublishResource = (
 
 export const forumQdnService = {
   async loadForumStructure() {
+    const endTiming = perfDebugTimeStart('forum-structure-load');
     const [topicPayloads, subTopicPayloads] = await Promise.all([
       fetchTopicPayloads(),
       fetchSubTopicPayloads(),
@@ -607,7 +625,65 @@ export const forumQdnService = {
         topics.some((topic) => topic.id === subTopic.topicId)
       );
 
-    return { topics, subTopics };
+    const result = { topics, subTopics };
+    endTiming({
+      topicCount: topics.length,
+      subTopicCount: subTopics.length,
+    });
+    return result;
+  },
+
+  async loadForumStructureCached(options?: {
+    force?: boolean;
+    maxAgeMs?: number;
+  }) {
+    const force = options?.force === true;
+    const maxAgeMs = options?.maxAgeMs ?? FORUM_STRUCTURE_CACHE_TTL_MS;
+    const now = Date.now();
+
+    if (
+      !force &&
+      forumStructureCache.value &&
+      now - forumStructureCache.updatedAt <= maxAgeMs
+    ) {
+      return forumStructureCache.value;
+    }
+
+    if (!force && forumStructureCache.inflight) {
+      return forumStructureCache.inflight;
+    }
+
+    const loadPromise = this.loadForumStructure()
+      .then((result) => {
+        forumStructureCache = {
+          value: result,
+          updatedAt: Date.now(),
+          inflight: null,
+        };
+        return result;
+      })
+      .catch((error) => {
+        forumStructureCache = {
+          ...forumStructureCache,
+          inflight: null,
+        };
+        throw error;
+      });
+
+    forumStructureCache = {
+      ...forumStructureCache,
+      inflight: loadPromise,
+    };
+
+    return loadPromise;
+  },
+
+  invalidateForumStructureCache() {
+    forumStructureCache = {
+      value: null,
+      updatedAt: 0,
+      inflight: null,
+    };
   },
 
   async loadPostsBySubTopic(subTopicId: string) {

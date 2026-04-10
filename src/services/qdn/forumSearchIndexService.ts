@@ -5,6 +5,7 @@ import {
   type QortalResourceToPublish,
 } from '../qortal/qortalClient';
 import { getUserAccount } from '../qortal/walletService';
+import { perfDebugTimeStart } from '../perf/perfDebug';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
@@ -14,6 +15,7 @@ const THREAD_INDEX_PREFIX = `${FORUM_NAMESPACE}-index-thread-`;
 const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
 const MAX_SAFE_QDN_IDENTIFIER_LENGTH = 64;
+const TOPIC_DIRECTORY_CACHE_TTL_MS = 15 * 1000;
 
 type SearchQdnResourceResult = {
   name: string;
@@ -84,6 +86,16 @@ type ThreadIndexPayload = {
   type: 'thread-search-index';
   updatedAt: number;
   snapshot: ThreadSearchSnapshot;
+};
+
+let topicDirectoryIndexCache: {
+  value: TopicDirectorySnapshot | null;
+  updatedAt: number;
+  inflight: Promise<TopicDirectorySnapshot | null> | null;
+} = {
+  value: null,
+  updatedAt: 0,
+  inflight: null,
 };
 
 const encodeBase64Json = (value: unknown): string => {
@@ -575,17 +587,69 @@ export const forumSearchIndexService = {
   },
 
   async loadTopicDirectoryIndex(): Promise<TopicDirectorySnapshot | null> {
-    const resources = await searchByPrefix(TOPIC_DIRECTORY_IDENTIFIER);
-    const payloads = await mapWithConcurrency(resources, async (item) => {
-      try {
-        const raw = await fetchResource(item.name, item.identifier);
-        return parseTopicDirectoryPayload(raw);
-      } catch {
-        return null;
-      }
-    });
+    const endTiming = perfDebugTimeStart('topic-directory-index-load');
+    const now = Date.now();
 
-    return pickLatest(payloads)?.snapshot ?? null;
+    if (
+      topicDirectoryIndexCache.value &&
+      now - topicDirectoryIndexCache.updatedAt <= TOPIC_DIRECTORY_CACHE_TTL_MS
+    ) {
+      endTiming({
+        cacheHit: true,
+        topicCount: topicDirectoryIndexCache.value.topics.length,
+        subTopicCount: topicDirectoryIndexCache.value.subTopics.length,
+      });
+      return topicDirectoryIndexCache.value;
+    }
+
+    if (topicDirectoryIndexCache.inflight) {
+      endTiming({ reusedInflight: true });
+      return topicDirectoryIndexCache.inflight;
+    }
+
+    const loadPromise = (async () => {
+      const resources = await searchByPrefix(TOPIC_DIRECTORY_IDENTIFIER);
+      const payloads = await mapWithConcurrency(resources, async (item) => {
+        try {
+          const raw = await fetchResource(item.name, item.identifier);
+          return parseTopicDirectoryPayload(raw);
+        } catch {
+          return null;
+        }
+      });
+
+      return pickLatest(payloads)?.snapshot ?? null;
+    })()
+      .then((result) => {
+        topicDirectoryIndexCache = {
+          value: result,
+          updatedAt: Date.now(),
+          inflight: null,
+        };
+        return result;
+      })
+      .catch((error) => {
+        topicDirectoryIndexCache = {
+          ...topicDirectoryIndexCache,
+          inflight: null,
+        };
+        throw error;
+      });
+
+    topicDirectoryIndexCache = {
+      ...topicDirectoryIndexCache,
+      inflight: loadPromise,
+    };
+
+    return loadPromise.then((result) => {
+      endTiming({
+        cacheHit: false,
+        found: Boolean(result),
+        topicCount: result?.topics.length ?? 0,
+        subTopicCount: result?.subTopics.length ?? 0,
+      });
+      return result;
+    });
   },
 
   async publishTopicDirectoryIndex(
@@ -620,6 +684,11 @@ export const forumSearchIndexService = {
       TOPIC_DIRECTORY_IDENTIFIER,
       'topic-directory-index'
     );
+    topicDirectoryIndexCache = {
+      value: snapshot,
+      updatedAt,
+      inflight: null,
+    };
     return snapshot;
   },
 

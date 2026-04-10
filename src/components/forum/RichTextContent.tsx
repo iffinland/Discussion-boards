@@ -5,12 +5,61 @@ import {
   stripQdnImageTags,
   toRichTextHtml,
 } from '../../services/forum/richText';
+import { mapWithConcurrency } from '../../services/qdn/qdnReadiness';
 import { forumQdnService } from '../../services/qdn/forumQdnService';
+import { perfDebugLog } from '../../services/perf/perfDebug';
 import ImagePreviewModal from './ImagePreviewModal';
 
 type RichTextContentProps = {
   value: string;
   className?: string;
+};
+
+type ImageReference = {
+  service: string;
+  name: string;
+  identifier: string;
+  filename?: string;
+};
+
+const imageUrlCache = new Map<string, string | null>();
+const imageUrlInflight = new Map<string, Promise<string | null>>();
+
+const toImageReferenceKey = (reference: ImageReference) =>
+  [
+    reference.service,
+    reference.name,
+    reference.identifier,
+    reference.filename ?? '',
+  ].join(':');
+
+const resolveImageUrlCached = async (reference: ImageReference) => {
+  const cacheKey = toImageReferenceKey(reference);
+  if (imageUrlCache.has(cacheKey)) {
+    return imageUrlCache.get(cacheKey) ?? null;
+  }
+
+  const existingInflight = imageUrlInflight.get(cacheKey);
+  if (existingInflight) {
+    return existingInflight;
+  }
+
+  const requestPromise = forumQdnService
+    .getPostImageResourceUrl(reference)
+    .then((url) => {
+      imageUrlCache.set(cacheKey, url);
+      return url;
+    })
+    .catch(() => {
+      imageUrlCache.set(cacheKey, null);
+      return null;
+    })
+    .finally(() => {
+      imageUrlInflight.delete(cacheKey);
+    });
+
+  imageUrlInflight.set(cacheKey, requestPromise);
+  return requestPromise;
 };
 
 const RichTextContent = ({ value, className }: RichTextContentProps) => {
@@ -49,32 +98,58 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
     setResolvedValue(stripQdnImageTags(value));
 
     const resolveImages = async () => {
+      const startedAt = performance.now();
       let nextValue = value;
-      const resolvedUrlCache = new Map<string, string | null>();
+      const uniqueReferencesByKey = new Map<string, ImageReference>();
 
-      for (const tag of tags) {
-        const key = `${tag.reference.name}:${tag.reference.identifier}`;
-        let resourceUrl = resolvedUrlCache.get(key) ?? null;
+      tags.forEach((tag) => {
+        uniqueReferencesByKey.set(
+          toImageReferenceKey(tag.reference),
+          tag.reference
+        );
+      });
 
-        if (!resolvedUrlCache.has(key)) {
-          try {
-            resourceUrl = await forumQdnService.getPostImageResourceUrl(
-              tag.reference
-            );
-          } catch {
-            resourceUrl = null;
-          }
-          resolvedUrlCache.set(key, resourceUrl);
-        }
+      const cacheHits = [...uniqueReferencesByKey.values()].reduce(
+        (count, reference) =>
+          imageUrlCache.has(toImageReferenceKey(reference)) ? count + 1 : count,
+        0
+      );
+      const cacheMisses = uniqueReferencesByKey.size - cacheHits;
 
+      const resolvedEntries = await mapWithConcurrency(
+        [...uniqueReferencesByKey.entries()],
+        async ([key, reference]) => {
+          const resourceUrl = await resolveImageUrlCached(reference);
+          return [key, resourceUrl] as const;
+        },
+        4
+      );
+
+      const resolvedByKey = new Map(resolvedEntries);
+
+      tags.forEach((tag) => {
+        const resourceUrl =
+          resolvedByKey.get(toImageReferenceKey(tag.reference)) ?? null;
         nextValue = nextValue
           .split(tag.rawTag)
           .join(resourceUrl ? `[img]${resourceUrl}[/img]` : '');
-      }
+      });
 
       if (active) {
         setResolvedValue(nextValue);
       }
+
+      const elapsedMs = performance.now() - startedAt;
+      const resolvedCount = resolvedEntries.filter(([, url]) => Boolean(url))
+        .length;
+      perfDebugLog('richtext-image-resolve', {
+        tags: tags.length,
+        uniqueReferences: uniqueReferencesByKey.size,
+        cacheHits,
+        cacheMisses,
+        resolvedCount,
+        elapsedMs: Number(elapsedMs.toFixed(1)),
+      });
     };
 
     void resolveImages();

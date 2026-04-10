@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type FormEvent,
@@ -10,17 +11,22 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import RichTextEditor from '../components/forum/RichTextEditor';
 import SubTopicList from '../components/forum/SubTopicList';
-import { useForumData } from '../hooks/useForumData';
+import { useForumActions, useForumData } from '../hooks/useForumData';
 import {
   canAccessSubTopic,
   resolveAccessLabel,
 } from '../services/forum/forumAccess';
 import { forumSearchIndexService } from '../services/qdn/forumSearchIndexService';
 import {
+  loadThreadIndexCached,
+  readThreadIndexCache,
+} from '../services/qdn/threadIndexCache';
+import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../services/qortal/share';
 import { getAccountNames } from '../services/qortal/walletService';
+import { perfDebugTimeStart } from '../services/perf/perfDebug';
 import type { PostAttachment, SubTopic, TopicAccess } from '../types';
 
 type TopicPageProps = {
@@ -29,6 +35,10 @@ type TopicPageProps = {
 };
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+const INITIAL_POST_COUNT_BATCH_SIZE = 8;
+const POST_COUNT_BATCH_SIZE = 6;
+const INITIAL_ADDRESS_BATCH_SIZE = 8;
+const ADDRESS_BATCH_SIZE = 6;
 
 const reorderList = <T,>(items: T[], fromIndex: number, toIndex: number) => {
   const next = [...items];
@@ -94,13 +104,15 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     subTopics,
     posts,
     threadSearchIndexes,
+  } = useForumData();
+  const {
     createSubTopic,
     createPost,
     uploadPostImage,
     uploadPostAttachment,
     updateSubTopicSettings,
     reorderPinnedSubTopics,
-  } = useForumData();
+  } = useForumActions();
   const [walletNamesByAddress, setWalletNamesByAddress] = useState<
     Record<string, string>
   >({});
@@ -140,6 +152,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   >(null);
   const [fetchedPostCountsBySubTopicId, setFetchedPostCountsBySubTopicId] =
     useState<Record<string, number>>({});
+  const requestedWalletAddressesRef = useRef<Set<string>>(new Set());
+  const requestedPostCountsRef = useRef<Set<string>>(new Set());
 
   const topic = useMemo(
     () => topics.find((item) => item.id === id),
@@ -212,6 +226,27 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         .map((subTopic) => subTopic.id),
     [visibleSubTopics]
   );
+  const visibleWalletAddresses = useMemo(() => {
+    const seen = new Set<string>();
+    const next: string[] = [];
+
+    const pushAddress = (value: string | null | undefined) => {
+      const normalized = value?.trim();
+      if (!normalized || seen.has(normalized)) {
+        return;
+      }
+
+      seen.add(normalized);
+      next.push(normalized);
+    };
+
+    topic?.allowedAddresses.forEach(pushAddress);
+    visibleSubTopics.forEach((subTopic) => {
+      subTopic.allowedAddresses.slice(0, 3).forEach(pushAddress);
+    });
+
+    return next;
+  }, [topic, visibleSubTopics]);
   const localPostCountsBySubTopicId = useMemo(() => {
     const countsBySubTopicId: Record<string, number> = {};
 
@@ -244,22 +279,33 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     }
 
     let active = true;
-    const addresses = [
-      ...topic.allowedAddresses,
-      ...visibleSubTopics.flatMap((subTopic) => subTopic.allowedAddresses),
-    ];
-    const uniqueAddresses = [...new Set(addresses.filter(Boolean))];
+    const missingAddresses = visibleWalletAddresses.filter(
+      (address) =>
+        !walletNamesByAddress[address] &&
+        !requestedWalletAddressesRef.current.has(address)
+    );
 
-    if (uniqueAddresses.length === 0) {
-      setWalletNamesByAddress({});
+    if (missingAddresses.length === 0) {
       return () => {
         active = false;
       };
     }
 
-    const resolveNames = async () => {
+    missingAddresses.forEach((address) => {
+      requestedWalletAddressesRef.current.add(address);
+    });
+
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const resolveAddressBatch = async (batch: string[]) => {
       const resolvedEntries = await Promise.all(
-        uniqueAddresses.map(async (address) => {
+        batch.map(async (address) => {
           try {
             const names = await getAccountNames(address);
             const primary = names.find((entry) => entry.trim())?.trim();
@@ -274,25 +320,91 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         return;
       }
 
-      setWalletNamesByAddress(
-        Object.fromEntries(
-          resolvedEntries.filter((entry) => Boolean(entry[1].trim()))
-        )
+      const nextResolved = Object.fromEntries(
+        resolvedEntries.filter((entry) => Boolean(entry[1].trim()))
       );
+      if (Object.keys(nextResolved).length === 0) {
+        return;
+      }
+
+      setWalletNamesByAddress((current) => ({
+        ...current,
+        ...nextResolved,
+      }));
     };
 
-    void resolveNames();
+    const loadMissingNames = async () => {
+      const endTiming = perfDebugTimeStart('topic-page-wallet-name-load', {
+        topicId: topic.id,
+        addressCount: missingAddresses.length,
+      });
+      const firstBatch = missingAddresses.slice(0, INITIAL_ADDRESS_BATCH_SIZE);
+      await resolveAddressBatch(firstBatch);
+
+      for (
+        let startIndex = INITIAL_ADDRESS_BATCH_SIZE;
+        startIndex < missingAddresses.length && active;
+        startIndex += ADDRESS_BATCH_SIZE
+      ) {
+        await new Promise<void>((resolve) => {
+          if (typeof maybeWindow.requestIdleCallback === 'function') {
+            maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1200 });
+            return;
+          }
+
+          window.setTimeout(resolve, 120);
+        });
+
+        if (!active) {
+          return;
+        }
+
+        await resolveAddressBatch(
+          missingAddresses.slice(startIndex, startIndex + ADDRESS_BATCH_SIZE)
+        );
+      }
+
+      endTiming({
+        topicId: topic.id,
+        resolvedAddressCount: missingAddresses.length,
+      });
+    };
+
+    void loadMissingNames();
 
     return () => {
       active = false;
     };
-  }, [topic, visibleSubTopics]);
+  }, [topic, visibleWalletAddresses, walletNamesByAddress]);
 
   useEffect(() => {
     let active = true;
+    const nextCachedCounts: Record<string, number> = {};
     const missingSubTopicIds = visibleSubTopics
       .map((subTopic) => subTopic.id)
-      .filter((subTopicId) => postCountsBySubTopicId[subTopicId] === undefined);
+      .filter((subTopicId) => {
+        if (postCountsBySubTopicId[subTopicId] !== undefined) {
+          return false;
+        }
+
+        const cachedThreadIndex = readThreadIndexCache(subTopicId);
+        if (cachedThreadIndex) {
+          nextCachedCounts[subTopicId] = Math.max(
+            cachedThreadIndex.posts.length,
+            localPostCountsBySubTopicId[subTopicId] ?? 0
+          );
+          return false;
+        }
+
+        return !requestedPostCountsRef.current.has(subTopicId);
+      });
+
+    if (Object.keys(nextCachedCounts).length > 0) {
+      setFetchedPostCountsBySubTopicId((current) => ({
+        ...current,
+        ...nextCachedCounts,
+      }));
+    }
 
     if (missingSubTopicIds.length === 0) {
       return () => {
@@ -300,12 +412,26 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       };
     }
 
-    const loadMissingPostCounts = async () => {
+    missingSubTopicIds.forEach((subTopicId) => {
+      requestedPostCountsRef.current.add(subTopicId);
+    });
+
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const resolveCountBatch = async (batch: string[]) => {
       const resolvedEntries = await Promise.all(
-        missingSubTopicIds.map(async (subTopicId) => {
+        batch.map(async (subTopicId) => {
           try {
-            const threadIndex =
-              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            const threadIndex = await loadThreadIndexCached(
+              subTopicId,
+              forumSearchIndexService.loadThreadIndex
+            );
             const indexCount = threadIndex?.posts.length ?? 0;
             const localCount = localPostCountsBySubTopicId[subTopicId] ?? 0;
             return [subTopicId, Math.max(indexCount, localCount)] as const;
@@ -328,12 +454,58 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       }));
     };
 
+    const loadMissingPostCounts = async () => {
+      const endTiming = perfDebugTimeStart('topic-page-post-count-load', {
+        topicId: topic?.id ?? null,
+        subTopicCount: missingSubTopicIds.length,
+      });
+      await resolveCountBatch(
+        missingSubTopicIds.slice(0, INITIAL_POST_COUNT_BATCH_SIZE)
+      );
+
+      for (
+        let startIndex = INITIAL_POST_COUNT_BATCH_SIZE;
+        startIndex < missingSubTopicIds.length && active;
+        startIndex += POST_COUNT_BATCH_SIZE
+      ) {
+        await new Promise<void>((resolve) => {
+          if (typeof maybeWindow.requestIdleCallback === 'function') {
+            maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1200 });
+            return;
+          }
+
+          window.setTimeout(resolve, 120);
+        });
+
+        if (!active) {
+          return;
+        }
+
+        await resolveCountBatch(
+          missingSubTopicIds.slice(
+            startIndex,
+            startIndex + POST_COUNT_BATCH_SIZE
+          )
+        );
+      }
+
+      endTiming({
+        topicId: topic?.id ?? null,
+        resolvedSubTopicCount: missingSubTopicIds.length,
+      });
+    };
+
     void loadMissingPostCounts();
 
     return () => {
       active = false;
     };
-  }, [localPostCountsBySubTopicId, postCountsBySubTopicId, visibleSubTopics]);
+  }, [
+    localPostCountsBySubTopicId,
+    postCountsBySubTopicId,
+    topic?.id,
+    visibleSubTopics,
+  ]);
 
   useEffect(() => {
     if (!topicId) {

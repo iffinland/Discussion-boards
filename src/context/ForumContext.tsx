@@ -23,6 +23,10 @@ import type {
 import { threadPostCache } from '../services/forum/threadPostCache';
 import { forumSearchIndexService } from '../services/qdn/forumSearchIndexService';
 import { forumQdnService } from '../services/qdn/forumQdnService';
+import {
+  loadThreadIndexCached,
+  writeThreadIndexCache,
+} from '../services/qdn/threadIndexCache';
 import type {
   ForumRoleRegistry,
   Post,
@@ -35,7 +39,7 @@ import type {
 
 type ForumAuthMode = 'qortal';
 
-type ForumContextValue = {
+type ForumDataContextValue = {
   users: User[];
   currentUser: User;
   authenticatedAddress: string | null;
@@ -51,6 +55,10 @@ type ForumContextValue = {
   isAuthenticated: boolean;
   isAuthReady: boolean;
   canSwitchUser: boolean;
+  isThreadPostsLoading: boolean;
+};
+
+type ForumActionsContextValue = {
   authenticate: () => Promise<void>;
   setCurrentUser: (userId: string) => void;
   createTopic: (input: {
@@ -121,11 +129,13 @@ type ForumContextValue = {
   }) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
-  isThreadPostsLoading: boolean;
   loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
 };
 
-const ForumContext = createContext<ForumContextValue | null>(null);
+const ForumDataContext = createContext<ForumDataContextValue | null>(null);
+const ForumActionsContext = createContext<ForumActionsContextValue | null>(
+  null
+);
 
 const mergePostsByLatestCreatedAt = (
   currentPosts: Post[],
@@ -258,8 +268,10 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
         let loadedPosts: Post[] | null = null;
 
         try {
-          const loadedThreadIndex =
-            await forumSearchIndexService.loadThreadIndex(normalizedId);
+          const loadedThreadIndex = await loadThreadIndexCached(
+            normalizedId,
+            forumSearchIndexService.loadThreadIndex
+          );
           if (loadedThreadIndex) {
             setThreadSearchIndexes((current) => ({
               ...current,
@@ -301,7 +313,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     [setPosts, setThreadSearchIndexes]
   );
 
-  const value = useMemo<ForumContextValue>(
+  const dataValue = useMemo<ForumDataContextValue>(
     () => ({
       users,
       currentUser,
@@ -317,27 +329,8 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       authMode,
       isAuthenticated,
       isAuthReady,
-      authenticate,
       canSwitchUser: availableAuthNames.length > 1,
-      setCurrentUser,
-      createTopic,
-      reorderTopics,
-      reorderPinnedSubTopics,
-      createSubTopic,
-      updateTopicSettings,
-      updateSubTopicSettings,
-      toggleSubTopicSolved,
-      upsertRoleAssignment,
-      removeRoleAssignment,
-      createPost,
-      uploadPostImage,
-      uploadPostAttachment,
-      updatePost,
-      deletePost,
-      likePost,
-      tipPost,
       isThreadPostsLoading,
-      loadThreadPosts,
     }),
     [
       users,
@@ -354,6 +347,12 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       authMode,
       isAuthenticated,
       isAuthReady,
+      isThreadPostsLoading,
+    ]
+  );
+
+  const actionsValue = useMemo<ForumActionsContextValue>(
+    () => ({
       authenticate,
       setCurrentUser,
       createTopic,
@@ -372,7 +371,27 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       deletePost,
       likePost,
       tipPost,
-      isThreadPostsLoading,
+      loadThreadPosts,
+    }),
+    [
+      authenticate,
+      setCurrentUser,
+      createTopic,
+      reorderTopics,
+      reorderPinnedSubTopics,
+      createSubTopic,
+      updateTopicSettings,
+      updateSubTopicSettings,
+      toggleSubTopicSolved,
+      upsertRoleAssignment,
+      removeRoleAssignment,
+      createPost,
+      uploadPostImage,
+      uploadPostAttachment,
+      updatePost,
+      deletePost,
+      likePost,
+      tipPost,
       loadThreadPosts,
     ]
   );
@@ -423,12 +442,15 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
           }
 
           try {
-            const threadIndex =
-              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            const threadIndex = await loadThreadIndexCached(
+              subTopicId,
+              forumSearchIndexService.loadThreadIndex
+            );
             const postsForThread = threadIndex
               ? postsFromThreadIndex(threadIndex)
               : await forumQdnService.loadPostsBySubTopic(subTopicId);
             threadPostCache.write(subTopicId, postsForThread);
+            writeThreadIndexCache(subTopicId, threadIndex);
           } catch {
             // Ignore background sync errors.
           }
@@ -472,16 +494,33 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
   }, [isAuthReady, isAuthenticated, subTopics]);
 
   return (
-    <ForumContext.Provider value={value}>{children}</ForumContext.Provider>
+    <ForumDataContext.Provider value={dataValue}>
+      <ForumActionsContext.Provider value={actionsValue}>
+        {children}
+      </ForumActionsContext.Provider>
+    </ForumDataContext.Provider>
   );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
-export const useForumContext = () => {
-  const context = useContext(ForumContext);
+export const useForumDataContext = () => {
+  const context = useContext(ForumDataContext);
 
   if (!context) {
-    throw new Error('useForumContext must be used within ForumProvider');
+    throw new Error('useForumDataContext must be used within ForumProvider');
+  }
+
+  return context;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useForumActionsContext = () => {
+  const context = useContext(ForumActionsContext);
+
+  if (!context) {
+    throw new Error(
+      'useForumActionsContext must be used within ForumProvider'
+    );
   }
 
   return context;

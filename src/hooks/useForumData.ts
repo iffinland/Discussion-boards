@@ -1,5 +1,12 @@
-import { useForumContext } from '../context/ForumContext';
+import {
+  useForumActionsContext,
+  useForumDataContext,
+} from '../context/ForumContext';
 
 export const useForumData = () => {
-  return useForumContext();
+  return useForumDataContext();
+};
+
+export const useForumActions = () => {
+  return useForumActionsContext();
 };

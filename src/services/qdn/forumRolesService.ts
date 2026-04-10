@@ -2,6 +2,7 @@ import type { ForumRoleRegistry, UserRole } from '../../types';
 import { fetchWithQdnReadyFallback } from './qdnReadiness';
 import { requestQortal } from '../qortal/qortalClient';
 import { getAccountNames, getUserAccount } from '../qortal/walletService';
+import { perfDebugTimeStart } from '../perf/perfDebug';
 
 const FORUM_SERVICE = import.meta.env.VITE_QORTAL_QDN_SERVICE ?? 'DOCUMENT';
 const FORUM_NAMESPACE =
@@ -13,6 +14,7 @@ const ROLE_IDENTIFIER_PREFIX = `${FORUM_NAMESPACE}-roles-`;
 const PRIMARY_ROLE_IDENTIFIER = `${ROLE_IDENTIFIER_PREFIX}default`;
 const VERIFY_RETRIES = 5;
 const VERIFY_DELAY_MS = 1500;
+const ROLE_REGISTRY_CACHE_TTL_MS = 60 * 1000;
 
 type SearchQdnResourceResult = {
   name: string;
@@ -30,6 +32,16 @@ type RoleRegistryPayload = {
     admins: string[];
     moderators: string[];
   };
+};
+
+let roleRegistryCache: {
+  value: ForumRoleRegistry | null;
+  updatedAt: number;
+  inflight: Promise<ForumRoleRegistry> | null;
+} = {
+  value: null,
+  updatedAt: 0,
+  inflight: null,
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
@@ -271,39 +283,87 @@ export const resolveRoleForAddress = (
 
 export const forumRolesService = {
   async loadRoleRegistry(): Promise<ForumRoleRegistry> {
-    let trustedNames: string[] = [];
+    const endTiming = perfDebugTimeStart('role-registry-load');
+    const now = Date.now();
 
-    try {
-      trustedNames = await getAccountNames(PRIMARY_SYSOP_ADDRESS);
-    } catch {
-      trustedNames = [];
+    if (
+      roleRegistryCache.value &&
+      now - roleRegistryCache.updatedAt <= ROLE_REGISTRY_CACHE_TTL_MS
+    ) {
+      endTiming({ cacheHit: true });
+      return roleRegistryCache.value;
     }
 
-    if (trustedNames.length === 0) {
-      return createDefaultRoleRegistry();
+    if (roleRegistryCache.inflight) {
+      endTiming({ reusedInflight: true });
+      return roleRegistryCache.inflight;
     }
 
-    const trustedNameSet = new Set(
-      trustedNames.map((name) => name.trim().toLowerCase())
-    );
-    const results = (await searchByPrefix(ROLE_IDENTIFIER_PREFIX)).filter(
-      (item) => trustedNameSet.has(item.name.trim().toLowerCase())
-    );
+    const loadPromise = (async (): Promise<ForumRoleRegistry> => {
+      let trustedNames: string[] = [];
 
-    for (const item of results) {
       try {
-        const raw = await fetchResource(item.name, item.identifier);
-        const payload = parseRoleRegistryPayload(raw);
-
-        if (payload) {
-          return toForumRoleRegistry(payload);
-        }
+        trustedNames = await getAccountNames(PRIMARY_SYSOP_ADDRESS);
       } catch {
-        // Ignore malformed resources and continue.
+        trustedNames = [];
       }
-    }
 
-    return createDefaultRoleRegistry();
+      if (trustedNames.length === 0) {
+        return createDefaultRoleRegistry();
+      }
+
+      const trustedNameSet = new Set(
+        trustedNames.map((name) => name.trim().toLowerCase())
+      );
+      const results = (await searchByPrefix(ROLE_IDENTIFIER_PREFIX)).filter(
+        (item) => trustedNameSet.has(item.name.trim().toLowerCase())
+      );
+
+      for (const item of results) {
+        try {
+          const raw = await fetchResource(item.name, item.identifier);
+          const payload = parseRoleRegistryPayload(raw);
+
+          if (payload) {
+            return toForumRoleRegistry(payload);
+          }
+        } catch {
+          // Ignore malformed resources and continue.
+        }
+      }
+
+      return createDefaultRoleRegistry();
+    })()
+      .then((result) => {
+        roleRegistryCache = {
+          value: result,
+          updatedAt: Date.now(),
+          inflight: null,
+        };
+        return result;
+      })
+      .catch((error) => {
+        roleRegistryCache = {
+          ...roleRegistryCache,
+          inflight: null,
+        };
+        throw error;
+      });
+
+    roleRegistryCache = {
+      ...roleRegistryCache,
+      inflight: loadPromise,
+    };
+
+    return loadPromise.then((result) => {
+      endTiming({
+        cacheHit: false,
+        sysOpCount: result.sysOps.length,
+        adminCount: result.admins.length,
+        moderatorCount: result.moderators.length,
+      });
+      return result;
+    });
   },
 
   async publishRoleRegistry(registry: ForumRoleRegistry, ownerName?: string) {
@@ -348,6 +408,12 @@ export const forumRolesService = {
     });
 
     await verifyPublication(resolvedOwner, PRIMARY_ROLE_IDENTIFIER);
+
+    roleRegistryCache = {
+      value: sanitizedRegistry,
+      updatedAt,
+      inflight: null,
+    };
 
     return sanitizedRegistry;
   },

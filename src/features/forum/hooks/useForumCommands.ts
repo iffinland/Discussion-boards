@@ -18,6 +18,7 @@ import type {
 } from '../../../services/qdn/forumSearchIndexService';
 import { forumSearchIndexService } from '../../../services/qdn/forumSearchIndexService';
 import { forumRolesService } from '../../../services/qdn/forumRolesService';
+import { writeThreadIndexCache } from '../../../services/qdn/threadIndexCache';
 import type {
   ForumRoleRegistry,
   Post,
@@ -151,6 +152,7 @@ export const useForumCommands = ({
           ...current,
           [subTopicId]: snapshot,
         }));
+        writeThreadIndexCache(subTopicId, snapshot);
       } catch {
         // Keep forum mutations successful even if index publish lags behind.
       }

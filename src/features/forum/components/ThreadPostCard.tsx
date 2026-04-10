@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 
 import UserRoleBadge from '../../../components/common/UserRoleBadge';
 import RichTextContent from '../../../components/forum/RichTextContent';
@@ -312,4 +312,30 @@ const ThreadPostCard = ({
   );
 };
 
-export default ThreadPostCard;
+const areThreadPostCardPropsEqual = (
+  prev: ThreadPostCardProps,
+  next: ThreadPostCardProps
+) => {
+  return (
+    prev.post === next.post &&
+    prev.author === next.author &&
+    prev.authorRole === next.authorRole &&
+    prev.repliedPost === next.repliedPost &&
+    prev.repliedAuthorName === next.repliedAuthorName &&
+    prev.highlighted === next.highlighted &&
+    prev.replyContextHighlighted === next.replyContextHighlighted &&
+    prev.isOwner === next.isOwner &&
+    prev.canModerate === next.canModerate &&
+    prev.hasLiked === next.hasLiked &&
+    prev.tipCount === next.tipCount &&
+    prev.onLike === next.onLike &&
+    prev.onReply === next.onReply &&
+    prev.onShare === next.onShare &&
+    prev.onSendTip === next.onSendTip &&
+    prev.onJumpToPost === next.onJumpToPost &&
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete
+  );
+};
+
+export default memo(ThreadPostCard, areThreadPostCardPropsEqual);

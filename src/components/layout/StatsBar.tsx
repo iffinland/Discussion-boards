@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { useForumData } from '../../hooks/useForumData';
@@ -10,15 +11,19 @@ type StatsBarProps = {
 const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
   const { topics, subTopics, posts } = useForumData();
   const location = useLocation();
-  const totalPosters = new Set(posts.map((post) => post.authorUserId)).size;
-  const totalSubTopicStarters = new Set(
-    subTopics.map((subTopic) => subTopic.authorUserId)
-  ).size;
-  const placeholder = location.pathname.startsWith('/thread/')
-    ? 'Search posts in this thread'
-    : location.pathname.startsWith('/topic/')
-      ? 'Search sub-topics in this topic'
-      : 'Search topics, sub-topics and posts';
+  const totalPosters = useMemo(() => {
+    return new Set(posts.map((post) => post.authorUserId)).size;
+  }, [posts]);
+  const totalSubTopicStarters = useMemo(() => {
+    return new Set(subTopics.map((subTopic) => subTopic.authorUserId)).size;
+  }, [subTopics]);
+  const placeholder = useMemo(() => {
+    return location.pathname.startsWith('/thread/')
+      ? 'Search posts in this thread'
+      : location.pathname.startsWith('/topic/')
+        ? 'Search sub-topics in this topic'
+        : 'Search topics, sub-topics and posts';
+  }, [location.pathname]);
 
   return (
     <div className="bg-forum-stats border-brand-primary border-b">
@@ -71,4 +76,4 @@ const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
   );
 };
 
-export default StatsBar;
+export default memo(StatsBar);

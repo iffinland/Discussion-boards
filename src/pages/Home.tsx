@@ -1,13 +1,15 @@
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type FormEvent,
 } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { useForumData } from '../hooks/useForumData';
+import { useForumActions, useForumData } from '../hooks/useForumData';
 import { canAccessSubTopic } from '../services/forum/forumAccess';
 import {
   buildForumStructureSearchIndex,
@@ -20,11 +22,13 @@ import {
   forumSearchIndexService,
   type ThreadSearchSnapshot,
 } from '../services/qdn/forumSearchIndexService';
+import { loadThreadIndexCached } from '../services/qdn/threadIndexCache';
 import {
   buildQortalShareLink,
   copyToClipboard,
 } from '../services/qortal/share';
 import { getAccountNames } from '../services/qortal/walletService';
+import { perfDebugTimeStart } from '../services/perf/perfDebug';
 import type { SubTopic, Topic, TopicAccess } from '../types';
 
 const parseAddressInput = (value: string) =>
@@ -96,6 +100,11 @@ type DisplayTopic = Topic & {
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
 const ACTIVE_SUBTOPIC_LIMIT = 8;
+const SEARCH_THREAD_INDEX_MAX_CANDIDATES = 18;
+const SEARCH_THREAD_INDEX_INITIAL_BATCH_SIZE = 6;
+const SEARCH_THREAD_INDEX_BATCH_SIZE = 4;
+const SEARCH_THREAD_INDEX_DEBOUNCE_MS = 250;
+const ROLE_NAME_BATCH_SIZE = 6;
 const roleLabelByType: Record<'SuperAdmin' | 'Admin' | 'Moderator', string> = {
   SuperAdmin: 'Super Admin',
   Admin: 'Admin',
@@ -142,13 +151,15 @@ const Home = ({ searchQuery }: HomeProps) => {
     subTopics,
     posts,
     threadSearchIndexes,
+    isAuthReady,
+  } = useForumData();
+  const {
     createTopic,
     reorderTopics,
     updateTopicSettings,
     upsertRoleAssignment,
     removeRoleAssignment,
-    isAuthReady,
-  } = useForumData();
+  } = useForumActions();
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
   const [topicTitle, setTopicTitle] = useState('');
   const [topicDescription, setTopicDescription] = useState('');
@@ -191,6 +202,7 @@ const Home = ({ searchQuery }: HomeProps) => {
   const [searchThreadIndexFailures, setSearchThreadIndexFailures] = useState<
     Record<string, true>
   >({});
+  const requestedRoleNameAddressesRef = useRef<Set<string>>(new Set());
 
   const isAdmin =
     currentUser.role === 'Admin' ||
@@ -227,6 +239,10 @@ const Home = ({ searchQuery }: HomeProps) => {
   const canReorderTopicsByDrag =
     (isSysOp || isSuperAdmin || currentUser.role === 'Admin') &&
     !hasActiveSearch;
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const normalizedDeferredSearchQuery = deferredSearchQuery.trim();
+  const hasDeferredActiveSearch = normalizedDeferredSearchQuery.length > 0;
+  const requestedSearchThreadIndexesRef = useRef<Set<string>>(new Set());
 
   const topicQueryParam = searchParams.get('topic');
   useEffect(() => {
@@ -283,38 +299,105 @@ const Home = ({ searchQuery }: HomeProps) => {
     [searchThreadIndexes, threadSearchIndexes]
   );
 
+  const structureTopics = useMemo(
+    () =>
+      visibleTopics.map((topic) => ({
+        ...topic,
+        subTopics: subTopicsByTopicId.get(topic.id) ?? [],
+      })),
+    [subTopicsByTopicId, visibleTopics]
+  );
+  const structureSearchIndex = useMemo(
+    () =>
+      buildForumStructureSearchIndex(visibleTopics, visibleSubTopics, users),
+    [users, visibleSubTopics, visibleTopics]
+  );
+  const structureSearchResult = useMemo(
+    () =>
+      searchForumStructure(structureSearchIndex, structureTopics, searchQuery),
+    [searchQuery, structureSearchIndex, structureTopics]
+  );
+  const searchThreadIndexCandidateIds = useMemo(() => {
+    if (!hasDeferredActiveSearch) {
+      return [];
+    }
+
+    const prioritizedIds: string[] = [];
+    const seen = new Set<string>();
+    const pushSubTopicId = (subTopicId: string) => {
+      const normalizedId = subTopicId.trim();
+      if (!normalizedId || seen.has(normalizedId)) {
+        return;
+      }
+
+      seen.add(normalizedId);
+      prioritizedIds.push(normalizedId);
+    };
+
+    const structureMatchedTopicIds = new Set(
+      structureSearchResult.topics.map((topic) => topic.id)
+    );
+
+    visibleSubTopics
+      .filter((subTopic) => structureMatchedTopicIds.has(subTopic.topicId))
+      .forEach((subTopic) => {
+        pushSubTopicId(subTopic.id);
+      });
+
+    sortSubTopics(visibleSubTopics).forEach((subTopic) => {
+      pushSubTopicId(subTopic.id);
+    });
+
+    return prioritizedIds.slice(0, SEARCH_THREAD_INDEX_MAX_CANDIDATES);
+  }, [hasDeferredActiveSearch, structureSearchResult.topics, visibleSubTopics]);
+
   useEffect(() => {
-    if (!hasActiveSearch || visibleSubTopics.length === 0) {
+    if (
+      !hasDeferredActiveSearch ||
+      searchThreadIndexCandidateIds.length === 0
+    ) {
       return;
     }
 
-    const missingSubTopicIds = visibleSubTopics
-      .map((subTopic) => subTopic.id)
-      .filter(
-        (subTopicId) =>
-          !searchableThreadIndexes[subTopicId] &&
-          !searchThreadIndexFailures[subTopicId]
-      );
+    const missingSubTopicIds = searchThreadIndexCandidateIds.filter(
+      (subTopicId) =>
+        !searchableThreadIndexes[subTopicId] &&
+        !searchThreadIndexFailures[subTopicId] &&
+        !requestedSearchThreadIndexesRef.current.has(subTopicId)
+    );
 
     if (missingSubTopicIds.length === 0) {
       return;
     }
 
     let active = true;
+    missingSubTopicIds.forEach((subTopicId) => {
+      requestedSearchThreadIndexesRef.current.add(subTopicId);
+    });
 
-    const loadMissingThreadIndexes = async () => {
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const loadBatch = async (subTopicIds: string[]) => {
       const resolved = await mapWithConcurrency(
-        missingSubTopicIds,
+        subTopicIds,
         async (subTopicId) => {
           try {
-            const snapshot =
-              await forumSearchIndexService.loadThreadIndex(subTopicId);
+            const snapshot = await loadThreadIndexCached(
+              subTopicId,
+              forumSearchIndexService.loadThreadIndex
+            );
             return [subTopicId, snapshot] as const;
           } catch {
             return [subTopicId, null] as const;
           }
         },
-        4
+        2
       );
 
       if (!active) {
@@ -348,36 +431,68 @@ const Home = ({ searchQuery }: HomeProps) => {
       }
     };
 
+    const loadMissingThreadIndexes = async () => {
+      const endTiming = perfDebugTimeStart('home-search-thread-index-load', {
+        queryLength: normalizedDeferredSearchQuery.length,
+        candidateCount: searchThreadIndexCandidateIds.length,
+        subTopicCount: missingSubTopicIds.length,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, SEARCH_THREAD_INDEX_DEBOUNCE_MS);
+      });
+
+      if (!active) {
+        return;
+      }
+
+      await loadBatch(
+        missingSubTopicIds.slice(0, SEARCH_THREAD_INDEX_INITIAL_BATCH_SIZE)
+      );
+
+      for (
+        let startIndex = SEARCH_THREAD_INDEX_INITIAL_BATCH_SIZE;
+        startIndex < missingSubTopicIds.length && active;
+        startIndex += SEARCH_THREAD_INDEX_BATCH_SIZE
+      ) {
+        await new Promise<void>((resolve) => {
+          if (typeof maybeWindow.requestIdleCallback === 'function') {
+            maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1500 });
+            return;
+          }
+
+          window.setTimeout(resolve, 150);
+        });
+
+        if (!active) {
+          return;
+        }
+
+        await loadBatch(
+          missingSubTopicIds.slice(
+            startIndex,
+            startIndex + SEARCH_THREAD_INDEX_BATCH_SIZE
+          )
+        );
+      }
+
+      endTiming({
+        queryLength: normalizedDeferredSearchQuery.length,
+        loadedSubTopicCount: missingSubTopicIds.length,
+      });
+    };
+
     void loadMissingThreadIndexes();
 
     return () => {
       active = false;
     };
   }, [
-    hasActiveSearch,
+    hasDeferredActiveSearch,
+    normalizedDeferredSearchQuery.length,
+    searchThreadIndexCandidateIds,
     searchableThreadIndexes,
     searchThreadIndexFailures,
-    visibleSubTopics,
   ]);
-
-  const structureTopics = useMemo(
-    () =>
-      visibleTopics.map((topic) => ({
-        ...topic,
-        subTopics: subTopicsByTopicId.get(topic.id) ?? [],
-      })),
-    [subTopicsByTopicId, visibleTopics]
-  );
-  const structureSearchIndex = useMemo(
-    () =>
-      buildForumStructureSearchIndex(visibleTopics, visibleSubTopics, users),
-    [users, visibleSubTopics, visibleTopics]
-  );
-  const structureSearchResult = useMemo(
-    () =>
-      searchForumStructure(structureSearchIndex, structureTopics, searchQuery),
-    [searchQuery, structureSearchIndex, structureTopics]
-  );
 
   const postMatchCountBySubTopicId = useMemo(() => {
     if (!hasActiveSearch) {
@@ -616,9 +731,33 @@ const Home = ({ searchQuery }: HomeProps) => {
       };
     }
 
-    const resolveRoleNames = async () => {
+    const missingAddresses = uniqueAddresses.filter(
+      (address) =>
+        !roleNamesByAddress[address] &&
+        !requestedRoleNameAddressesRef.current.has(address)
+    );
+
+    if (missingAddresses.length === 0) {
+      return () => {
+        active = false;
+      };
+    }
+
+    missingAddresses.forEach((address) => {
+      requestedRoleNameAddressesRef.current.add(address);
+    });
+
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const resolveRoleNameBatch = async (batch: string[]) => {
       const resolvedEntries = await Promise.all(
-        uniqueAddresses.map(async (address) => {
+        batch.map(async (address) => {
           try {
             const names = await getAccountNames(address);
             const primaryName = names.find((entry) => entry.trim())?.trim();
@@ -633,11 +772,58 @@ const Home = ({ searchQuery }: HomeProps) => {
         return;
       }
 
-      setRoleNamesByAddress(
-        Object.fromEntries(
-          resolvedEntries.filter((entry) => Boolean(entry[1].trim()))
-        )
+      const nextResolved = Object.fromEntries(
+        resolvedEntries.filter((entry) => Boolean(entry[1].trim()))
       );
+      if (Object.keys(nextResolved).length === 0) {
+        return;
+      }
+
+      setRoleNamesByAddress((current) => ({
+        ...current,
+        ...nextResolved,
+      }));
+    };
+
+    const resolveRoleNames = async () => {
+      await new Promise<void>((resolve) => {
+        if (typeof maybeWindow.requestIdleCallback === 'function') {
+          maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1200 });
+          return;
+        }
+
+        window.setTimeout(resolve, 120);
+      });
+
+      if (!active) {
+        return;
+      }
+
+      for (
+        let startIndex = 0;
+        startIndex < missingAddresses.length && active;
+        startIndex += ROLE_NAME_BATCH_SIZE
+      ) {
+        await resolveRoleNameBatch(
+          missingAddresses.slice(startIndex, startIndex + ROLE_NAME_BATCH_SIZE)
+        );
+
+        if (
+          !active ||
+          startIndex + ROLE_NAME_BATCH_SIZE >= missingAddresses.length
+        ) {
+          continue;
+        }
+
+        await new Promise<void>((resolve) => {
+          if (typeof maybeWindow.requestIdleCallback === 'function') {
+            maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1200 });
+            return;
+          }
+
+          window.setTimeout(resolve, 120);
+        });
+      }
     };
 
     void resolveRoleNames();
@@ -645,7 +831,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     return () => {
       active = false;
     };
-  }, [roleRegistry]);
+  }, [roleNamesByAddress, roleRegistry]);
 
   const renderRoleIdentity = (address: string) => {
     const displayName = roleNamesByAddress[address];

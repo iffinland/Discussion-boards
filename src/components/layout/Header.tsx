@@ -7,7 +7,7 @@ import {
 } from 'react';
 
 import UserRoleBadge from '../common/UserRoleBadge';
-import { useForumData } from '../../hooks/useForumData';
+import { useForumActions, useForumData } from '../../hooks/useForumData';
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
 
@@ -67,8 +67,8 @@ const initialsFromName = (name: string | null) => {
 };
 
 const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
-  const { availableAuthNames, activeAuthName, currentUser, setCurrentUser } =
-    useForumData();
+  const { availableAuthNames, activeAuthName, currentUser } = useForumData();
+  const { setCurrentUser } = useForumActions();
   const [isNameMenuOpen, setIsNameMenuOpen] = useState(false);
   const [highlightedNameIndex, setHighlightedNameIndex] = useState(0);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);

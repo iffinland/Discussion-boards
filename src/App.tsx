@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -9,9 +9,10 @@ import {
 } from 'react-router-dom';
 
 import Layout from './components/layout/Layout';
-import Home from './pages/Home';
-import TopicPage from './pages/TopicPage';
-import ThreadPage from './pages/ThreadPage';
+
+const Home = lazy(() => import('./pages/Home'));
+const TopicPage = lazy(() => import('./pages/TopicPage'));
+const ThreadPage = lazy(() => import('./pages/ThreadPage'));
 
 type ThemeMode = 'light-cyan' | 'soft-cyan';
 const THEME_STORAGE_KEY = 'forum-theme-mode';
@@ -65,28 +66,38 @@ const App = () => {
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
       >
-        <Routes>
-          <Route path="/" element={<Home searchQuery={searchQuery} />} />
-          <Route
-            path="/topic/:id"
-            element={
-              <TopicPage
-                searchQuery={searchQuery}
-                onSearchQueryChange={setSearchQuery}
-              />
-            }
-          />
-          <Route
-            path="/thread/:id"
-            element={
-              <ThreadPage
-                searchQuery={searchQuery}
-                onSearchQueryChange={setSearchQuery}
-              />
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense
+          fallback={
+            <div className="space-y-4">
+              <div className="forum-card p-5">
+                <p className="text-ui-muted text-sm">Loading page...</p>
+              </div>
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Home searchQuery={searchQuery} />} />
+            <Route
+              path="/topic/:id"
+              element={
+                <TopicPage
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                />
+              }
+            />
+            <Route
+              path="/thread/:id"
+              element={
+                <ThreadPage
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </Layout>
     </BrowserRouter>
   );

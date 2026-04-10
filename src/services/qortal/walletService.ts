@@ -16,6 +16,23 @@ interface NameDataResponse {
   address?: string;
 }
 
+const ACCOUNT_NAMES_TTL_MS = 5 * 60 * 1000;
+const NAME_ADDRESS_TTL_MS = 5 * 60 * 1000;
+
+type CachedValue<T> = {
+  value: T;
+  cachedAt: number;
+};
+
+const accountNamesCache = new Map<string, CachedValue<string[]>>();
+const accountNamesInflight = new Map<string, Promise<string[]>>();
+const nameAddressCache = new Map<string, CachedValue<string | null>>();
+const nameAddressInflight = new Map<string, Promise<string | null>>();
+
+const isFresh = (cachedAt: number, ttlMs: number) => {
+  return Date.now() - cachedAt < ttlMs;
+};
+
 const readNumericBalance = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -66,6 +83,103 @@ export const getUserAccount = async (): Promise<UserAccount> => {
 };
 
 export const getAccountNames = async (address: string): Promise<string[]> => {
+  const normalizedAddress = address.trim();
+  if (!normalizedAddress) {
+    return [];
+  }
+
+  const cached = accountNamesCache.get(normalizedAddress);
+  if (cached && isFresh(cached.cachedAt, ACCOUNT_NAMES_TTL_MS)) {
+    return cached.value;
+  }
+
+  const existingInflight = accountNamesInflight.get(normalizedAddress);
+  if (existingInflight) {
+    return existingInflight;
+  }
+
+  const requestPromise = requestQortal<unknown>({
+    action: 'GET_ACCOUNT_NAMES',
+    address: normalizedAddress,
+  })
+    .then((raw) => {
+      const normalizedNames = normalizeNames(raw);
+      accountNamesCache.set(normalizedAddress, {
+        value: normalizedNames,
+        cachedAt: Date.now(),
+      });
+      return normalizedNames;
+    })
+    .finally(() => {
+      accountNamesInflight.delete(normalizedAddress);
+    });
+
+  accountNamesInflight.set(normalizedAddress, requestPromise);
+  return requestPromise;
+};
+
+export const resolveNameWalletAddress = async (
+  name: string
+): Promise<string | null> => {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return null;
+  }
+
+  const cacheKey = trimmedName.toLowerCase();
+  const cached = nameAddressCache.get(cacheKey);
+  if (cached && isFresh(cached.cachedAt, NAME_ADDRESS_TTL_MS)) {
+    return cached.value;
+  }
+
+  const existingInflight = nameAddressInflight.get(cacheKey);
+  if (existingInflight) {
+    return existingInflight;
+  }
+
+  const requestPromise = requestQortal<NameDataResponse | null>({
+    action: 'GET_NAME_DATA',
+    name: trimmedName,
+  })
+    .then((response) => {
+      if (!response || typeof response !== 'object') {
+        nameAddressCache.set(cacheKey, {
+          value: null,
+          cachedAt: Date.now(),
+        });
+        return null;
+      }
+
+      const resolvedAddress =
+        normalizeAddress(response.owner) ||
+        normalizeAddress(response.ownerAddress) ||
+        normalizeAddress(response.address);
+
+      nameAddressCache.set(cacheKey, {
+        value: resolvedAddress,
+        cachedAt: Date.now(),
+      });
+
+      return resolvedAddress;
+    })
+    .finally(() => {
+      nameAddressInflight.delete(cacheKey);
+    });
+
+  nameAddressInflight.set(cacheKey, requestPromise);
+  return requestPromise;
+};
+
+export const clearWalletLookupCaches = () => {
+  accountNamesCache.clear();
+  accountNamesInflight.clear();
+  nameAddressCache.clear();
+  nameAddressInflight.clear();
+};
+
+export const getAccountNamesUncached = async (
+  address: string
+): Promise<string[]> => {
   const raw = await requestQortal<unknown>({
     action: 'GET_ACCOUNT_NAMES',
     address,
@@ -81,30 +195,6 @@ const normalizeAddress = (value: unknown): string | null => {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-};
-
-export const resolveNameWalletAddress = async (
-  name: string
-): Promise<string | null> => {
-  const trimmedName = name.trim();
-  if (!trimmedName) {
-    return null;
-  }
-
-  const response = await requestQortal<NameDataResponse | null>({
-    action: 'GET_NAME_DATA',
-    name: trimmedName,
-  });
-
-  if (!response || typeof response !== 'object') {
-    return null;
-  }
-
-  return (
-    normalizeAddress(response.owner) ||
-    normalizeAddress(response.ownerAddress) ||
-    normalizeAddress(response.address)
-  );
 };
 
 export const getQortBalance = async (): Promise<number> => {

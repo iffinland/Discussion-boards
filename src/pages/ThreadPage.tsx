@@ -8,7 +8,7 @@ import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
 import ThreadPostCard from '../features/forum/components/ThreadPostCard';
 import { useThreadActions } from '../features/forum/hooks/useThreadActions';
 import { useThreadDataQuery } from '../features/forum/hooks/useThreadDataQuery';
-import { useForumData } from '../hooks/useForumData';
+import { useForumActions, useForumData } from '../hooks/useForumData';
 import {
   buildThreadPostSearchIndex,
   createSearchHaystack,
@@ -25,9 +25,15 @@ import {
   copyToClipboard,
 } from '../services/qortal/share';
 import { resolveNameWalletAddress } from '../services/qortal/walletService';
+import { perfDebugLog, perfDebugTimeStart } from '../services/perf/perfDebug';
 import type { UserRole } from '../types';
 
 const THREAD_BATCH_SIZE = 12;
+const THREAD_VIRTUALIZE_THRESHOLD = 30;
+const THREAD_VIRTUAL_ROW_ESTIMATE = 280;
+const THREAD_VIRTUAL_OVERSCAN = 6;
+const AUTHOR_ROLE_INITIAL_BATCH_SIZE = 8;
+const AUTHOR_ROLE_BATCH_SIZE = 6;
 type PostSortMode = 'oldest' | 'newest';
 
 type ThreadPageProps = {
@@ -48,6 +54,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     posts,
     threadSearchIndexes,
     isAuthenticated,
+    isThreadPostsLoading,
+    isAuthReady,
+  } = useForumData();
+  const {
     updateSubTopicSettings,
     toggleSubTopicSolved,
     createPost,
@@ -57,10 +67,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     deletePost,
     likePost,
     tipPost,
-    isThreadPostsLoading,
     loadThreadPosts,
-    isAuthReady,
-  } = useForumData();
+  } = useForumActions();
   const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
   const [moderationFeedback, setModerationFeedback] = useState<string | null>(
     null
@@ -77,10 +85,16 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     Record<string, UserRole>
   >({});
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
+  const [virtualScrollTop, setVirtualScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [virtualFocusIndex, setVirtualFocusIndex] = useState<number | null>(
+    null
+  );
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const resolvedAuthorAddressRef = useRef<Map<string, string | null>>(
     new Map()
   );
+  const requestedAuthorRolesRef = useRef<Set<string>>(new Set());
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const { subTopic, threadPosts, userMap, resolveAuthorDisplayName } =
@@ -189,6 +203,62 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
   }, [postSortMode, sharedPostId, threadPostMap, visiblePosts]);
+  const shouldVirtualize = displayPosts.length >= THREAD_VIRTUALIZE_THRESHOLD;
+  const virtualWindow = useMemo(() => {
+    if (!shouldVirtualize) {
+      return {
+        start: 0,
+        end: displayPosts.length,
+      };
+    }
+
+    const baseVisibleRows = Math.max(
+      THREAD_BATCH_SIZE,
+      Math.ceil(Math.max(viewportHeight, 1) / THREAD_VIRTUAL_ROW_ESTIMATE)
+    );
+
+    let start = Math.max(
+      0,
+      Math.floor(virtualScrollTop / THREAD_VIRTUAL_ROW_ESTIMATE) -
+        THREAD_VIRTUAL_OVERSCAN
+    );
+
+    if (virtualFocusIndex !== null) {
+      start = Math.max(0, virtualFocusIndex - THREAD_VIRTUAL_OVERSCAN);
+    }
+
+    const end = Math.min(
+      displayPosts.length,
+      start + baseVisibleRows + THREAD_VIRTUAL_OVERSCAN * 2
+    );
+
+    return { start, end };
+  }, [
+    displayPosts.length,
+    shouldVirtualize,
+    viewportHeight,
+    virtualFocusIndex,
+    virtualScrollTop,
+  ]);
+  const renderedPosts = useMemo(
+    () => displayPosts.slice(virtualWindow.start, virtualWindow.end),
+    [displayPosts, virtualWindow.end, virtualWindow.start]
+  );
+  const topSpacerHeight = shouldVirtualize
+    ? virtualWindow.start * THREAD_VIRTUAL_ROW_ESTIMATE
+    : 0;
+  const bottomSpacerHeight = shouldVirtualize
+    ? (displayPosts.length - virtualWindow.end) * THREAD_VIRTUAL_ROW_ESTIMATE
+    : 0;
+  const renderWindowSize = renderedPosts.length;
+  const visibleAuthorIds = useMemo(
+    () => [
+      ...new Set(
+        renderedPosts.map((post) => post.authorUserId).filter(Boolean)
+      ),
+    ],
+    [renderedPosts]
+  );
 
   const canLoadMore = visibleCount < orderedThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
@@ -235,20 +305,33 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
   useEffect(() => {
     let active = true;
-    const uniqueAuthorIds = [
-      ...new Set(threadPosts.map((post) => post.authorUserId).filter(Boolean)),
-    ];
+    const missingAuthorIds = visibleAuthorIds.filter(
+      (authorUserId) =>
+        authorRolesByUserId[authorUserId] === undefined &&
+        !requestedAuthorRolesRef.current.has(authorUserId)
+    );
 
-    if (uniqueAuthorIds.length === 0) {
-      setAuthorRolesByUserId({});
+    if (missingAuthorIds.length === 0) {
       return () => {
         active = false;
       };
     }
 
-    const resolveAuthorRoles = async () => {
+    missingAuthorIds.forEach((authorUserId) => {
+      requestedAuthorRolesRef.current.add(authorUserId);
+    });
+
+    const maybeWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const resolveRoleBatch = async (authorIds: string[]) => {
       const resolvedEntries = await Promise.all(
-        uniqueAuthorIds.map(async (authorUserId) => {
+        authorIds.map(async (authorUserId) => {
           const directRole = resolveRoleForAddress(authorUserId, roleRegistry);
           if (directRole !== 'Member') {
             return [authorUserId, directRole] as const;
@@ -285,7 +368,52 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         return;
       }
 
-      setAuthorRolesByUserId(Object.fromEntries(resolvedEntries));
+      setAuthorRolesByUserId((current) => ({
+        ...current,
+        ...Object.fromEntries(resolvedEntries),
+      }));
+    };
+
+    const resolveAuthorRoles = async () => {
+      const endTiming = perfDebugTimeStart('thread-page-author-role-load', {
+        threadId: id ?? null,
+        authorCount: missingAuthorIds.length,
+        renderedPostCount: renderedPosts.length,
+      });
+      await resolveRoleBatch(
+        missingAuthorIds.slice(0, AUTHOR_ROLE_INITIAL_BATCH_SIZE)
+      );
+
+      for (
+        let startIndex = AUTHOR_ROLE_INITIAL_BATCH_SIZE;
+        startIndex < missingAuthorIds.length && active;
+        startIndex += AUTHOR_ROLE_BATCH_SIZE
+      ) {
+        await new Promise<void>((resolve) => {
+          if (typeof maybeWindow.requestIdleCallback === 'function') {
+            maybeWindow.requestIdleCallback(() => resolve(), { timeout: 1200 });
+            return;
+          }
+
+          window.setTimeout(resolve, 120);
+        });
+
+        if (!active) {
+          return;
+        }
+
+        await resolveRoleBatch(
+          missingAuthorIds.slice(
+            startIndex,
+            startIndex + AUTHOR_ROLE_BATCH_SIZE
+          )
+        );
+      }
+
+      endTiming({
+        threadId: id ?? null,
+        resolvedAuthorCount: missingAuthorIds.length,
+      });
     };
 
     void resolveAuthorRoles();
@@ -293,7 +421,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     return () => {
       active = false;
     };
-  }, [roleRegistry, threadPosts, userMap]);
+  }, [
+    authorRolesByUserId,
+    id,
+    renderedPosts.length,
+    roleRegistry,
+    userMap,
+    visibleAuthorIds,
+  ]);
 
   const handleToggleSubTopicStatus = async () => {
     if (!subTopic) {
@@ -458,11 +593,110 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
+    setVirtualFocusIndex(null);
   }, [filteredThreadPosts.length, id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!shouldVirtualize) {
+      setVirtualScrollTop(0);
+      setViewportHeight(window.innerHeight);
+      return;
+    }
+
+    let frameId = 0;
+    const updateViewportState = () => {
+      setVirtualScrollTop(window.scrollY || window.pageYOffset || 0);
+      setViewportHeight(window.innerHeight);
+    };
+
+    const handleScroll = () => {
+      if (frameId) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        updateViewportState();
+      });
+    };
+
+    updateViewportState();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', updateViewportState);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updateViewportState);
+    };
+  }, [shouldVirtualize]);
+
+  useEffect(() => {
+    perfDebugLog('thread-render-window', {
+      threadId: id ?? null,
+      totalPosts: displayPosts.length,
+      renderedPosts: renderWindowSize,
+      shouldVirtualize,
+      visibleCount,
+      windowStart: virtualWindow.start,
+      windowEnd: virtualWindow.end,
+      searchActive: hasActiveSearch,
+    });
+  }, [
+    displayPosts.length,
+    hasActiveSearch,
+    id,
+    renderWindowSize,
+    shouldVirtualize,
+    virtualWindow.end,
+    virtualWindow.start,
+    visibleCount,
+  ]);
+
+  useEffect(() => {
+    if (!shouldVirtualize || typeof window === 'undefined') {
+      return;
+    }
+
+    let frameCount = 0;
+    let lastTimestamp = performance.now();
+    let rafId = 0;
+
+    const sampleFps = (timestamp: number) => {
+      frameCount += 1;
+      const elapsed = timestamp - lastTimestamp;
+
+      if (elapsed >= 2000) {
+        const fps = (frameCount * 1000) / elapsed;
+        perfDebugLog('thread-scroll-fps', {
+          threadId: id ?? null,
+          fps: Number(fps.toFixed(1)),
+          renderedPosts: renderWindowSize,
+          totalPosts: displayPosts.length,
+        });
+        frameCount = 0;
+        lastTimestamp = timestamp;
+      }
+
+      rafId = window.requestAnimationFrame(sampleFps);
+    };
+
+    rafId = window.requestAnimationFrame(sampleFps);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [displayPosts.length, id, renderWindowSize, shouldVirtualize]);
 
   useEffect(() => {
     if (!sharedPostId) {
       setHighlightedPostId(null);
+      setVirtualFocusIndex(null);
       return;
     }
 
@@ -471,6 +705,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     );
     if (targetIndex >= 0) {
       setVisibleCount((current) => Math.max(current, targetIndex + 1));
+      setVirtualFocusIndex(targetIndex);
     }
   }, [orderedThreadPosts, sharedPostId]);
 
@@ -493,6 +728,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         behavior: 'smooth',
         block: 'center',
       });
+      setVirtualFocusIndex(null);
       setHighlightedPostId(sharedPostId);
       setReplyContextPostId(
         threadPostMap.get(sharedPostId)?.parentPostId ?? null
@@ -523,6 +759,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     );
     if (targetIndex >= 0) {
       setVisibleCount((current) => Math.max(current, targetIndex + 1));
+      setVirtualFocusIndex(targetIndex);
     }
 
     window.requestAnimationFrame(() => {
@@ -535,6 +772,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         behavior: 'smooth',
         block: 'center',
       });
+      setVirtualFocusIndex(null);
       setHighlightedPostId(postId);
       window.setTimeout(() => {
         setHighlightedPostId((current) =>
@@ -829,7 +1067,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       ) : null}
 
       <section className="space-y-3">
-        {displayPosts.map((post) => (
+        {topSpacerHeight > 0 ? (
+          <div style={{ height: topSpacerHeight }} aria-hidden="true" />
+        ) : null}
+        {renderedPosts.map((post) => (
           <ThreadPostCard
             key={post.id}
             post={post}
@@ -864,6 +1105,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             onDelete={handleDeletePost}
           />
         ))}
+        {bottomSpacerHeight > 0 ? (
+          <div style={{ height: bottomSpacerHeight }} aria-hidden="true" />
+        ) : null}
         {canLoadMore ? (
           <div ref={loadMoreRef} className="h-6 w-full" aria-hidden="true" />
         ) : null}
