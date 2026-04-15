@@ -657,16 +657,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicStatus = async (subTopic: SubTopic) => {
-    const reason = window.prompt(
-      `Provide reason to ${
-        subTopic.status === 'locked' ? 'unlock' : 'lock'
-      } this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setManagementFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -678,7 +668,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setManagementFeedback(
@@ -689,16 +678,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicVisibility = async (subTopic: SubTopic) => {
-    const reason = window.prompt(
-      `Provide reason to ${
-        subTopic.visibility === 'hidden' ? 'show' : 'hide'
-      } this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setManagementFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -710,7 +689,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setManagementFeedback(
@@ -721,15 +699,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleHideBrokenSubTopic = async (subTopic: SubTopic) => {
-    const reason = window.prompt(
-      'Provide reason to hide this broken sub-topic from forum users:',
-      'Broken QDN thread resource'
-    );
-    if (!reason?.trim()) {
-      setManagementFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -741,7 +710,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
+      moderationReason: 'Broken QDN thread resource',
     });
 
     if (result.ok) {
@@ -756,14 +725,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   };
 
   const handleToggleSubTopicPin = async (subTopic: SubTopic) => {
-    const reason = window.prompt(
-      `Provide reason to ${subTopic.isPinned ? 'unpin' : 'pin'} this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setManagementFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       topicId: subTopic.topicId,
@@ -775,7 +736,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setManagementFeedback(

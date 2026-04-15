@@ -798,14 +798,8 @@ export const useForumCommands = ({
       if (isSolvedChanged) {
         moderationActions.push(input.isSolved ? 'mark-solved' : 'clear-solved');
       }
-      const requiresModerationReason = moderationActions.length > 0;
       const moderationReason = input.moderationReason?.trim() ?? '';
-      if (requiresModerationReason && !moderationReason) {
-        return {
-          ok: false,
-          error: 'Reason is required for moderation actions.',
-        };
-      }
+      const hasModerationAction = moderationActions.length > 0;
 
       const title = input.title.trim();
       const description = input.description.trim();
@@ -855,16 +849,16 @@ export const useForumCommands = ({
           : null,
         access: input.access,
         allowedAddresses,
-        lastModerationAction: requiresModerationReason
+        lastModerationAction: hasModerationAction
           ? moderationActions.join(',')
           : (target.lastModerationAction ?? null),
-        lastModerationReason: requiresModerationReason
-          ? moderationReason
+        lastModerationReason: hasModerationAction
+          ? moderationReason || null
           : (target.lastModerationReason ?? null),
-        lastModeratedByUserId: requiresModerationReason
+        lastModeratedByUserId: hasModerationAction
           ? currentUser.id
           : (target.lastModeratedByUserId ?? null),
-        lastModeratedAt: requiresModerationReason
+        lastModeratedAt: hasModerationAction
           ? new Date().toISOString()
           : (target.lastModeratedAt ?? null),
       };
@@ -919,7 +913,7 @@ export const useForumCommands = ({
   const toggleSubTopicSolved = useCallback(
     async (input: {
       subTopicId: string;
-      reason: string;
+      reason?: string | null;
     }): Promise<ForumMutationResult> => {
       const target = subTopics.find(
         (subTopic) => subTopic.id === input.subTopicId
@@ -940,13 +934,7 @@ export const useForumCommands = ({
         };
       }
 
-      const reason = input.reason.trim();
-      if (!reason) {
-        return {
-          ok: false,
-          error: 'Reason is required for moderation actions.',
-        };
-      }
+      const reason = input.reason?.trim() ?? '';
 
       const updatedSubTopic: SubTopic = {
         ...target,
@@ -954,7 +942,7 @@ export const useForumCommands = ({
         solvedAt: target.isSolved ? null : new Date().toISOString(),
         solvedByUserId: target.isSolved ? null : currentUser.id,
         lastModerationAction: target.isSolved ? 'clear-solved' : 'mark-solved',
-        lastModerationReason: reason,
+        lastModerationReason: reason || null,
         lastModeratedByUserId: currentUser.id,
         lastModeratedAt: new Date().toISOString(),
       };
@@ -1435,7 +1423,7 @@ export const useForumCommands = ({
   const deletePost = useCallback(
     async (input: {
       postId: string;
-      reason: string;
+      reason?: string | null;
     }): Promise<ForumMutationResult> => {
       const target = posts.find((post) => post.id === input.postId);
       if (!target) {
@@ -1452,14 +1440,6 @@ export const useForumCommands = ({
           ok: false,
           error:
             'Only owner, admin, Super Admin or SysOp can delete this post.',
-        };
-      }
-
-      const reason = input.reason.trim();
-      if (!reason) {
-        return {
-          ok: false,
-          error: 'Reason is required when deleting posts.',
         };
       }
 

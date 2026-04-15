@@ -115,7 +115,7 @@ type ForumActionsContextValue = {
   }) => Promise<ForumMutationResult>;
   toggleSubTopicSolved: (input: {
     subTopicId: string;
-    reason: string;
+    reason?: string | null;
   }) => Promise<ForumMutationResult>;
   createPost: (input: {
     subTopicId: string;
@@ -136,7 +136,7 @@ type ForumActionsContextValue = {
   }) => Promise<ForumMutationResult>;
   deletePost: (input: {
     postId: string;
-    reason: string;
+    reason?: string | null;
   }) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;

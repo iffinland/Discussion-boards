@@ -32,7 +32,7 @@ type UseThreadActionsParams = {
   }) => Promise<ForumMutationResult>;
   deletePost: (input: {
     postId: string;
-    reason: string;
+    reason?: string | null;
   }) => Promise<ForumMutationResult>;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
   resolveAuthorDisplayName: (authorUserId: string) => string;
@@ -118,13 +118,7 @@ export const useThreadActions = ({
 
   const handleDeletePost = useCallback(
     async (postId: string) => {
-      const reason = window.prompt('Provide a reason for deleting this post:');
-      if (!reason?.trim()) {
-        setFeedback('Delete cancelled: reason is required.');
-        return;
-      }
-
-      const result = await deletePost({ postId, reason });
+      const result = await deletePost({ postId });
       if (!result.ok) {
         setFeedback(result.error ?? 'Unable to delete post.');
         return;

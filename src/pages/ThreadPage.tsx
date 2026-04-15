@@ -462,16 +462,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const reason = window.prompt(
-      `Provide reason to ${
-        subTopic.status === 'locked' ? 'unlock' : 'lock'
-      } this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setModerationFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -482,7 +472,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -497,16 +486,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const reason = window.prompt(
-      `Provide reason to ${
-        subTopic.visibility === 'hidden' ? 'show' : 'hide'
-      } this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setModerationFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -517,7 +496,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -532,14 +510,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const reason = window.prompt(
-      `Provide reason to ${subTopic.isPinned ? 'unpin' : 'pin'} this sub-topic:`
-    );
-    if (!reason?.trim()) {
-      setModerationFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await updateSubTopicSettings({
       subTopicId: subTopic.id,
       title: subTopic.title,
@@ -550,7 +520,6 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       isSolved: subTopic.isSolved,
       access: subTopic.access,
       allowedAddresses: subTopic.allowedAddresses,
-      moderationReason: reason,
     });
 
     setModerationFeedback(
@@ -567,19 +536,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
-    const reason = window.prompt(
-      `Provide reason to ${
-        subTopic.isSolved ? 'clear solved' : 'mark as solved'
-      }:`
-    );
-    if (!reason?.trim()) {
-      setModerationFeedback('Action cancelled: reason is required.');
-      return;
-    }
-
     const result = await toggleSubTopicSolved({
       subTopicId: subTopic.id,
-      reason,
     });
     setModerationFeedback(
       result.ok
