@@ -1293,6 +1293,9 @@ export const useForumCommands = ({
           input.subTopicId,
           nextPosts
         );
+        const threadPostsForSubTopic = nextPosts.filter(
+          (post) => post.subTopicId === input.subTopicId
+        );
         const topicDirectoryResource = buildTopicDirectoryIndexResource(
           topics,
           nextSubTopics
@@ -1303,12 +1306,12 @@ export const useForumCommands = ({
           topicDirectoryResource.resource,
         ]);
 
+        threadPostCache.write(input.subTopicId, threadPostsForSubTopic);
+        writeThreadIndexCache(input.subTopicId, threadIndexResource.snapshot);
+
         setPosts((current) => {
           const next = [...current, newPost];
-          threadPostCache.write(
-            input.subTopicId,
-            next.filter((post) => post.subTopicId === input.subTopicId)
-          );
+          threadPostCache.write(input.subTopicId, threadPostsForSubTopic);
           return next;
         });
         setSubTopics((current) =>

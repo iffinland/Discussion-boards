@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import ShareIcon from '../components/common/ShareIcon';
 import QortTipModal from '../features/forum/components/QortTipModal';
@@ -44,6 +44,7 @@ type ThreadPageProps = {
 const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     users,
     currentUser,
@@ -84,6 +85,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const [authorRolesByUserId, setAuthorRolesByUserId] = useState<
     Record<string, UserRole>
   >({});
+  const [hasInitialThreadLoadCompleted, setHasInitialThreadLoadCompleted] =
+    useState(false);
   const [visibleCount, setVisibleCount] = useState<number>(THREAD_BATCH_SIZE);
   const [virtualScrollTop, setVirtualScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -164,6 +167,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     () => searchThreadPosts(postSearchIndex, threadPosts, deferredSearchQuery),
     [deferredSearchQuery, postSearchIndex, threadPosts]
   );
+  const hasActiveThreadSearch = deferredSearchQuery.trim().length > 0;
   const orderedThreadPosts = useMemo(() => {
     const sorted = [...filteredThreadPosts].sort(
       (a, b) =>
@@ -175,6 +179,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     () => new URLSearchParams(location.search).get('post'),
     [location.search]
   );
+  const shouldAutoOpenComposer = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('compose') === '1';
+  }, [location.search]);
   const threadPostMap = useMemo(
     () => new Map(threadPosts.map((post) => [post.id, post])),
     [threadPosts]
@@ -302,6 +310,25 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       setIsComposerOpen(true);
     }
   }, [replyTarget]);
+
+  useEffect(() => {
+    if (!shouldAutoOpenComposer) {
+      return;
+    }
+
+    setIsComposerOpen(true);
+    const params = new URLSearchParams(location.search);
+    params.delete('compose');
+    params.delete('firstPost');
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate, shouldAutoOpenComposer]);
 
   useEffect(() => {
     let active = true;
@@ -572,6 +599,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   }, [id, onSearchQueryChange]);
 
   useEffect(() => {
+    setHasInitialThreadLoadCompleted(false);
+  }, [id]);
+
+  useEffect(() => {
     if (!id || !subTopic) {
       return;
     }
@@ -581,6 +612,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       if (!active) {
         return;
       }
+      setHasInitialThreadLoadCompleted(true);
       setThreadLoadError(
         result.ok ? null : (result.error ?? 'Unable to load thread posts.')
       );
@@ -590,6 +622,21 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       active = false;
     };
   }, [id, loadThreadPosts, subTopic]);
+
+  const shouldShowThreadEmptyState =
+    hasInitialThreadLoadCompleted &&
+    !isThreadPostsLoading &&
+    !threadLoadError &&
+    displayPosts.length === 0;
+  const isCreatingFirstPost =
+    threadPosts.length === 0 && !replyTarget && isComposerOpen;
+  const composerTitle = isCreatingFirstPost ? 'Add First Post' : 'Add Reply';
+  const composerPlaceholder = isCreatingFirstPost
+    ? 'Write the first post for this new sub-topic...'
+    : 'Share your thoughts with the community...';
+  const composerSubmitLabel = isCreatingFirstPost
+    ? 'Publish First Post'
+    : 'Publish Reply';
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
@@ -1111,13 +1158,15 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         {canLoadMore ? (
           <div ref={loadMoreRef} className="h-6 w-full" aria-hidden="true" />
         ) : null}
-        {displayPosts.length === 0 ? (
+        {shouldShowThreadEmptyState ? (
           <div className="forum-card p-5">
             <p className="text-ui-strong text-sm font-semibold">
-              No matching posts
+              {hasActiveThreadSearch ? 'No matching posts' : 'No posts yet'}
             </p>
             <p className="text-ui-muted mt-1 text-sm">
-              Adjust the forum search field to search this thread differently.
+              {hasActiveThreadSearch
+                ? 'Adjust the forum search field to search this thread differently.'
+                : 'This thread does not have any published posts yet.'}
             </p>
           </div>
         ) : null}
@@ -1125,6 +1174,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
       {isComposerOpen || replyTarget ? (
         <ThreadComposer
+          title={composerTitle}
+          placeholder={composerPlaceholder}
+          submitLabel={composerSubmitLabel}
           replyText={replyText}
           replyAttachments={replyAttachments}
           replyTargetAuthorName={

@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,13 +8,16 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import RichTextEditor from '../components/forum/RichTextEditor';
 import SubTopicList from '../components/forum/SubTopicList';
 import { useForumActions, useForumData } from '../hooks/useForumData';
 import {
   canAccessSubTopic,
   resolveAccessLabel,
 } from '../services/forum/forumAccess';
+import {
+  clearThreadQuarantine,
+  isThreadQuarantined,
+} from '../services/forum/threadLoadQuarantine';
 import { forumSearchIndexService } from '../services/qdn/forumSearchIndexService';
 import {
   loadThreadIndexCached,
@@ -27,7 +29,7 @@ import {
 } from '../services/qortal/share';
 import { getAccountNames } from '../services/qortal/walletService';
 import { perfDebugTimeStart } from '../services/perf/perfDebug';
-import type { PostAttachment, SubTopic, TopicAccess } from '../types';
+import type { SubTopic, TopicAccess } from '../types';
 
 type TopicPageProps = {
   searchQuery: string;
@@ -105,14 +107,8 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     posts,
     threadSearchIndexes,
   } = useForumData();
-  const {
-    createSubTopic,
-    createPost,
-    uploadPostImage,
-    uploadPostAttachment,
-    updateSubTopicSettings,
-    reorderPinnedSubTopics,
-  } = useForumActions();
+  const { createSubTopic, updateSubTopicSettings, reorderPinnedSubTopics } =
+    useForumActions();
   const [walletNamesByAddress, setWalletNamesByAddress] = useState<
     Record<string, string>
   >({});
@@ -120,10 +116,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   const [createFeedback, setCreateFeedback] = useState<string | null>(null);
   const [subTopicTitle, setSubTopicTitle] = useState('');
   const [subTopicDescription, setSubTopicDescription] = useState('');
-  const [firstPostContent, setFirstPostContent] = useState('');
-  const [firstPostAttachments, setFirstPostAttachments] = useState<
-    PostAttachment[]
-  >([]);
   const [managementFeedback, setManagementFeedback] = useState<string | null>(
     null
   );
@@ -272,6 +264,15 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     );
     return merged;
   }, [fetchedPostCountsBySubTopicId, localPostCountsBySubTopicId]);
+  const quarantinedSubTopicIds = useMemo(
+    () =>
+      Object.fromEntries(
+        visibleSubTopics
+          .filter((subTopic) => isThreadQuarantined(subTopic.id))
+          .map((subTopic) => [subTopic.id, true] as const)
+      ),
+    [visibleSubTopics]
+  );
 
   useEffect(() => {
     if (!topic) {
@@ -383,6 +384,12 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     const missingSubTopicIds = visibleSubTopics
       .map((subTopic) => subTopic.id)
       .filter((subTopicId) => {
+        if (isThreadQuarantined(subTopicId)) {
+          nextCachedCounts[subTopicId] =
+            localPostCountsBySubTopicId[subTopicId] ?? 0;
+          return false;
+        }
+
         if (postCountsBySubTopicId[subTopicId] !== undefined) {
           return false;
         }
@@ -515,30 +522,6 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     onSearchQueryChange('');
   }, [onSearchQueryChange, topicId]);
 
-  const uploadImageForTopicPost = useCallback(
-    async (file: File): Promise<string> => {
-      const result = await uploadPostImage(file);
-      if (!result.ok || !result.imageTag) {
-        throw new Error(result.error ?? 'Unable to upload image.');
-      }
-
-      return result.imageTag;
-    },
-    [uploadPostImage]
-  );
-
-  const uploadAttachmentForTopicPost = useCallback(
-    async (file: File): Promise<PostAttachment> => {
-      const result = await uploadPostAttachment(file);
-      if (!result.ok || !result.attachment) {
-        throw new Error(result.error ?? 'Unable to upload attachment.');
-      }
-
-      return result.attachment;
-    },
-    [uploadPostAttachment]
-  );
-
   const handleOpenThread = (subTopicId: string) => {
     navigate(`/thread/${subTopicId}`);
   };
@@ -640,18 +623,15 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     }
   };
 
-  const handleCreateSubTopicWithFirstPost = async () => {
+  const handleCreateSubTopic = async () => {
     if (!topic) {
       return;
     }
 
     const title = subTopicTitle.trim();
     const description = subTopicDescription.trim();
-    const content = firstPostContent.trim();
-    if (!title || !description || !content) {
-      setCreateFeedback(
-        'Sub-topic title, description and first post are required.'
-      );
+    if (!title || !description) {
+      setCreateFeedback('Sub-topic title and description are required.');
       return;
     }
 
@@ -668,27 +648,12 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       return;
     }
 
-    const postResult = await createPost({
-      subTopicId: createResult.subTopicId,
-      content,
-      attachments: firstPostAttachments,
-    });
-
-    if (!postResult.ok) {
-      setCreateFeedback(
-        postResult.error ??
-          'Sub-topic was created, but the first post could not be published.'
-      );
-      return;
-    }
-
     setSubTopicTitle('');
     setSubTopicDescription('');
-    setFirstPostContent('');
-    setFirstPostAttachments([]);
     setCreateFeedback(null);
     setIsCreateOpen(false);
-    navigate(`/thread/${createResult.subTopicId}`);
+    onSearchQueryChange('');
+    navigate(`/thread/${createResult.subTopicId}?compose=1&firstPost=1`);
   };
 
   const handleToggleSubTopicStatus = async (subTopic: SubTopic) => {
@@ -752,6 +717,41 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       result.ok
         ? 'Sub-topic visibility updated.'
         : (result.error ?? 'Unable to update sub-topic.')
+    );
+  };
+
+  const handleHideBrokenSubTopic = async (subTopic: SubTopic) => {
+    const reason = window.prompt(
+      'Provide reason to hide this broken sub-topic from forum users:',
+      'Broken QDN thread resource'
+    );
+    if (!reason?.trim()) {
+      setManagementFeedback('Action cancelled: reason is required.');
+      return;
+    }
+
+    const result = await updateSubTopicSettings({
+      subTopicId: subTopic.id,
+      topicId: subTopic.topicId,
+      title: subTopic.title,
+      description: subTopic.description,
+      status: subTopic.status,
+      visibility: 'hidden',
+      isPinned: subTopic.isPinned,
+      isSolved: subTopic.isSolved,
+      access: subTopic.access,
+      allowedAddresses: subTopic.allowedAddresses,
+      moderationReason: reason,
+    });
+
+    if (result.ok) {
+      clearThreadQuarantine(subTopic.id);
+    }
+
+    setManagementFeedback(
+      result.ok
+        ? 'Broken sub-topic hidden from public lists.'
+        : (result.error ?? 'Unable to hide broken sub-topic.')
     );
   };
 
@@ -920,18 +920,17 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
               <p className="text-ui-muted text-xs">
                 {subTopicDescription.length}/{TOPIC_DESCRIPTION_MAX_LENGTH}
               </p>
-              <RichTextEditor
-                value={firstPostContent}
-                attachments={firstPostAttachments}
-                onChange={setFirstPostContent}
-                onAttachmentsChange={setFirstPostAttachments}
-                onSubmit={handleCreateSubTopicWithFirstPost}
-                onUploadImage={uploadImageForTopicPost}
-                onUploadAttachment={uploadAttachmentForTopicPost}
-                placeholder="Write the first post for this new sub-topic..."
-                editorLabel="First post editor"
-                submitLabel="Create Sub-Topic and Publish First Post"
-              />
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                After the sub-topic is created, you will be taken to the new
+                thread to publish the first post.
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateSubTopic}
+                className="bg-brand-primary-solid rounded-md px-4 py-2 text-sm font-semibold text-white"
+              >
+                Create Sub-Topic
+              </button>
             </>
           ) : (
             <p className="text-ui-muted text-sm">
@@ -972,12 +971,14 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             users={users}
             postCountsBySubTopicId={postCountsBySubTopicId}
             walletNamesByAddress={walletNamesByAddress}
+            quarantinedSubTopicIds={quarantinedSubTopicIds}
             onOpenThread={handleOpenThread}
             canManageSubTopics={canManageSubTopics}
             onManageSubTopic={handleOpenSubTopicManager}
             onToggleSubTopicPin={handleToggleSubTopicPin}
             onToggleSubTopicStatus={handleToggleSubTopicStatus}
             onToggleSubTopicVisibility={handleToggleSubTopicVisibility}
+            onHideBrokenSubTopic={handleHideBrokenSubTopic}
             canReorderPinnedSubTopics={
               canReorderPinnedSubTopics && pinnedSubTopicIds.length > 1
             }

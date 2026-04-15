@@ -7,6 +7,9 @@ type ThreadComposerProps = {
   replyAttachments: PostAttachment[];
   replyTargetAuthorName?: string | null;
   replyTargetContent?: string | null;
+  title?: string;
+  placeholder?: string;
+  submitLabel?: string;
   onReplyTextChange: (value: string) => void;
   onReplyAttachmentsChange: (attachments: PostAttachment[]) => void;
   onSubmit: () => void;
@@ -22,6 +25,9 @@ const ThreadComposer = ({
   replyAttachments,
   replyTargetAuthorName = null,
   replyTargetContent = null,
+  title = 'Add Reply',
+  placeholder = 'Share your thoughts with the community...',
+  submitLabel = 'Publish Reply',
   onReplyTextChange,
   onReplyAttachmentsChange,
   onSubmit,
@@ -35,7 +41,7 @@ const ThreadComposer = ({
     return (
       <section>
         <h3 className="text-brand-primary mb-2 text-base font-semibold">
-          Add Reply
+          {title}
         </h3>
         <div className="forum-card-accent p-4 text-sm text-slate-600">
           {helperText ?? 'Replies are currently disabled for this thread.'}
@@ -47,7 +53,7 @@ const ThreadComposer = ({
   return (
     <section>
       <h3 className="text-brand-primary mb-2 text-base font-semibold">
-        Add Reply
+        {title}
       </h3>
       {replyTargetAuthorName && replyTargetContent ? (
         <div className="forum-card-accent mb-3 border-l-4 border-cyan-300 p-3">
@@ -79,7 +85,8 @@ const ThreadComposer = ({
         onSubmit={onSubmit}
         onUploadImage={onUploadImage}
         onUploadAttachment={onUploadAttachment}
-        placeholder="Share your thoughts with the community..."
+        placeholder={placeholder}
+        submitLabel={submitLabel}
       />
     </section>
   );

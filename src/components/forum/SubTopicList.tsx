@@ -9,11 +9,13 @@ type SubTopicListProps = {
   users: User[];
   postCountsBySubTopicId?: Record<string, number>;
   walletNamesByAddress?: Record<string, string>;
+  quarantinedSubTopicIds?: Record<string, true>;
   onOpenThread: (subTopicId: string) => void;
   canManageSubTopics?: boolean;
   onToggleSubTopicPin?: (subTopic: SubTopic) => void;
   onToggleSubTopicStatus?: (subTopic: SubTopic) => void;
   onToggleSubTopicVisibility?: (subTopic: SubTopic) => void;
+  onHideBrokenSubTopic?: (subTopic: SubTopic) => void;
   onManageSubTopic?: (subTopic: SubTopic) => void;
   canReorderPinnedSubTopics?: boolean;
   draggedPinnedSubTopicId?: string | null;
@@ -51,11 +53,13 @@ const SubTopicList = ({
   users,
   postCountsBySubTopicId = {},
   walletNamesByAddress = {},
+  quarantinedSubTopicIds = {},
   onOpenThread,
   canManageSubTopics = false,
   onToggleSubTopicPin,
   onToggleSubTopicStatus,
   onToggleSubTopicVisibility,
+  onHideBrokenSubTopic,
   onManageSubTopic,
   canReorderPinnedSubTopics = false,
   draggedPinnedSubTopicId = null,
@@ -84,11 +88,13 @@ const SubTopicList = ({
 
       <ul className="space-y-2">
         {subTopics.map((subTopic) => {
+          const isQuarantined = quarantinedSubTopicIds[subTopic.id] === true;
           const metadata = [
             subTopic.isPinned ? 'Pinned' : null,
             subTopic.isSolved ? 'Solved' : null,
             subTopic.status === 'locked' ? 'Locked' : 'Open',
             subTopic.visibility === 'hidden' ? 'Hidden' : null,
+            isQuarantined ? 'Quarantined' : null,
             subTopic.access !== 'everyone'
               ? `Access: ${resolveAccessLabel(subTopic.access)}`
               : null,
@@ -145,6 +151,13 @@ const SubTopicList = ({
                           className={`${statusBadgeBaseClass} border-rose-300 bg-rose-50 text-rose-700`}
                         >
                           Locked
+                        </span>
+                      ) : null}
+                      {isQuarantined ? (
+                        <span
+                          className={`${statusBadgeBaseClass} border-orange-300 bg-orange-50 text-orange-700`}
+                        >
+                          Quarantined
                         </span>
                       ) : null}
                       {subTopic.title}
@@ -210,6 +223,15 @@ const SubTopicList = ({
                     >
                       {subTopic.visibility === 'hidden' ? 'Show' : 'Hide'}
                     </button>
+                    {isQuarantined ? (
+                      <button
+                        type="button"
+                        onClick={() => onHideBrokenSubTopic?.(subTopic)}
+                        className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700"
+                      >
+                        Hide Broken
+                      </button>
+                    ) : null}
                     {subTopic.allowedAddresses.length > 0 ? (
                       <span className="flex flex-wrap items-center gap-1">
                         {subTopic.allowedAddresses

@@ -64,6 +64,22 @@ const parseRequestError = (response: unknown): string | null => {
   return null;
 };
 
+const parseMultiResourcePublishError = (response: unknown): string | null => {
+  if (!Array.isArray(response)) {
+    return null;
+  }
+
+  const failedIndex = response.findIndex((entry) => parseRequestError(entry));
+  if (failedIndex === -1) {
+    return null;
+  }
+
+  const entryError = parseRequestError(response[failedIndex]);
+  return entryError
+    ? `Qortal resource publish failed at item ${failedIndex + 1}: ${entryError}`
+    : `Qortal resource publish failed at item ${failedIndex + 1}.`;
+};
+
 const getQortalRequest = () => {
   if (typeof qortalRequest === 'function') {
     return qortalRequest;
@@ -186,11 +202,18 @@ export const publishMultipleQortalResources = async (
     return [];
   }
 
-  return requestQortal<unknown[]>(
+  const response = await requestQortal<unknown>(
     {
       action: 'PUBLISH_MULTIPLE_QDN_RESOURCES',
       resources,
     },
     options
   );
+
+  const publishError = parseMultiResourcePublishError(response);
+  if (publishError) {
+    throw new Error(publishError);
+  }
+
+  return response;
 };

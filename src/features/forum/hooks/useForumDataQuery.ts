@@ -8,6 +8,10 @@ import {
 } from '../../../services/qortal/walletService';
 import { forumQdnService } from '../../../services/qdn/forumQdnService';
 import {
+  forumMaintenanceService,
+  type ForumMaintenanceState,
+} from '../../../services/qdn/forumMaintenanceService';
+import {
   forumSearchIndexService,
   type ThreadSearchSnapshot,
   type TopicDirectorySnapshot,
@@ -174,6 +178,12 @@ export const useForumDataQuery = () => {
   const [threadSearchIndexes, setThreadSearchIndexes] = useState<
     Record<string, ThreadSearchSnapshot>
   >({});
+  const [maintenanceState, setMaintenanceState] =
+    useState<ForumMaintenanceState>(
+      forumMaintenanceService.createDefaultMaintenanceState()
+    );
+  const [canBypassMaintenance, setCanBypassMaintenance] =
+    useState<boolean>(false);
   const loadedIdentityRef = useRef<string | null>(null);
   const backgroundStructureRefreshRef = useRef<string | null>(null);
   const hydratedStructureIdentityRef = useRef<string | null>(null);
@@ -362,6 +372,10 @@ export const useForumDataQuery = () => {
       setAvailableAuthNames([]);
       setActiveAuthName(null);
       setRoleRegistry(createDefaultRoleRegistry());
+      setMaintenanceState(
+        forumMaintenanceService.createDefaultMaintenanceState()
+      );
+      setCanBypassMaintenance(false);
       setTopicDirectoryIndex(null);
       setThreadSearchIndexes({});
       backgroundStructureRefreshRef.current = null;
@@ -413,10 +427,10 @@ export const useForumDataQuery = () => {
                 .catch(() => '')
           : Promise.resolve('');
 
-        const [registryResult, topicDirectoryIndexResult, addressResult] =
+        const [maintenanceResult, registryResult, addressResult] =
           await Promise.allSettled([
+            forumMaintenanceService.loadMaintenanceState(),
             forumRolesService.loadRoleRegistry(),
-            forumSearchIndexService.loadTopicDirectoryIndex(),
             authenticatedAddressPromise,
           ]);
 
@@ -424,14 +438,14 @@ export const useForumDataQuery = () => {
           return;
         }
 
+        const nextMaintenanceState =
+          maintenanceResult.status === 'fulfilled'
+            ? maintenanceResult.value
+            : forumMaintenanceService.createDefaultMaintenanceState();
         const nextRoleRegistry =
           registryResult.status === 'fulfilled'
             ? registryResult.value
             : createDefaultRoleRegistry();
-        const nextTopicDirectoryIndex =
-          topicDirectoryIndexResult.status === 'fulfilled'
-            ? topicDirectoryIndexResult.value
-            : null;
         const nextAuthenticatedAddress =
           identity && addressResult.status === 'fulfilled'
             ? addressResult.value || null
@@ -464,13 +478,39 @@ export const useForumDataQuery = () => {
             : GUEST_USER,
         };
 
+        const nextCanBypassMaintenance =
+          session.user.role === 'SysOp' &&
+          session.authenticatedAddress === nextRoleRegistry.primarySysOpAddress;
+
         setAuthenticatedAddress(session.authenticatedAddress);
         setRoleRegistry(nextRoleRegistry);
-        setTopicDirectoryIndex(nextTopicDirectoryIndex);
+        setMaintenanceState(nextMaintenanceState);
+        setCanBypassMaintenance(nextCanBypassMaintenance);
         setThreadSearchIndexes({});
         setCurrentUserId(session.user.id);
         loadedIdentityRef.current = identityKey;
         hydratedStructureIdentityRef.current = null;
+
+        if (nextMaintenanceState.enabled && !nextCanBypassMaintenance) {
+          setUsers([session.user]);
+          setTopics([]);
+          setSubTopics([]);
+          setPosts([]);
+          setTopicDirectoryIndex(null);
+          endTiming({
+            maintenanceMode: true,
+            usedTopicDirectoryIndex: false,
+          });
+          setIsAuthReady(true);
+          return;
+        }
+
+        const nextTopicDirectoryIndex =
+          await forumSearchIndexService.loadTopicDirectoryIndex();
+        if (!active) {
+          return;
+        }
+        setTopicDirectoryIndex(nextTopicDirectoryIndex);
 
         if (nextTopicDirectoryIndex) {
           const indexedStructure = toForumStructureFromTopicDirectory(
@@ -525,6 +565,10 @@ export const useForumDataQuery = () => {
         setSubTopics([]);
         setPosts([]);
         setRoleRegistry(createDefaultRoleRegistry());
+        setMaintenanceState(
+          forumMaintenanceService.createDefaultMaintenanceState()
+        );
+        setCanBypassMaintenance(false);
         setTopicDirectoryIndex(null);
         setThreadSearchIndexes({});
         hydratedStructureIdentityRef.current = null;
@@ -601,9 +645,12 @@ export const useForumDataQuery = () => {
     authenticatedAddress,
     roleRegistry,
     topicDirectoryIndex,
+    maintenanceState,
+    canBypassMaintenance,
     threadSearchIndexes,
     setRoleRegistry,
     setTopicDirectoryIndex,
+    setMaintenanceState,
     setThreadSearchIndexes,
     availableAuthNames,
     activeAuthName,
