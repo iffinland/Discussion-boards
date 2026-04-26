@@ -147,7 +147,6 @@ const Home = ({ searchQuery }: HomeProps) => {
     currentUser,
     authenticatedAddress,
     roleRegistry,
-    maintenanceState,
     users,
     topics,
     subTopics,
@@ -158,7 +157,6 @@ const Home = ({ searchQuery }: HomeProps) => {
   const {
     createTopic,
     reorderTopics,
-    setMaintenanceMode,
     updateTopicSettings,
     upsertRoleAssignment,
     removeRoleAssignment,
@@ -191,10 +189,6 @@ const Home = ({ searchQuery }: HomeProps) => {
     'SuperAdmin' | 'Admin' | 'Moderator'
   >('Admin');
   const [roleFeedback, setRoleFeedback] = useState<string | null>(null);
-  const [maintenanceFeedback, setMaintenanceFeedback] = useState<string | null>(
-    null
-  );
-  const [maintenanceMessageDraft, setMaintenanceMessageDraft] = useState('');
   const [roleNamesByAddress, setRoleNamesByAddress] = useState<
     Record<string, string>
   >({});
@@ -240,9 +234,6 @@ const Home = ({ searchQuery }: HomeProps) => {
 
     return [{ value: 'Moderator' as const, label: 'Moderator' }];
   }, [isSuperAdmin, isSysOp]);
-  useEffect(() => {
-    setMaintenanceMessageDraft(maintenanceState.message);
-  }, [maintenanceState.message]);
   const canModerate = currentUser.role !== 'Member';
   const normalizedSearchQuery = searchQuery.trim();
   const hasActiveSearch = normalizedSearchQuery.length > 0;
@@ -1051,22 +1042,6 @@ const Home = ({ searchQuery }: HomeProps) => {
     );
   };
 
-  const handleToggleMaintenanceMode = async () => {
-    const nextEnabled = !maintenanceState.enabled;
-    const result = await setMaintenanceMode({
-      enabled: nextEnabled,
-      message: maintenanceMessageDraft,
-    });
-
-    setMaintenanceFeedback(
-      result.ok
-        ? nextEnabled
-          ? 'Maintenance mode enabled.'
-          : 'Maintenance mode disabled.'
-        : (result.error ?? 'Unable to update maintenance mode.')
-    );
-  };
-
   useEffect(() => {
     if (assignableRoleOptions.some((option) => option.value === roleType)) {
       return;
@@ -1496,52 +1471,6 @@ const Home = ({ searchQuery }: HomeProps) => {
 
             {roleFeedback ? (
               <p className="text-ui-muted mt-3 text-xs">{roleFeedback}</p>
-            ) : null}
-          </article>
-        </section>
-      ) : null}
-
-      {isSysOp ? (
-        <section className="space-y-3">
-          <h2 className="text-brand-primary text-lg font-semibold">
-            Maintenance
-          </h2>
-
-          <article className="forum-card-primary p-4">
-            <p className="text-ui-strong text-sm font-semibold">
-              Public access
-            </p>
-            <p className="text-ui-muted mt-1 text-xs">
-              {maintenanceState.enabled
-                ? 'Maintenance mode is enabled for non-SysOp users.'
-                : 'Forum is currently open for all users.'}
-            </p>
-
-            <textarea
-              value={maintenanceMessageDraft}
-              onChange={(event) =>
-                setMaintenanceMessageDraft(event.target.value)
-              }
-              placeholder="Maintenance message shown to public users"
-              className="bg-surface-card text-ui-strong mt-4 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-            />
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleToggleMaintenanceMode}
-                className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-slate-900"
-              >
-                {maintenanceState.enabled
-                  ? 'Disable Maintenance'
-                  : 'Enable Maintenance'}
-              </button>
-            </div>
-
-            {maintenanceFeedback ? (
-              <p className="text-ui-muted mt-3 text-xs">
-                {maintenanceFeedback}
-              </p>
             ) : null}
           </article>
         </section>

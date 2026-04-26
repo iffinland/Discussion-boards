@@ -100,7 +100,7 @@ The backup and restore flow is documented in
 
 ## Verification status
 
-At the time of the latest maintenance pass:
+At the time of the latest verification pass:
 
 - `npm run lint` passes
 - `npx tsc -b` passes

@@ -20,10 +20,6 @@ import type {
   ThreadSearchSnapshot,
   TopicDirectorySnapshot,
 } from '../services/qdn/forumSearchIndexService';
-import {
-  forumMaintenanceService,
-  type ForumMaintenanceState,
-} from '../services/qdn/forumMaintenanceService';
 import { threadPostCache } from '../services/forum/threadPostCache';
 import {
   clearThreadQuarantine,
@@ -53,8 +49,6 @@ type ForumDataContextValue = {
   currentUser: User;
   authenticatedAddress: string | null;
   roleRegistry: ForumRoleRegistry;
-  maintenanceState: ForumMaintenanceState;
-  canBypassMaintenance: boolean;
   availableAuthNames: string[];
   activeAuthName: string | null;
   topicDirectoryIndex: TopicDirectorySnapshot | null;
@@ -141,10 +135,6 @@ type ForumActionsContextValue = {
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
   loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
-  setMaintenanceMode: (input: {
-    enabled: boolean;
-    message: string;
-  }) => Promise<ForumMutationResult>;
 };
 
 const ForumDataContext = createContext<ForumDataContextValue | null>(null);
@@ -195,12 +185,9 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     currentUser,
     authenticatedAddress,
     roleRegistry,
-    maintenanceState,
-    canBypassMaintenance,
     topicDirectoryIndex,
     threadSearchIndexes,
     setRoleRegistry,
-    setMaintenanceState,
     setTopicDirectoryIndex,
     setThreadSearchIndexes,
     availableAuthNames,
@@ -257,51 +244,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       setActiveAuthName(name);
     },
     [setActiveAuthName]
-  );
-
-  const setMaintenanceMode = useCallback<
-    ForumActionsContextValue['setMaintenanceMode']
-  >(
-    async ({ enabled, message }) => {
-      if (!isAuthenticated) {
-        return { ok: false, error: 'Authenticate with Qortal first.' };
-      }
-
-      if (
-        currentUser.role !== 'SysOp' ||
-        authenticatedAddress !== roleRegistry.primarySysOpAddress
-      ) {
-        return {
-          ok: false,
-          error: 'Only the primary SysOp can change maintenance mode.',
-        };
-      }
-
-      try {
-        const published = await forumMaintenanceService.publishMaintenanceState(
-          { enabled, message },
-          currentUser.username
-        );
-        setMaintenanceState(published);
-        return { ok: true };
-      } catch (error) {
-        return {
-          ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Unable to update maintenance mode.',
-        };
-      }
-    },
-    [
-      authenticatedAddress,
-      currentUser.role,
-      currentUser.username,
-      isAuthenticated,
-      roleRegistry.primarySysOpAddress,
-      setMaintenanceState,
-    ]
   );
 
   const loadThreadPosts = useCallback(
@@ -393,8 +335,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       currentUser,
       authenticatedAddress,
       roleRegistry,
-      maintenanceState,
-      canBypassMaintenance,
       availableAuthNames,
       activeAuthName,
       topicDirectoryIndex,
@@ -413,8 +353,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       currentUser,
       authenticatedAddress,
       roleRegistry,
-      maintenanceState,
-      canBypassMaintenance,
       topicDirectoryIndex,
       threadSearchIndexes,
       availableAuthNames,
@@ -450,7 +388,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       likePost,
       tipPost,
       loadThreadPosts,
-      setMaintenanceMode,
     }),
     [
       authenticate,
@@ -472,7 +409,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       likePost,
       tipPost,
       loadThreadPosts,
-      setMaintenanceMode,
     ]
   );
 
