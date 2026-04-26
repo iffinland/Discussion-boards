@@ -2,8 +2,8 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import ShareIcon from '../components/common/ShareIcon';
+import PostComposerModal from '../features/forum/components/PostComposerModal';
 import QortTipModal from '../features/forum/components/QortTipModal';
-import ThreadComposer from '../features/forum/components/ThreadComposer';
 import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
 import ThreadPostCard from '../features/forum/components/ThreadPostCard';
 import { useThreadActions } from '../features/forum/hooks/useThreadActions';
@@ -26,7 +26,7 @@ import {
 } from '../services/qortal/share';
 import { resolveNameWalletAddress } from '../services/qortal/walletService';
 import { perfDebugLog, perfDebugTimeStart } from '../services/perf/perfDebug';
-import type { UserRole } from '../types';
+import type { Post, UserRole } from '../types';
 
 const THREAD_BATCH_SIZE = 12;
 const THREAD_VIRTUALIZE_THRESHOLD = 30;
@@ -131,6 +131,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     handleSubmitReply,
     handleReplyToPost,
     handleCancelReplyTarget,
+    resetComposer,
     handleEditPost,
     handleDeletePost,
     handleSharePost,
@@ -306,16 +307,11 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         : null;
 
   useEffect(() => {
-    if (replyTarget) {
-      setIsComposerOpen(true);
-    }
-  }, [replyTarget]);
-
-  useEffect(() => {
     if (!shouldAutoOpenComposer) {
       return;
     }
 
+    resetComposer();
     setIsComposerOpen(true);
     const params = new URLSearchParams(location.search);
     params.delete('compose');
@@ -328,7 +324,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       },
       { replace: true }
     );
-  }, [location.pathname, location.search, navigate, shouldAutoOpenComposer]);
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    resetComposer,
+    shouldAutoOpenComposer,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -588,13 +590,34 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     displayPosts.length === 0;
   const isCreatingFirstPost =
     threadPosts.length === 0 && !replyTarget && isComposerOpen;
-  const composerTitle = isCreatingFirstPost ? 'Add First Post' : 'Add Reply';
+  const composerTitle = replyTarget
+    ? 'Reply to Post'
+    : isCreatingFirstPost
+      ? 'Add First Post'
+      : 'Add New Post';
   const composerPlaceholder = isCreatingFirstPost
     ? 'Write the first post for this new sub-topic...'
     : 'Share your thoughts with the community...';
   const composerSubmitLabel = isCreatingFirstPost
     ? 'Publish First Post'
-    : 'Publish Reply';
+    : replyTarget
+      ? 'Publish Reply'
+      : 'Publish Post';
+
+  const openNewPostComposer = () => {
+    resetComposer();
+    setIsComposerOpen(true);
+  };
+
+  const openReplyComposer = (post: Post) => {
+    handleReplyToPost(post);
+    setIsComposerOpen(true);
+  };
+
+  const closeComposerModal = () => {
+    resetComposer();
+    setIsComposerOpen(false);
+  };
 
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
@@ -1014,11 +1037,11 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           </button>
           <button
             type="button"
-            onClick={() => setIsComposerOpen((current) => !current)}
+            onClick={openNewPostComposer}
             disabled={isComposerDisabled}
             className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isComposerOpen ? 'Close Reply' : 'Add Reply'}
+            Add New Post
           </button>
         </div>
         {subTopic.lastModerationReason ? (
@@ -1102,7 +1125,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             }
             tipCount={post.tips}
             onLike={likePost}
-            onReply={handleReplyToPost}
+            onReply={openReplyComposer}
             onShare={handleSharePost}
             onSendTip={handleSendTip}
             onJumpToPost={jumpToPost}
@@ -1130,29 +1153,27 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         ) : null}
       </section>
 
-      {isComposerOpen || replyTarget ? (
-        <ThreadComposer
-          title={composerTitle}
-          placeholder={composerPlaceholder}
-          submitLabel={composerSubmitLabel}
-          replyText={replyText}
-          replyAttachments={replyAttachments}
-          replyTargetAuthorName={
-            replyTarget
-              ? resolveAuthorDisplayName(replyTarget.authorUserId)
-              : null
-          }
-          replyTargetContent={replyTarget?.content ?? null}
-          onReplyTextChange={setReplyText}
-          onReplyAttachmentsChange={setReplyAttachments}
-          onSubmit={handleSubmitReply}
-          onUploadImage={uploadImageForReply}
-          onUploadAttachment={uploadAttachmentForReply}
-          onCancelReplyTarget={handleCancelReplyTarget}
-          disabled={isComposerDisabled}
-          helperText={composerHelperText}
-        />
-      ) : null}
+      <PostComposerModal
+        isOpen={isComposerOpen}
+        title={composerTitle}
+        placeholder={composerPlaceholder}
+        submitLabel={composerSubmitLabel}
+        replyText={replyText}
+        replyAttachments={replyAttachments}
+        replyTargetAuthorName={
+          replyTarget ? resolveAuthorDisplayName(replyTarget.authorUserId) : null
+        }
+        replyTargetContent={replyTarget?.content ?? null}
+        onReplyTextChange={setReplyText}
+        onReplyAttachmentsChange={setReplyAttachments}
+        onSubmit={handleSubmitReply}
+        onUploadImage={uploadImageForReply}
+        onUploadAttachment={uploadAttachmentForReply}
+        onCancelReplyTarget={handleCancelReplyTarget}
+        onClose={closeComposerModal}
+        disabled={isComposerDisabled}
+        helperText={composerHelperText}
+      />
     </div>
   );
 };

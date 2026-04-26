@@ -11,7 +11,6 @@ import {
 } from '../../../services/forum/richText';
 import type { Post, User, UserRole } from '../../../types';
 import PostAttachmentList from './PostAttachmentList';
-import PostActionsModal from './PostActionsModal';
 
 type ThreadPostCardProps = {
   post: Post;
@@ -78,7 +77,6 @@ const ThreadPostCard = ({
   const avatarColor = author?.avatarColor ?? 'bg-cyan-500';
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(post.content);
-  const [isActionsModalOpen, setIsActionsModalOpen] = useState(false);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -160,6 +158,11 @@ const ThreadPostCard = ({
     applyDraftFormatting(`[color=${color}]`, '[/color]');
   };
 
+  const actionButtonClass =
+    'rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-100 hover:shadow active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50';
+  const dangerButtonClass =
+    'rounded-md border border-orange-300 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-orange-800 shadow-sm transition hover:bg-orange-100 hover:shadow active:translate-y-px';
+
   return (
     <article
       id={`post-${post.id}`}
@@ -170,7 +173,7 @@ const ThreadPostCard = ({
           : '',
       ].join(' ')}
     >
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex items-start gap-4">
         <div className="flex items-center gap-3">
           {author?.avatarUrl && isAvatarVisible ? (
             <img
@@ -204,13 +207,6 @@ const ThreadPostCard = ({
             ) : null}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsActionsModalOpen(true)}
-          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-300 hover:bg-cyan-50"
-        >
-          Actions
-        </button>
       </header>
 
       {isEditing ? (
@@ -288,26 +284,63 @@ const ThreadPostCard = ({
         </>
       )}
 
-      <div className="mt-4 flex items-center gap-4 text-xs text-slate-600">
-        <span>Likes: {post.likes}</span>
-        <span>Tips: {tipCount}</span>
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-orange-100 pt-3">
+        <button
+          type="button"
+          className={actionButtonClass}
+          disabled={hasLiked}
+          onClick={() => onLike(post.id)}
+        >
+          {hasLiked ? `Liked (${post.likes})` : `Like (${post.likes})`}
+        </button>
+        <button
+          type="button"
+          className={actionButtonClass}
+          onClick={() => onReply(post)}
+        >
+          Reply to Post
+        </button>
+        <button
+          type="button"
+          className={actionButtonClass}
+          onClick={() => onShare(post.id)}
+        >
+          Share
+        </button>
+        <button
+          type="button"
+          className={actionButtonClass}
+          onClick={() => onSendTip(post)}
+        >
+          Send Tip ({tipCount})
+        </button>
+        {isOwner ? (
+          <>
+            <button
+              type="button"
+              className={actionButtonClass}
+              onClick={handleStartEdit}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className={dangerButtonClass}
+              onClick={() => onDelete(post.id)}
+            >
+              Delete
+            </button>
+          </>
+        ) : canModerate ? (
+          <button
+            type="button"
+            className={dangerButtonClass}
+            onClick={() => onDelete(post.id)}
+          >
+            Moderation Delete
+          </button>
+        ) : null}
       </div>
-
-      <PostActionsModal
-        isOpen={isActionsModalOpen}
-        isOwner={isOwner}
-        canModerate={canModerate}
-        likes={post.likes}
-        tipCount={tipCount}
-        hasLiked={hasLiked}
-        onClose={() => setIsActionsModalOpen(false)}
-        onLike={() => onLike(post.id)}
-        onReply={() => onReply(post)}
-        onShare={() => onShare(post.id)}
-        onSendTip={() => onSendTip(post)}
-        onEdit={handleStartEdit}
-        onDelete={() => onDelete(post.id)}
-      />
     </article>
   );
 };

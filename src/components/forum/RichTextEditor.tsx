@@ -45,7 +45,7 @@ const RichTextEditor = ({
   onUploadAttachment,
   placeholder = 'Write your reply...',
   editorLabel = 'Reply editor',
-  submitLabel = 'Post Reply',
+  submitLabel = 'Publish Post',
 }: RichTextEditorProps) => {
   const editorId = useId();
   const fileInputId = useId();

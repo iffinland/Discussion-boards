@@ -69,7 +69,7 @@ export const useThreadActions = ({
 
   const handleSubmitReply = useCallback(async () => {
     if (!threadId) {
-      return;
+      return false;
     }
 
     const result = await createPost({
@@ -81,13 +81,14 @@ export const useThreadActions = ({
 
     if (!result.ok) {
       setFeedback(result.error ?? 'Unable to publish post.');
-      return;
+      return false;
     }
 
     setReplyText('');
     setReplyTarget(null);
     setReplyAttachments([]);
-    setFeedback('Reply published.');
+    setFeedback(replyTarget ? 'Reply published.' : 'Post published.');
+    return true;
   }, [createPost, replyAttachments, replyTarget, replyText, threadId]);
 
   const handleReplyToPost = useCallback(
@@ -101,6 +102,12 @@ export const useThreadActions = ({
 
   const handleCancelReplyTarget = useCallback(() => {
     setReplyTarget(null);
+  }, []);
+
+  const resetComposer = useCallback(() => {
+    setReplyText('');
+    setReplyTarget(null);
+    setReplyAttachments([]);
   }, []);
 
   const handleEditPost = useCallback(
@@ -338,6 +345,7 @@ export const useThreadActions = ({
     handleSubmitReply,
     handleReplyToPost,
     handleCancelReplyTarget,
+    resetComposer,
     handleEditPost,
     handleDeletePost,
     handleSharePost,

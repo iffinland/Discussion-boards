@@ -1,8 +1,8 @@
 # Forum Feature Module
 
 ## Current structure
-- `components/PostActionsModal.tsx`: reusable modal for post actions.
 - `components/ThreadPostCard.tsx`: thread post item UI and action wiring.
+- `components/PostComposerModal.tsx`: modal composer for new posts and post replies.
 - `components/ThreadComposer.tsx`: thread reply composer view.
 - `hooks/useThreadActions.ts`: thread action and feedback orchestration.
 - `hooks/useForumDataQuery.ts`: forum bootstrap/auth/QDN data query flow.

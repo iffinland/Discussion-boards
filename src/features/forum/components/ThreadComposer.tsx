@@ -8,6 +8,7 @@ type ThreadComposerProps = {
   replyTargetAuthorName?: string | null;
   replyTargetContent?: string | null;
   title?: string;
+  showTitle?: boolean;
   placeholder?: string;
   submitLabel?: string;
   onReplyTextChange: (value: string) => void;
@@ -25,9 +26,10 @@ const ThreadComposer = ({
   replyAttachments,
   replyTargetAuthorName = null,
   replyTargetContent = null,
-  title = 'Add Reply',
+  title = 'Add New Post',
+  showTitle = true,
   placeholder = 'Share your thoughts with the community...',
-  submitLabel = 'Publish Reply',
+  submitLabel = 'Publish Post',
   onReplyTextChange,
   onReplyAttachmentsChange,
   onSubmit,
@@ -40,9 +42,11 @@ const ThreadComposer = ({
   if (disabled) {
     return (
       <section>
-        <h3 className="text-brand-primary mb-2 text-base font-semibold">
-          {title}
-        </h3>
+        {showTitle ? (
+          <h3 className="text-brand-primary mb-2 text-base font-semibold">
+            {title}
+          </h3>
+        ) : null}
         <div className="forum-card-accent p-4 text-sm text-slate-600">
           {helperText ?? 'Replies are currently disabled for this thread.'}
         </div>
@@ -52,9 +56,11 @@ const ThreadComposer = ({
 
   return (
     <section>
-      <h3 className="text-brand-primary mb-2 text-base font-semibold">
-        {title}
-      </h3>
+      {showTitle ? (
+        <h3 className="text-brand-primary mb-2 text-base font-semibold">
+          {title}
+        </h3>
+      ) : null}
       {replyTargetAuthorName && replyTargetContent ? (
         <div className="forum-card-accent mb-3 border-l-4 border-cyan-300 p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
