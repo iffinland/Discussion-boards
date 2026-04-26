@@ -4,6 +4,13 @@ export type ForumMutationResult = {
   subTopicId?: string;
 };
 
+export type ForumPollDraft = {
+  question: string;
+  description: string;
+  mode: import('../../types').PostPollMode;
+  options: string[];
+};
+
 export type ForumUploadImageResult = {
   ok: boolean;
   error?: string;

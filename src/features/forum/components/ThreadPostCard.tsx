@@ -24,7 +24,9 @@ type ThreadPostCardProps = {
   canModerate: boolean;
   hasLiked: boolean;
   tipCount: number;
+  pollVoterId: string;
   onLike: (postId: string) => void;
+  onVoteOnPoll: (postId: string, optionIds: string[]) => void;
   onReply: (post: Post) => void;
   onShare: (postId: string) => void;
   onSendTip: (post: Post) => void;
@@ -65,7 +67,9 @@ const ThreadPostCard = ({
   canModerate,
   hasLiked,
   tipCount,
+  pollVoterId,
   onLike,
+  onVoteOnPoll,
   onReply,
   onShare,
   onSendTip,
@@ -79,7 +83,14 @@ const ThreadPostCard = ({
   const [draftContent, setDraftContent] = useState(post.content);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
+  const [selectedPollOptionIds, setSelectedPollOptionIds] = useState<string[]>(
+    []
+  );
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const existingPollVote = post.poll?.votes.find(
+    (vote) => vote.voterId === pollVoterId
+  );
+  const totalPollVotes = post.poll?.votes.length ?? 0;
 
   const handleStartEdit = () => {
     setDraftContent(post.content);
@@ -156,6 +167,30 @@ const ThreadPostCard = ({
 
   const handleDraftColor = (color: string) => {
     applyDraftFormatting(`[color=${color}]`, '[/color]');
+  };
+
+  const togglePollOption = (optionId: string) => {
+    if (!post.poll || existingPollVote) {
+      return;
+    }
+
+    setSelectedPollOptionIds((current) => {
+      if (post.poll?.mode === 'single') {
+        return current.includes(optionId) ? [] : [optionId];
+      }
+
+      return current.includes(optionId)
+        ? current.filter((id) => id !== optionId)
+        : [...current, optionId];
+    });
+  };
+
+  const submitPollVote = () => {
+    if (!post.poll || existingPollVote || selectedPollOptionIds.length === 0) {
+      return;
+    }
+
+    onVoteOnPoll(post.id, selectedPollOptionIds);
   };
 
   const actionButtonClass =
@@ -280,6 +315,90 @@ const ThreadPostCard = ({
             value={post.content}
             className="text-ui-strong mt-3 text-sm leading-relaxed"
           />
+          {post.poll ? (
+            <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/60 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex rounded-md border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
+                  Poll / Voting
+                </span>
+                <span className="text-ui-muted text-xs">
+                  {post.poll.mode === 'multiple'
+                    ? 'Multiple answers allowed'
+                    : 'Single answer only'}
+                </span>
+              </div>
+              <p className="text-ui-strong text-base font-semibold">
+                {post.poll.question}
+              </p>
+              {post.poll.description ? (
+                <p className="text-ui-muted mt-1 text-sm">
+                  {post.poll.description}
+                </p>
+              ) : null}
+              <div className="mt-3 space-y-2">
+                {post.poll.options.map((option) => {
+                  const voteCount = post.poll
+                    ? post.poll.votes.filter((vote) =>
+                        vote.optionIds.includes(option.id)
+                      ).length
+                    : 0;
+                  const percentage =
+                    totalPollVotes > 0
+                      ? Math.round((voteCount / totalPollVotes) * 100)
+                      : 0;
+                  const isSelected = existingPollVote
+                    ? existingPollVote.optionIds.includes(option.id)
+                    : selectedPollOptionIds.includes(option.id);
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => togglePollOption(option.id)}
+                      disabled={Boolean(existingPollVote)}
+                      className={[
+                        'w-full rounded-md border px-3 py-2 text-left text-sm transition active:translate-y-px',
+                        isSelected
+                          ? 'border-cyan-400 bg-white text-slate-900 shadow-sm'
+                          : 'border-cyan-100 bg-white/70 text-slate-700 hover:bg-white',
+                        existingPollVote ? 'cursor-default' : '',
+                      ].join(' ')}
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="font-semibold">{option.label}</span>
+                        <span className="text-xs text-slate-600">
+                          {voteCount} vote{voteCount === 1 ? '' : 's'} •{' '}
+                          {percentage}%
+                        </span>
+                      </span>
+                      <span className="mt-2 block h-2 overflow-hidden rounded-full bg-cyan-100">
+                        <span
+                          className="block h-full rounded-full bg-cyan-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-ui-muted text-xs">
+                  {totalPollVotes} total vote{totalPollVotes === 1 ? '' : 's'}
+                  {existingPollVote ? ' • You have voted' : ''}
+                </p>
+                {!existingPollVote ? (
+                  <button
+                    type="button"
+                    onClick={submitPollVote}
+                    disabled={selectedPollOptionIds.length === 0}
+                    className="rounded-md border border-cyan-300 bg-cyan-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-cyan-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Submit Vote
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <PostAttachmentList attachments={post.attachments} />
         </>
       )}
@@ -361,7 +480,9 @@ const areThreadPostCardPropsEqual = (
     prev.canModerate === next.canModerate &&
     prev.hasLiked === next.hasLiked &&
     prev.tipCount === next.tipCount &&
+    prev.pollVoterId === next.pollVoterId &&
     prev.onLike === next.onLike &&
+    prev.onVoteOnPoll === next.onVoteOnPoll &&
     prev.onReply === next.onReply &&
     prev.onShare === next.onShare &&
     prev.onSendTip === next.onSendTip &&

@@ -356,6 +356,58 @@ const sanitizeAddressList = (value: unknown) => {
   return next;
 };
 
+const sanitizePostPoll = (value: unknown): Post['poll'] => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  const options = Array.isArray(value.options)
+    ? value.options
+        .filter((item) => isObject(item))
+        .map((item) => ({
+          id: typeof item.id === 'string' ? item.id : '',
+          label: typeof item.label === 'string' ? item.label.trim() : '',
+        }))
+        .filter((option) => option.id && option.label)
+        .slice(0, 6)
+    : [];
+
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.question !== 'string' ||
+    !value.question.trim() ||
+    options.length < 2
+  ) {
+    return null;
+  }
+
+  const validOptionIds = new Set(options.map((option) => option.id));
+  const votes = Array.isArray(value.votes)
+    ? value.votes
+        .filter((item) => isObject(item))
+        .map((item) => ({
+          voterId: typeof item.voterId === 'string' ? item.voterId : '',
+          optionIds: sanitizeAddressList(item.optionIds).filter((optionId) =>
+            validOptionIds.has(optionId)
+          ),
+          votedAt: typeof item.votedAt === 'string' ? item.votedAt : '',
+        }))
+        .filter(
+          (vote) => vote.voterId && vote.optionIds.length > 0 && vote.votedAt
+        )
+    : [];
+
+  return {
+    id: value.id,
+    question: value.question.trim(),
+    description:
+      typeof value.description === 'string' ? value.description.trim() : '',
+    mode: value.mode === 'multiple' ? 'multiple' : 'single',
+    options,
+    votes,
+  };
+};
+
 const sanitizeTopic = (value: unknown): Topic | null => {
   if (!isObject(value)) {
     return null;
@@ -432,6 +484,7 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
       typeof value.solvedByUserId === 'string' && value.solvedByUserId.trim()
         ? value.solvedByUserId
         : null,
+    isPoll: value.isPoll === true,
     access:
       value.access === 'moderators' ||
       value.access === 'admins' ||
@@ -540,6 +593,7 @@ const parsePostPayload = (raw: unknown): PostPayload | null => {
     post: {
       ...raw.post,
       attachments: sanitizePostAttachments(raw.post.attachments),
+      poll: sanitizePostPoll(raw.post.poll),
       likes:
         typeof raw.post.likes === 'number' && Number.isFinite(raw.post.likes)
           ? raw.post.likes

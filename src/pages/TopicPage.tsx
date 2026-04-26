@@ -116,6 +116,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   const [createFeedback, setCreateFeedback] = useState<string | null>(null);
   const [subTopicTitle, setSubTopicTitle] = useState('');
   const [subTopicDescription, setSubTopicDescription] = useState('');
+  const [subTopicIsPoll, setSubTopicIsPoll] = useState(false);
   const [managementFeedback, setManagementFeedback] = useState<string | null>(
     null
   );
@@ -134,6 +135,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   >('visible');
   const [managedSubTopicAccess, setManagedSubTopicAccess] =
     useState<TopicAccess>('everyone');
+  const [managedSubTopicIsPoll, setManagedSubTopicIsPoll] = useState(false);
   const [managedSubTopicAllowedAddresses, setManagedSubTopicAllowedAddresses] =
     useState('');
   const [draggedPinnedSubTopicId, setDraggedPinnedSubTopicId] = useState<
@@ -641,6 +643,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       description,
       access: 'everyone',
       allowedAddresses: [],
+      isPoll: subTopicIsPoll,
     });
 
     if (!createResult.ok || !createResult.subTopicId) {
@@ -650,6 +653,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
 
     setSubTopicTitle('');
     setSubTopicDescription('');
+    setSubTopicIsPoll(false);
     setCreateFeedback(null);
     setIsCreateOpen(false);
     onSearchQueryChange('');
@@ -757,6 +761,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     setManagedSubTopicStatus(subTopic.status);
     setManagedSubTopicVisibility(subTopic.visibility);
     setManagedSubTopicAccess(subTopic.access);
+    setManagedSubTopicIsPoll(subTopic.isPoll);
     setManagedSubTopicAllowedAddresses(subTopic.allowedAddresses.join(', '));
     setManagementFeedback(null);
   };
@@ -786,6 +791,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       visibility: managedSubTopicVisibility,
       isPinned: existingSubTopic.isPinned,
       isSolved: existingSubTopic.isSolved,
+      isPoll: managedSubTopicIsPoll,
       access: managedSubTopicAccess,
       allowedAddresses: managedSubTopicAllowedAddresses
         .split(',')
@@ -880,6 +886,14 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
               <p className="text-ui-muted text-xs">
                 {subTopicDescription.length}/{TOPIC_DESCRIPTION_MAX_LENGTH}
               </p>
+              <label className="flex items-center gap-2 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={subTopicIsPoll}
+                  onChange={(event) => setSubTopicIsPoll(event.target.checked)}
+                />
+                Mark this topic as Poll / Voting
+              </label>
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                 After the sub-topic is created, you will be taken to the new
                 thread to publish the first post.
@@ -1032,6 +1046,16 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             <option value="admins">Admins only</option>
             <option value="custom">Specific wallets</option>
           </select>
+          <label className="flex items-center gap-2 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              checked={managedSubTopicIsPoll}
+              onChange={(event) =>
+                setManagedSubTopicIsPoll(event.target.checked)
+              }
+            />
+            Poll / Voting topic
+          </label>
           <p className="text-ui-muted text-xs">
             Access: {resolveAccessLabel(managedSubTopicAccess)}
           </p>

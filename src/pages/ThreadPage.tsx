@@ -65,6 +65,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     uploadPostImage,
     uploadPostAttachment,
     updatePost,
+    voteOnPoll,
     deletePost,
     likePost,
     tipPost,
@@ -116,8 +117,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     replyText,
     replyTarget,
     replyAttachments,
+    pollDraft,
     setReplyText,
     setReplyAttachments,
+    setPollDraft,
     feedback,
     isTipModalOpen,
     tipAmount,
@@ -158,7 +161,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         ? {
             entries: threadSearchIndexes[subTopic.id].posts.map((post) => ({
               postId: post.postId,
-              haystack: createSearchHaystack([post.content, post.authorUserId]),
+              haystack: createSearchHaystack([
+                post.content,
+                post.poll?.question ?? '',
+                post.poll?.description ?? '',
+                ...(post.poll?.options.map((option) => option.label) ?? []),
+                post.authorUserId,
+              ]),
             })),
           }
         : buildThreadPostSearchIndex(threadPosts, users),
@@ -294,6 +303,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
     return '';
   }, [authenticatedAddress, currentUser.id]);
+  const pollVoterId = authenticatedAddress ?? currentUser.id;
   const isComposerDisabled =
     !hasSubTopicAccess ||
     subTopic?.status === 'locked' ||
@@ -619,6 +629,21 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     setIsComposerOpen(false);
   };
 
+  const handleVoteOnPoll = async (postId: string, optionIds: string[]) => {
+    const result = await voteOnPoll({ postId, optionIds });
+    if (!result.ok) {
+      setModerationFeedback(result.error ?? 'Unable to submit vote.');
+      return;
+    }
+
+    setModerationFeedback('Vote submitted.');
+    window.setTimeout(() => {
+      setModerationFeedback((current) =>
+        current === 'Vote submitted.' ? null : current
+      );
+    }, 2400);
+  };
+
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
     setVirtualFocusIndex(null);
@@ -942,6 +967,11 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
               Pinned
             </span>
           ) : null}
+          {subTopic.isPoll ? (
+            <span className="mr-3 inline-flex items-center rounded-md border border-cyan-300 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800 align-middle">
+              Poll / Voting
+            </span>
+          ) : null}
           {subTopic.title}
         </h2>
         <p className="text-ui-muted mt-1 text-sm">{subTopic.description}</p>
@@ -957,6 +987,11 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           {subTopic.isPinned ? (
             <span className="bg-brand-primary-soft text-brand-primary-strong border-brand-primary rounded-md border px-2 py-1 text-xs font-semibold">
               Pinned
+            </span>
+          ) : null}
+          {subTopic.isPoll ? (
+            <span className="rounded-md border border-cyan-300 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800">
+              Poll / Voting
             </span>
           ) : null}
           {subTopic.isSolved ? (
@@ -1124,7 +1159,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
               likeActorId ? post.likedByAddresses.includes(likeActorId) : false
             }
             tipCount={post.tips}
+            pollVoterId={pollVoterId}
             onLike={likePost}
+            onVoteOnPoll={handleVoteOnPoll}
             onReply={openReplyComposer}
             onShare={handleSharePost}
             onSendTip={handleSendTip}
@@ -1160,12 +1197,15 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         submitLabel={composerSubmitLabel}
         replyText={replyText}
         replyAttachments={replyAttachments}
+        pollDraft={pollDraft}
+        canAddPoll={Boolean(subTopic?.isPoll && !replyTarget)}
         replyTargetAuthorName={
           replyTarget ? resolveAuthorDisplayName(replyTarget.authorUserId) : null
         }
         replyTargetContent={replyTarget?.content ?? null}
         onReplyTextChange={setReplyText}
         onReplyAttachmentsChange={setReplyAttachments}
+        onPollDraftChange={setPollDraft}
         onSubmit={handleSubmitReply}
         onUploadImage={uploadImageForReply}
         onUploadAttachment={uploadAttachmentForReply}

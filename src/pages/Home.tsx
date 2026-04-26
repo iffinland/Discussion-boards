@@ -1086,6 +1086,11 @@ const Home = ({ searchQuery }: HomeProps) => {
                         Locked
                       </span>
                     ) : null}
+                    {subTopic.isPoll ? (
+                      <span className="mr-2 inline-flex rounded-md border border-cyan-300 bg-cyan-50 px-2 py-0.5 text-[11px] font-semibold text-cyan-800 align-middle">
+                        Poll / Voting
+                      </span>
+                    ) : null}
                     {subTopic.isSolved ? (
                       <span className="mr-2 inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 align-middle">
                         Solved

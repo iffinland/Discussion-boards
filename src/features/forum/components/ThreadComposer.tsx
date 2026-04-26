@@ -1,6 +1,7 @@
 import type { PostAttachment } from '../../../types';
 import RichTextContent from '../../../components/forum/RichTextContent';
 import RichTextEditor from '../../../components/forum/RichTextEditor';
+import type { ForumPollDraft } from '../types';
 
 type ThreadComposerProps = {
   replyText: string;
@@ -11,8 +12,11 @@ type ThreadComposerProps = {
   showTitle?: boolean;
   placeholder?: string;
   submitLabel?: string;
+  pollDraft?: ForumPollDraft | null;
+  canAddPoll?: boolean;
   onReplyTextChange: (value: string) => void;
   onReplyAttachmentsChange: (attachments: PostAttachment[]) => void;
+  onPollDraftChange?: (draft: ForumPollDraft | null) => void;
   onSubmit: () => void;
   onUploadImage: (file: File) => Promise<string>;
   onUploadAttachment: (file: File) => Promise<PostAttachment>;
@@ -30,8 +34,11 @@ const ThreadComposer = ({
   showTitle = true,
   placeholder = 'Share your thoughts with the community...',
   submitLabel = 'Publish Post',
+  pollDraft = null,
+  canAddPoll = false,
   onReplyTextChange,
   onReplyAttachmentsChange,
+  onPollDraftChange,
   onSubmit,
   onUploadImage,
   onUploadAttachment,
@@ -39,6 +46,54 @@ const ThreadComposer = ({
   disabled = false,
   helperText = null,
 }: ThreadComposerProps) => {
+  const updatePollDraft = (next: ForumPollDraft | null) => {
+    onPollDraftChange?.(next);
+  };
+
+  const ensurePollDraft = () => {
+    updatePollDraft({
+      question: '',
+      description: '',
+      mode: 'single',
+      options: ['', ''],
+    });
+  };
+
+  const updatePollOption = (index: number, value: string) => {
+    if (!pollDraft) {
+      return;
+    }
+
+    updatePollDraft({
+      ...pollDraft,
+      options: pollDraft.options.map((option, optionIndex) =>
+        optionIndex === index ? value : option
+      ),
+    });
+  };
+
+  const addPollOption = () => {
+    if (!pollDraft || pollDraft.options.length >= 6) {
+      return;
+    }
+
+    updatePollDraft({
+      ...pollDraft,
+      options: [...pollDraft.options, ''],
+    });
+  };
+
+  const removePollOption = (index: number) => {
+    if (!pollDraft || pollDraft.options.length <= 2) {
+      return;
+    }
+
+    updatePollDraft({
+      ...pollDraft,
+      options: pollDraft.options.filter((_, optionIndex) => optionIndex !== index),
+    });
+  };
+
   if (disabled) {
     return (
       <section>
@@ -81,6 +136,109 @@ const ThreadComposer = ({
             value={replyTargetContent}
             className="text-ui-muted text-xs leading-relaxed"
           />
+        </div>
+      ) : null}
+      {canAddPoll ? (
+        <div className="forum-card-accent mb-3 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-ui-strong text-sm font-semibold">
+                Poll / Voting
+              </p>
+              <p className="text-ui-muted text-xs">
+                Add a structured poll with 2-6 answer options.
+              </p>
+            </div>
+            {pollDraft ? (
+              <button
+                type="button"
+                onClick={() => updatePollDraft(null)}
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 active:translate-y-px"
+              >
+                Remove Poll
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={ensurePollDraft}
+                className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-cyan-100 active:translate-y-px"
+              >
+                Add Poll
+              </button>
+            )}
+          </div>
+
+          {pollDraft ? (
+            <div className="mt-3 space-y-3">
+              <input
+                value={pollDraft.question}
+                onChange={(event) =>
+                  updatePollDraft({
+                    ...pollDraft,
+                    question: event.target.value,
+                  })
+                }
+                placeholder="Poll question"
+                className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+              <textarea
+                value={pollDraft.description}
+                onChange={(event) =>
+                  updatePollDraft({
+                    ...pollDraft,
+                    description: event.target.value,
+                  })
+                }
+                placeholder="Optional poll description"
+                className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+              <div className="grid gap-2">
+                {pollDraft.options.map((option, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      value={option}
+                      onChange={(event) =>
+                        updatePollOption(index, event.target.value)
+                      }
+                      placeholder={`Option ${index + 1}`}
+                      className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePollOption(index)}
+                      disabled={pollDraft.options.length <= 2}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addPollOption}
+                  disabled={pollDraft.options.length >= 6}
+                  className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-cyan-100 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add Option
+                </button>
+                <label className="text-ui-muted flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={pollDraft.mode === 'multiple'}
+                    onChange={(event) =>
+                      updatePollDraft({
+                        ...pollDraft,
+                        mode: event.target.checked ? 'multiple' : 'single',
+                      })
+                    }
+                  />
+                  Allow multiple answers
+                </label>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <RichTextEditor

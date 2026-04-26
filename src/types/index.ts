@@ -9,6 +9,7 @@ export type TopicVisibility = 'visible' | 'hidden';
 export type TopicAccess = 'everyone' | 'moderators' | 'admins' | 'custom';
 export type SubTopicStatus = 'open' | 'locked';
 export type SubTopicVisibility = 'visible' | 'hidden';
+export type PostPollMode = 'single' | 'multiple';
 
 export interface PostAttachment {
   id: string;
@@ -18,6 +19,26 @@ export interface PostAttachment {
   filename: string;
   mimeType: string;
   size: number;
+}
+
+export interface PostPollOption {
+  id: string;
+  label: string;
+}
+
+export interface PostPollVote {
+  voterId: string;
+  optionIds: string[];
+  votedAt: string;
+}
+
+export interface PostPoll {
+  id: string;
+  question: string;
+  description: string;
+  mode: PostPollMode;
+  options: PostPollOption[];
+  votes: PostPollVote[];
 }
 
 export interface User {
@@ -57,6 +78,7 @@ export interface SubTopic {
   isSolved: boolean;
   solvedAt: string | null;
   solvedByUserId: string | null;
+  isPoll: boolean;
   access: TopicAccess;
   allowedAddresses: string[];
   status: SubTopicStatus;
@@ -74,6 +96,7 @@ export interface Post {
   parentPostId: string | null;
   content: string;
   attachments: PostAttachment[];
+  poll?: PostPoll | null;
   createdAt: string;
   editedAt?: string | null;
   likes: number;

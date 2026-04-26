@@ -13,6 +13,7 @@ import { useForumCommands } from '../features/forum/hooks/useForumCommands';
 import { useForumDataQuery } from '../features/forum/hooks/useForumDataQuery';
 import type {
   ForumMutationResult,
+  ForumPollDraft,
   ForumUploadAttachmentResult,
   ForumUploadImageResult,
 } from '../features/forum/types';
@@ -84,6 +85,7 @@ type ForumActionsContextValue = {
     description: string;
     access: TopicAccess;
     allowedAddresses: string[];
+    isPoll?: boolean;
   }) => Promise<ForumMutationResult>;
   updateTopicSettings: (input: {
     topicId: string;
@@ -103,6 +105,7 @@ type ForumActionsContextValue = {
     visibility: SubTopic['visibility'];
     isPinned: boolean;
     isSolved: boolean;
+    isPoll?: boolean;
     access: TopicAccess;
     allowedAddresses: string[];
     moderationReason?: string | null;
@@ -116,6 +119,7 @@ type ForumActionsContextValue = {
     content: string;
     parentPostId?: string | null;
     attachments?: PostAttachment[];
+    poll?: ForumPollDraft | null;
   }) => Promise<ForumMutationResult>;
   upsertRoleAssignment: (input: {
     address: string;
@@ -127,6 +131,10 @@ type ForumActionsContextValue = {
   updatePost: (input: {
     postId: string;
     content: string;
+  }) => Promise<ForumMutationResult>;
+  voteOnPoll: (input: {
+    postId: string;
+    optionIds: string[];
   }) => Promise<ForumMutationResult>;
   deletePost: (input: {
     postId: string;
@@ -164,6 +172,7 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     parentPostId: post.parentPostId,
     content: post.content,
     attachments: post.attachments,
+    poll: post.poll ?? null,
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
     likes: post.likes,
@@ -212,6 +221,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     uploadPostImage,
     uploadPostAttachment,
     updatePost,
+    voteOnPoll,
     deletePost,
     likePost,
     tipPost,
@@ -384,6 +394,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostImage,
       uploadPostAttachment,
       updatePost,
+      voteOnPoll,
       deletePost,
       likePost,
       tipPost,
@@ -405,6 +416,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostImage,
       uploadPostAttachment,
       updatePost,
+      voteOnPoll,
       deletePost,
       likePost,
       tipPost,

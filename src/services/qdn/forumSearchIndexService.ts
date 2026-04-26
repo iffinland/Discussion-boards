@@ -44,6 +44,7 @@ export type TopicDirectorySnapshot = {
     isSolved: boolean;
     solvedAt: string | null;
     solvedByUserId: string | null;
+    isPoll: boolean;
     access: SubTopic['access'];
     allowedAddresses: string[];
     status: SubTopic['status'];
@@ -66,6 +67,7 @@ export type ThreadSearchSnapshot = {
     parentPostId: string | null;
     content: string;
     attachments: PostAttachment[];
+    poll?: Post['poll'];
     createdAt: string;
     editedAt?: string | null;
     likes: number;
@@ -190,6 +192,58 @@ const sanitizeStringList = (value: unknown): string[] => {
   });
 
   return next;
+};
+
+const sanitizePostPoll = (value: unknown): Post['poll'] => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  const options = Array.isArray(value.options)
+    ? value.options
+        .filter((item) => isObject(item))
+        .map((item) => ({
+          id: typeof item.id === 'string' ? item.id : '',
+          label: typeof item.label === 'string' ? item.label.trim() : '',
+        }))
+        .filter((option) => option.id && option.label)
+        .slice(0, 6)
+    : [];
+
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.question !== 'string' ||
+    !value.question.trim() ||
+    options.length < 2
+  ) {
+    return null;
+  }
+
+  const validOptionIds = new Set(options.map((option) => option.id));
+  const votes = Array.isArray(value.votes)
+    ? value.votes
+        .filter((item) => isObject(item))
+        .map((item) => ({
+          voterId: typeof item.voterId === 'string' ? item.voterId : '',
+          optionIds: sanitizeStringList(item.optionIds).filter((optionId) =>
+            validOptionIds.has(optionId)
+          ),
+          votedAt: typeof item.votedAt === 'string' ? item.votedAt : '',
+        }))
+        .filter(
+          (vote) => vote.voterId && vote.optionIds.length > 0 && vote.votedAt
+        )
+    : [];
+
+  return {
+    id: value.id,
+    question: value.question.trim(),
+    description:
+      typeof value.description === 'string' ? value.description.trim() : '',
+    mode: value.mode === 'multiple' ? 'multiple' : 'single',
+    options,
+    votes,
+  };
 };
 
 const sleep = async (durationMs: number) => {
@@ -338,6 +392,7 @@ const parseTopicDirectoryPayload = (
             item.solvedByUserId.trim()
               ? item.solvedByUserId
               : null,
+          isPoll: item.isPoll === true,
           access: (item.access === 'moderators' ||
           item.access === 'admins' ||
           item.access === 'custom'
@@ -423,6 +478,7 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
             typeof item.parentPostId === 'string' ? item.parentPostId : null,
           content: typeof item.content === 'string' ? item.content : '',
           attachments: sanitizePostAttachments(item.attachments),
+          poll: sanitizePostPoll(item.poll),
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
           editedAt:
             typeof item.editedAt === 'string' || item.editedAt === null
@@ -558,6 +614,7 @@ export const forumSearchIndexService = {
           isSolved: subTopic.isSolved,
           solvedAt: subTopic.solvedAt,
           solvedByUserId: subTopic.solvedByUserId,
+          isPoll: subTopic.isPoll,
           access: subTopic.access,
           allowedAddresses: subTopic.allowedAddresses,
           status: subTopic.status,
@@ -714,6 +771,7 @@ export const forumSearchIndexService = {
             parentPostId: post.parentPostId,
             content: post.content,
             attachments: post.attachments,
+            poll: post.poll ?? null,
             createdAt: post.createdAt,
             editedAt: post.editedAt ?? null,
             likes: post.likes,

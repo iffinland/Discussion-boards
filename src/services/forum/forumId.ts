@@ -58,7 +58,14 @@ export const toPartitionKey = (input: string, length = 8): string => {
 };
 
 export const generateForumEntityId = (
-  entity: 'topic' | 'subtopic' | 'post' | 'image' | 'attachment',
+  entity:
+    | 'topic'
+    | 'subtopic'
+    | 'post'
+    | 'image'
+    | 'attachment'
+    | 'poll'
+    | 'option',
   ownerHint?: string
 ): string => {
   const timePart = encodeTime(Date.now(), TIME_PART_LENGTH);

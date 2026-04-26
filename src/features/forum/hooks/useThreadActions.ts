@@ -12,6 +12,7 @@ import {
 import type { Post, PostAttachment } from '../../../types';
 import type {
   ForumMutationResult,
+  ForumPollDraft,
   ForumUploadAttachmentResult,
   ForumUploadImageResult,
 } from '../types';
@@ -23,6 +24,7 @@ type UseThreadActionsParams = {
     content: string;
     parentPostId?: string | null;
     attachments?: PostAttachment[];
+    poll?: ForumPollDraft | null;
   }) => Promise<ForumMutationResult>;
   uploadPostImage: (file: File) => Promise<ForumUploadImageResult>;
   uploadPostAttachment: (file: File) => Promise<ForumUploadAttachmentResult>;
@@ -53,6 +55,7 @@ export const useThreadActions = ({
   const [replyAttachments, setReplyAttachments] = useState<PostAttachment[]>(
     []
   );
+  const [pollDraft, setPollDraft] = useState<ForumPollDraft | null>(null);
   const [isTipModalOpen, setIsTipModalOpen] = useState(false);
   const [tipAmount, setTipAmount] = useState('0');
   const [tipRecipientName, setTipRecipientName] = useState('');
@@ -77,6 +80,7 @@ export const useThreadActions = ({
       content: replyText,
       parentPostId: replyTarget?.id ?? null,
       attachments: replyAttachments,
+      poll: replyTarget ? null : pollDraft,
     });
 
     if (!result.ok) {
@@ -87,9 +91,17 @@ export const useThreadActions = ({
     setReplyText('');
     setReplyTarget(null);
     setReplyAttachments([]);
+    setPollDraft(null);
     setFeedback(replyTarget ? 'Reply published.' : 'Post published.');
     return true;
-  }, [createPost, replyAttachments, replyTarget, replyText, threadId]);
+  }, [
+    createPost,
+    pollDraft,
+    replyAttachments,
+    replyTarget,
+    replyText,
+    threadId,
+  ]);
 
   const handleReplyToPost = useCallback(
     (post: Post) => {
@@ -108,6 +120,7 @@ export const useThreadActions = ({
     setReplyText('');
     setReplyTarget(null);
     setReplyAttachments([]);
+    setPollDraft(null);
   }, []);
 
   const handleEditPost = useCallback(
@@ -329,8 +342,10 @@ export const useThreadActions = ({
     replyText,
     replyTarget,
     replyAttachments,
+    pollDraft,
     setReplyText,
     setReplyAttachments,
+    setPollDraft,
     feedback,
     isTipModalOpen,
     tipAmount,

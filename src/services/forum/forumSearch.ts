@@ -177,6 +177,9 @@ export const buildThreadPostSearchIndex = (
       haystack: normalizeText(
         [
           post.content,
+          post.poll?.question ?? '',
+          post.poll?.description ?? '',
+          ...(post.poll?.options.map((option) => option.label) ?? []),
           userMap.get(post.authorUserId) ?? post.authorUserId,
         ].join(' ')
       ),

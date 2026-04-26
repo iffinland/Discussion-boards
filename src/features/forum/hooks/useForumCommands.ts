@@ -23,6 +23,7 @@ import type {
   ForumRoleRegistry,
   Post,
   PostAttachment,
+  PostPoll,
   SubTopic,
   Topic,
   TopicAccess,
@@ -30,6 +31,7 @@ import type {
 } from '../../../types';
 import type {
   ForumMutationResult,
+  ForumPollDraft,
   ForumUploadAttachmentResult,
   ForumUploadImageResult,
 } from '../types';
@@ -89,6 +91,38 @@ const isSuperAdminRole = (role: User['role']) =>
   role === 'SuperAdmin' || role === 'SysOp';
 const isSysOpRole = (role: User['role']) => role === 'SysOp';
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
+
+const normalizePollDraft = (draft: ForumPollDraft | null) => {
+  if (!draft) {
+    return null;
+  }
+
+  const question = draft.question.trim();
+  const description = draft.description.trim();
+  const options = draft.options
+    .map((option) => option.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+
+  if (!question && options.length === 0 && !description) {
+    return null;
+  }
+
+  if (!question) {
+    throw new Error('Poll question is required.');
+  }
+
+  if (options.length < 2) {
+    throw new Error('Poll requires at least two answer options.');
+  }
+
+  return {
+    question,
+    description,
+    mode: draft.mode,
+    options,
+  };
+};
 
 const sortTopicsByOrder = (items: Topic[]) =>
   [...items].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -187,6 +221,7 @@ export const useForumCommands = ({
       status: Topic['status'];
       subTopicAccess: TopicAccess;
       allowedAddresses: string[];
+      isPoll?: boolean;
     }): Promise<ForumMutationResult> => {
       const title = input.title.trim();
       const description = input.description.trim();
@@ -481,6 +516,7 @@ export const useForumCommands = ({
       description: string;
       access: TopicAccess;
       allowedAddresses: string[];
+      isPoll?: boolean;
     }): Promise<ForumMutationResult> => {
       const title = input.title.trim();
       const description = input.description.trim();
@@ -558,6 +594,7 @@ export const useForumCommands = ({
         isSolved: false,
         solvedAt: null,
         solvedByUserId: null,
+        isPoll: input.isPoll === true,
         access: input.access,
         allowedAddresses,
         status: 'open',
@@ -723,6 +760,7 @@ export const useForumCommands = ({
       visibility: SubTopic['visibility'];
       isPinned: boolean;
       isSolved: boolean;
+      isPoll?: boolean;
       access: TopicAccess;
       allowedAddresses: string[];
       moderationReason?: string | null;
@@ -759,6 +797,7 @@ export const useForumCommands = ({
       const isVisibilityChanged = input.visibility !== target.visibility;
       const isPinnedChanged = input.isPinned !== target.isPinned;
       const isSolvedChanged = input.isSolved !== target.isSolved;
+      const isPollChanged = (input.isPoll ?? target.isPoll) !== target.isPoll;
       const isTitleChanged = input.title.trim() !== target.title;
       const isDescriptionChanged =
         input.description.trim() !== target.description;
@@ -770,6 +809,7 @@ export const useForumCommands = ({
         isVisibilityChanged ||
         isPinnedChanged ||
         isSolvedChanged ||
+        isPollChanged ||
         isTopicChanged ||
         isAccessChanged ||
         !sameAllowedAddresses;
@@ -847,6 +887,7 @@ export const useForumCommands = ({
         solvedByUserId: input.isSolved
           ? (target.solvedByUserId ?? currentUser.id)
           : null,
+        isPoll: input.isPoll ?? target.isPoll,
         access: input.access,
         allowedAddresses,
         lastModerationAction: hasModerationAction
@@ -1199,12 +1240,26 @@ export const useForumCommands = ({
       content: string;
       parentPostId?: string | null;
       attachments?: PostAttachment[];
+      poll?: ForumPollDraft | null;
     }): Promise<ForumMutationResult> => {
       const content = input.content.trim();
       const attachments = input.attachments ?? [];
+      let normalizedPoll: ReturnType<typeof normalizePollDraft>;
+      try {
+        normalizedPoll = normalizePollDraft(input.poll ?? null);
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Poll configuration is invalid.',
+        };
+      }
 
-      if (!content && attachments.length === 0) {
-        return { ok: false, error: 'Post content or attachment is required.' };
+      if (!content && attachments.length === 0 && !normalizedPoll) {
+        return {
+          ok: false,
+          error: 'Post content, attachment or poll is required.',
+        };
       }
 
       if (!isAuthenticated) {
@@ -1252,7 +1307,27 @@ export const useForumCommands = ({
         }
       }
 
+      if (input.poll && !targetSubTopic.isPoll) {
+        return {
+          ok: false,
+          error: 'Polls can only be added inside Poll / Voting topics.',
+        };
+      }
+
       const createdAt = new Date().toISOString();
+      const poll: PostPoll | null = normalizedPoll
+        ? {
+            id: generateForumEntityId('poll', currentUser.username),
+            question: normalizedPoll.question,
+            description: normalizedPoll.description,
+            mode: normalizedPoll.mode,
+            options: normalizedPoll.options.map((label) => ({
+              id: generateForumEntityId('option', currentUser.username),
+              label,
+            })),
+            votes: [],
+          }
+        : null;
       const newPost: Post = {
         id: generateForumEntityId('post', currentUser.username),
         subTopicId: input.subTopicId,
@@ -1260,6 +1335,7 @@ export const useForumCommands = ({
         parentPostId: input.parentPostId ?? null,
         content,
         attachments,
+        poll,
         createdAt,
         likes: 0,
         tips: 0,
@@ -1417,6 +1493,133 @@ export const useForumCommands = ({
       posts,
       setPosts,
       setThreadSearchIndexes,
+    ]
+  );
+
+  const voteOnPoll = useCallback(
+    async (input: {
+      postId: string;
+      optionIds: string[];
+    }): Promise<ForumMutationResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      const target = posts.find((post) => post.id === input.postId);
+      if (!target?.poll) {
+        return { ok: false, error: 'Poll not found.' };
+      }
+
+      const targetSubTopic = subTopics.find(
+        (subTopic) => subTopic.id === target.subTopicId
+      );
+      if (!targetSubTopic) {
+        return { ok: false, error: 'Sub-topic not found.' };
+      }
+
+      if (
+        targetSubTopic.visibility === 'hidden' &&
+        !isModeratorRole(currentUser.role)
+      ) {
+        return { ok: false, error: 'This sub-topic is hidden.' };
+      }
+
+      if (
+        !canAccessSubTopic(targetSubTopic, currentUser, authenticatedAddress)
+      ) {
+        return {
+          ok: false,
+          error: 'You do not have access to vote in this sub-topic.',
+        };
+      }
+
+      const voterId = authenticatedAddress ?? currentUser.id;
+      if (!voterId) {
+        return { ok: false, error: 'Unable to identify voter.' };
+      }
+
+      const validOptionIds = new Set(
+        target.poll.options.map((option) => option.id)
+      );
+      const selectedOptionIds = [...new Set(input.optionIds)].filter(
+        (optionId) => validOptionIds.has(optionId)
+      );
+
+      if (selectedOptionIds.length === 0) {
+        return { ok: false, error: 'Choose at least one poll option.' };
+      }
+
+      if (target.poll.mode === 'single' && selectedOptionIds.length > 1) {
+        return { ok: false, error: 'This poll allows one answer only.' };
+      }
+
+      const updatedPost: Post = {
+        ...target,
+        poll: {
+          ...target.poll,
+          votes: [
+            ...target.poll.votes.filter((vote) => vote.voterId !== voterId),
+            {
+              voterId,
+              optionIds: selectedOptionIds,
+              votedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      };
+
+      try {
+        const nextPosts = posts.map((post) =>
+          post.id === input.postId ? updatedPost : post
+        );
+        const postResource = forumQdnService.buildPostPublishResource(
+          updatedPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          updatedPost.subTopicId,
+          nextPosts
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+        ]);
+
+        setPosts((current) => {
+          const next = current.map((post) =>
+            post.id === input.postId ? updatedPost : post
+          );
+          threadPostCache.write(
+            updatedPost.subTopicId,
+            next.filter((post) => post.subTopicId === updatedPost.subTopicId)
+          );
+          return next;
+        });
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [updatedPost.subTopicId]: threadIndexResource.snapshot,
+        }));
+        writeThreadIndexCache(updatedPost.subTopicId, threadIndexResource.snapshot);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Failed to submit vote.',
+        };
+      }
+    },
+    [
+      authenticatedAddress,
+      buildThreadIndexResource,
+      currentUser.id,
+      currentUser.role,
+      currentUser.username,
+      isAuthenticated,
+      posts,
+      setPosts,
+      setThreadSearchIndexes,
+      subTopics,
     ]
   );
 
@@ -1694,6 +1897,7 @@ export const useForumCommands = ({
     removeRoleAssignment,
     createPost,
     updatePost,
+    voteOnPoll,
     deletePost,
     likePost,
     tipPost,

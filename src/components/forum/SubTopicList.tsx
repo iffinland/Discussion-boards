@@ -91,6 +91,7 @@ const SubTopicList = ({
           const isQuarantined = quarantinedSubTopicIds[subTopic.id] === true;
           const metadata = [
             subTopic.isPinned ? 'Pinned' : null,
+            subTopic.isPoll ? 'Poll / Voting' : null,
             subTopic.isSolved ? 'Solved' : null,
             subTopic.status === 'locked' ? 'Locked' : 'Open',
             subTopic.visibility === 'hidden' ? 'Hidden' : null,
@@ -151,6 +152,13 @@ const SubTopicList = ({
                           className={`${statusBadgeBaseClass} border-rose-300 bg-rose-50 text-rose-700`}
                         >
                           Locked
+                        </span>
+                      ) : null}
+                      {subTopic.isPoll ? (
+                        <span
+                          className={`${statusBadgeBaseClass} border-cyan-300 bg-cyan-50 text-cyan-800`}
+                        >
+                          Poll / Voting
                         </span>
                       ) : null}
                       {isQuarantined ? (

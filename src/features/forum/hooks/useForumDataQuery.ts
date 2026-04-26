@@ -133,6 +133,7 @@ const toForumStructureFromTopicDirectory = (
     isSolved: subTopic.isSolved,
     solvedAt: subTopic.solvedAt,
     solvedByUserId: subTopic.solvedByUserId,
+    isPoll: subTopic.isPoll,
     access: subTopic.access,
     allowedAddresses: subTopic.allowedAddresses,
     status: subTopic.status,
