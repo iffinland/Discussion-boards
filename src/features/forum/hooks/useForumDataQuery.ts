@@ -49,9 +49,6 @@ const GUEST_USER: User = {
   joinedAt: new Date(0).toISOString(),
 };
 
-const STRUCTURE_REFRESH_IDLE_TIMEOUT_MS = 1500;
-const STRUCTURE_REFRESH_FALLBACK_DELAY_MS = 300;
-
 const toUniqueNames = (input: Array<string | null | undefined>) => {
   const seen = new Set<string>();
   const next: string[] = [];
@@ -185,8 +182,6 @@ export const useForumDataQuery = () => {
   const [canBypassMaintenance, setCanBypassMaintenance] =
     useState<boolean>(false);
   const loadedIdentityRef = useRef<string | null>(null);
-  const backgroundStructureRefreshRef = useRef<string | null>(null);
-  const hydratedStructureIdentityRef = useRef<string | null>(null);
   const authMode: ForumAuthMode = 'qortal';
 
   const currentUser = useMemo(() => {
@@ -274,86 +269,6 @@ export const useForumDataQuery = () => {
     []
   );
 
-  const scheduleStructureRefresh = useCallback(
-    (
-      session: BootstrapSession,
-      roleRegistryForRefresh: ForumRoleRegistry,
-      preserveThreadIndexes: boolean
-    ) => {
-      if (backgroundStructureRefreshRef.current === session.identityKey) {
-        return () => undefined;
-      }
-
-      backgroundStructureRefreshRef.current = session.identityKey;
-      const maybeWindow = window as Window & {
-        requestIdleCallback?: (
-          callback: IdleRequestCallback,
-          options?: IdleRequestOptions
-        ) => number;
-        cancelIdleCallback?: (id: number) => void;
-      };
-      let cancelled = false;
-
-      const runRefresh = async () => {
-        try {
-          const remoteData = await forumQdnService.loadForumStructureCached();
-          if (cancelled || loadedIdentityRef.current !== session.identityKey) {
-            return;
-          }
-
-          setAuthenticatedAddress(session.authenticatedAddress);
-          setRoleRegistry(roleRegistryForRefresh);
-          setCurrentUserId(session.user.id);
-          applyForumStructure(
-            [session.user],
-            remoteData.topics,
-            remoteData.subTopics
-          );
-          hydratedStructureIdentityRef.current = session.identityKey;
-          if (!preserveThreadIndexes) {
-            setThreadSearchIndexes({});
-          }
-        } finally {
-          if (backgroundStructureRefreshRef.current === session.identityKey) {
-            backgroundStructureRefreshRef.current = null;
-          }
-        }
-      };
-
-      if (typeof maybeWindow.requestIdleCallback === 'function') {
-        const idleId = maybeWindow.requestIdleCallback(
-          () => {
-            void runRefresh();
-          },
-          { timeout: STRUCTURE_REFRESH_IDLE_TIMEOUT_MS }
-        );
-
-        return () => {
-          cancelled = true;
-          if (typeof maybeWindow.cancelIdleCallback === 'function') {
-            maybeWindow.cancelIdleCallback(idleId);
-          }
-          if (backgroundStructureRefreshRef.current === session.identityKey) {
-            backgroundStructureRefreshRef.current = null;
-          }
-        };
-      }
-
-      const timeoutId = window.setTimeout(() => {
-        void runRefresh();
-      }, STRUCTURE_REFRESH_FALLBACK_DELAY_MS);
-
-      return () => {
-        cancelled = true;
-        window.clearTimeout(timeoutId);
-        if (backgroundStructureRefreshRef.current === session.identityKey) {
-          backgroundStructureRefreshRef.current = null;
-        }
-      };
-    },
-    [applyForumStructure]
-  );
-
   useEffect(() => {
     let active = true;
     const hasAuthSignal = Boolean(
@@ -378,8 +293,6 @@ export const useForumDataQuery = () => {
       setCanBypassMaintenance(false);
       setTopicDirectoryIndex(null);
       setThreadSearchIndexes({});
-      backgroundStructureRefreshRef.current = null;
-      hydratedStructureIdentityRef.current = null;
       setIsAuthReady(true);
       return () => {
         active = false;
@@ -489,7 +402,6 @@ export const useForumDataQuery = () => {
         setThreadSearchIndexes({});
         setCurrentUserId(session.user.id);
         loadedIdentityRef.current = identityKey;
-        hydratedStructureIdentityRef.current = null;
 
         if (nextMaintenanceState.enabled && !nextCanBypassMaintenance) {
           setUsers([session.user]);
@@ -538,7 +450,6 @@ export const useForumDataQuery = () => {
             remoteData.topics,
             remoteData.subTopics
           );
-          hydratedStructureIdentityRef.current = identityKey;
           endTiming({
             usedTopicDirectoryIndex: false,
             topicCount: remoteData.topics.length,
@@ -571,7 +482,6 @@ export const useForumDataQuery = () => {
         setCanBypassMaintenance(false);
         setTopicDirectoryIndex(null);
         setThreadSearchIndexes({});
-        hydratedStructureIdentityRef.current = null;
         loadedIdentityRef.current = session ? identityKey : null;
         setIsAuthReady(true);
       }
@@ -589,36 +499,6 @@ export const useForumDataQuery = () => {
     isLoadingUser,
     name,
     primaryName,
-  ]);
-
-  useEffect(() => {
-    const identityKey = loadedIdentityRef.current;
-
-    if (
-      !isAuthReady ||
-      !topicDirectoryIndex ||
-      !identityKey ||
-      hydratedStructureIdentityRef.current === identityKey
-    ) {
-      return;
-    }
-
-    return scheduleStructureRefresh(
-      {
-        identityKey,
-        user: currentUser.id === GUEST_USER.id ? GUEST_USER : currentUser,
-        authenticatedAddress,
-      },
-      roleRegistry,
-      false
-    );
-  }, [
-    authenticatedAddress,
-    currentUser,
-    isAuthReady,
-    roleRegistry,
-    scheduleStructureRefresh,
-    topicDirectoryIndex,
   ]);
 
   const authenticate = useCallback(async () => {

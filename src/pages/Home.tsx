@@ -100,7 +100,7 @@ type DisplayTopic = Topic & {
 };
 
 const TOPIC_DESCRIPTION_MAX_LENGTH = 250;
-const ACTIVE_SUBTOPIC_LIMIT = 8;
+const ACTIVE_SUBTOPIC_LIMIT = 5;
 const SEARCH_THREAD_INDEX_MAX_CANDIDATES = 18;
 const SEARCH_THREAD_INDEX_INITIAL_BATCH_SIZE = 6;
 const SEARCH_THREAD_INDEX_BATCH_SIZE = 4;
@@ -676,6 +676,11 @@ const Home = ({ searchQuery }: HomeProps) => {
       });
     });
 
+    const toTimestamp = (value: string) => {
+      const timestamp = new Date(value).getTime();
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
     return [...subTopics]
       .filter((subTopic) => canModerate || subTopic.visibility !== 'hidden')
       .filter(
@@ -683,26 +688,41 @@ const Home = ({ searchQuery }: HomeProps) => {
           canModerate ||
           canAccessSubTopic(subTopic, currentUser, authenticatedAddress)
       )
-      .sort(
-        (a, b) =>
-          new Date(b.lastPostAt).getTime() - new Date(a.lastPostAt).getTime()
-      )
+      .map((subTopic) => {
+        const indexedLatest = latestBySubTopicId.get(subTopic.id);
+        const subTopicLastMs = toTimestamp(subTopic.lastPostAt);
+        const indexedLatestMs = indexedLatest
+          ? toTimestamp(indexedLatest.createdAt)
+          : 0;
+        const useIndexedLatest = Boolean(
+          indexedLatest && indexedLatestMs >= subTopicLastMs
+        );
+        const activityAt =
+          useIndexedLatest && indexedLatest
+            ? indexedLatest.createdAt
+            : subTopic.lastPostAt;
+        const activityAuthorUserId =
+          useIndexedLatest && indexedLatest
+            ? indexedLatest.authorUserId
+            : subTopic.authorUserId;
+
+        return {
+          ...subTopic,
+          activityAt,
+          activityMs: Math.max(subTopicLastMs, indexedLatestMs),
+          lastPostAuthorName:
+            userMap.get(activityAuthorUserId) ??
+            activityAuthorUserId ??
+            'Unknown User',
+          activeTimeLabel: formatActiveTopicTime(
+            activityAt,
+            activeTopicsNowMs
+          ),
+        };
+      })
+      .sort((a, b) => b.activityMs - a.activityMs)
       .slice(0, ACTIVE_SUBTOPIC_LIMIT)
-      .map((subTopic) => ({
-        ...subTopic,
-        lastPostAuthorName:
-          userMap.get(
-            latestBySubTopicId.get(subTopic.id)?.authorUserId ??
-              subTopic.authorUserId
-          ) ??
-          latestBySubTopicId.get(subTopic.id)?.authorUserId ??
-          subTopic.authorUserId ??
-          'Unknown User',
-        activeTimeLabel: formatActiveTopicTime(
-          latestBySubTopicId.get(subTopic.id)?.createdAt ?? subTopic.lastPostAt,
-          activeTopicsNowMs
-        ),
-      }));
+      .map(({ activityAt, activityMs, ...subTopic }) => subTopic);
   }, [
     activeTopicsNowMs,
     authenticatedAddress,
