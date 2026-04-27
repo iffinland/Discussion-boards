@@ -9,7 +9,7 @@ import {
 import UserRoleBadge from '../common/UserRoleBadge';
 import { useForumActions, useForumData } from '../../hooks/useForumData';
 
-type ThemeMode = 'light-cyan' | 'soft-cyan';
+type ThemeMode = 'light-cyan' | 'dark-cyan';
 
 type HeaderProps = {
   themeMode: ThemeMode;
@@ -215,18 +215,18 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
             onClick={onToggleTheme}
             aria-label={
               themeMode === 'light-cyan'
-                ? 'Switch to Soft Cyan theme'
-                : 'Switch to Light Cyan theme'
+                ? 'Switch to Dark theme'
+                : 'Switch to Light theme'
             }
             title={
               themeMode === 'light-cyan'
-                ? 'Switch to Soft Cyan'
-                : 'Switch to Light Cyan'
+                ? 'Switch to Dark theme'
+                : 'Switch to Light theme'
             }
             className="forum-pill-primary flex items-center gap-2 rounded-md px-3 py-2"
           >
             <SunIcon active={themeMode === 'light-cyan'} />
-            <MoonIcon active={themeMode === 'soft-cyan'} />
+            <MoonIcon active={themeMode === 'dark-cyan'} />
           </button>
 
           <div

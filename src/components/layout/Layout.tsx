@@ -4,7 +4,7 @@ import Footer from './Footer';
 import Header from './Header';
 import StatsBar from './StatsBar';
 
-type ThemeMode = 'light-cyan' | 'soft-cyan';
+type ThemeMode = 'light-cyan' | 'dark-cyan';
 
 type LayoutProps = {
   children: ReactNode;

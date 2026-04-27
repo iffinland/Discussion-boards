@@ -283,7 +283,7 @@ const ThreadPostCard = ({
                   className={[
                     'w-full rounded-md border px-3 py-2 text-left text-sm transition active:translate-y-px',
                     isSelected
-                      ? 'border-cyan-400 bg-white text-slate-900 shadow-sm'
+                      ? 'border-cyan-500 bg-cyan-100 text-slate-950 shadow-sm'
                       : 'border-cyan-100 bg-white/70 text-slate-700 hover:bg-white',
                     existingPollVote ? 'cursor-default' : '',
                   ].join(' ')}

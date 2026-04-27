@@ -14,7 +14,7 @@ const Home = lazy(() => import('./pages/Home'));
 const TopicPage = lazy(() => import('./pages/TopicPage'));
 const ThreadPage = lazy(() => import('./pages/ThreadPage'));
 
-type ThemeMode = 'light-cyan' | 'soft-cyan';
+type ThemeMode = 'light-cyan' | 'dark-cyan';
 const THEME_STORAGE_KEY = 'forum-theme-mode';
 const qortalWindow = window as Window & { _qdnBase?: string };
 const routerBaseName = qortalWindow._qdnBase || '';
@@ -41,19 +41,19 @@ const App = () => {
     }
 
     const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return storedTheme === 'soft-cyan' ? 'soft-cyan' : 'light-cyan';
+    return storedTheme === 'dark-cyan' ? 'dark-cyan' : 'light-cyan';
   });
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('theme-soft-cyan', themeMode === 'soft-cyan');
+    root.classList.toggle('theme-dark-cyan', themeMode === 'dark-cyan');
     window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [themeMode]);
 
   const handleToggleTheme = () => {
     setThemeMode((current) =>
-      current === 'light-cyan' ? 'soft-cyan' : 'light-cyan'
+      current === 'light-cyan' ? 'dark-cyan' : 'light-cyan'
     );
   };
 
