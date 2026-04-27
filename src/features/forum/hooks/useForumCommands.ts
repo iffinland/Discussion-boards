@@ -239,6 +239,47 @@ export const useForumCommands = ({
     [currentUser.username]
   );
 
+  const rebuildTopicDirectoryIndex =
+    useCallback(async (): Promise<ForumMutationResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      if (!isAdminRole(currentUser.role)) {
+        return {
+          ok: false,
+          error:
+            'Only admins, Super Admins and SysOp can rebuild the forum index.',
+        };
+      }
+
+      try {
+        const snapshot =
+          await forumSearchIndexService.publishTopicDirectoryIndex(
+            sortTopicsByOrder(topics),
+            subTopics,
+            currentUser.username
+          );
+        setTopicDirectoryIndex(snapshot);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to rebuild forum index.',
+        };
+      }
+    }, [
+      currentUser.role,
+      currentUser.username,
+      isAuthenticated,
+      setTopicDirectoryIndex,
+      subTopics,
+      topics,
+    ]);
+
   const createTopic = useCallback(
     async (input: {
       title: string;
@@ -2026,6 +2067,7 @@ export const useForumCommands = ({
     deletePost,
     likePost,
     tipPost,
+    rebuildTopicDirectoryIndex,
     uploadPostImage,
     uploadPostAttachment,
   };

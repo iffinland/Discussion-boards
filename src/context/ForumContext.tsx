@@ -143,6 +143,7 @@ type ForumActionsContextValue = {
   }) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
+  rebuildTopicDirectoryIndex: () => Promise<ForumMutationResult>;
   loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
 };
 
@@ -227,6 +228,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     deletePost,
     likePost,
     tipPost,
+    rebuildTopicDirectoryIndex,
   } = useForumCommands({
     currentUser,
     isAuthenticated,
@@ -401,6 +403,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       deletePost,
       likePost,
       tipPost,
+      rebuildTopicDirectoryIndex,
       loadThreadPosts,
     }),
     [
@@ -424,6 +427,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       deletePost,
       likePost,
       tipPost,
+      rebuildTopicDirectoryIndex,
       loadThreadPosts,
     ]
   );
@@ -479,10 +483,14 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
               subTopicId,
               forumSearchIndexService.loadThreadIndex
             );
-            const postsForThread = threadIndex
-              ? postsFromThreadIndex(threadIndex)
-              : await forumQdnService.loadPostsBySubTopic(subTopicId);
-            threadPostCache.write(subTopicId, postsForThread);
+            if (!threadIndex) {
+              continue;
+            }
+
+            threadPostCache.write(
+              subTopicId,
+              postsFromThreadIndex(threadIndex)
+            );
             writeThreadIndexCache(subTopicId, threadIndex);
             clearThreadQuarantine(subTopicId);
           } catch {
@@ -508,7 +516,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
         () => {
           void runBackgroundSync();
         },
-        { timeout: 2000 }
+        { timeout: 10_000 }
       );
 
       return () => {
@@ -520,7 +528,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
 
     const timeoutId = window.setTimeout(() => {
       void runBackgroundSync();
-    }, 800);
+    }, 10_000);
 
     return () => {
       window.clearTimeout(timeoutId);

@@ -160,6 +160,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     updateTopicSettings,
     upsertRoleAssignment,
     removeRoleAssignment,
+    rebuildTopicDirectoryIndex,
   } = useForumActions();
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
   const [topicTitle, setTopicTitle] = useState('');
@@ -705,15 +706,11 @@ const Home = ({ searchQuery }: HomeProps) => {
             userMap.get(activityAuthorUserId) ??
             activityAuthorUserId ??
             'Unknown User',
-          activeTimeLabel: formatActiveTopicTime(
-            activityAt,
-            activeTopicsNowMs
-          ),
+          activeTimeLabel: formatActiveTopicTime(activityAt, activeTopicsNowMs),
         };
       })
       .sort((a, b) => b.activityMs - a.activityMs)
-      .slice(0, ACTIVE_SUBTOPIC_LIMIT)
-      .map(({ activityAt, activityMs, ...subTopic }) => subTopic);
+      .slice(0, ACTIVE_SUBTOPIC_LIMIT);
   }, [
     activeTopicsNowMs,
     authenticatedAddress,
@@ -1042,6 +1039,15 @@ const Home = ({ searchQuery }: HomeProps) => {
     );
   };
 
+  const handleRebuildTopicDirectoryIndex = async () => {
+    const result = await rebuildTopicDirectoryIndex();
+    setManagementFeedback(
+      result.ok
+        ? 'Forum topic index rebuilt successfully.'
+        : (result.error ?? 'Unable to rebuild forum topic index.')
+    );
+  };
+
   useEffect(() => {
     if (assignableRoleOptions.some((option) => option.value === roleType)) {
       return;
@@ -1114,9 +1120,20 @@ const Home = ({ searchQuery }: HomeProps) => {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-brand-primary text-lg font-semibold">
-          Main Topics
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-brand-primary text-lg font-semibold">
+            Main Topics
+          </h2>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => void handleRebuildTopicDirectoryIndex()}
+              className="bg-surface-card text-ui-strong rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold"
+            >
+              Rebuild Forum Index
+            </button>
+          ) : null}
+        </div>
         {hasActiveSearch ? (
           <p className="text-ui-muted text-sm">
             Search results: {filteredTopics.length} main topics,{' '}

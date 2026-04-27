@@ -140,8 +140,9 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
       }
 
       const elapsedMs = performance.now() - startedAt;
-      const resolvedCount = resolvedEntries.filter(([, url]) => Boolean(url))
-        .length;
+      const resolvedCount = resolvedEntries.filter(([, url]) =>
+        Boolean(url)
+      ).length;
       perfDebugLog('richtext-image-resolve', {
         tags: tags.length,
         uniqueReferences: uniqueReferencesByKey.size,

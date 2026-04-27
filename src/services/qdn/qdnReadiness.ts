@@ -10,7 +10,7 @@ const BUILDABLE_STATUSES = new Set([
 const STATUS_POLL_RETRIES = 8;
 const STATUS_POLL_DELAY_MS = 1200;
 const RESOURCE_FETCH_CONCURRENCY = 6;
-const MISSING_RESOURCE_TTL_MS = 15 * 60 * 1000;
+const MISSING_RESOURCE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MISSING_RESOURCE_STORAGE_KEY = 'forum-missing-qdn-resources';
 
 type QdnStatusResponse =
@@ -89,7 +89,7 @@ const getMissingResourceCache = () => {
   return next;
 };
 
-const isMissingResourceError = (error: unknown) => {
+export const isMissingResourceError = (error: unknown) => {
   if (!(error instanceof Error)) {
     return false;
   }
@@ -158,6 +158,12 @@ export const ensureQdnResourceReady = async (
   name: string,
   identifier: string
 ) => {
+  if (isResourceQuarantined(service, name, identifier)) {
+    throw new Error(
+      `QDN resource is temporarily quarantined as missing: ${service}/${name}/${identifier}`
+    );
+  }
+
   let status = normalizeStatus(
     await getQdnResourceStatus(service, name, identifier, false)
   );

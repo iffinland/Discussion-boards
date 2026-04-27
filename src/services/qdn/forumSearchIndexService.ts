@@ -1,5 +1,13 @@
 import type { Post, PostAttachment, SubTopic, Topic } from '../../types';
-import { fetchWithQdnReadyFallback, mapWithConcurrency } from './qdnReadiness';
+import {
+  fetchWithQdnReadyFallback,
+  isMissingResourceError,
+  mapWithConcurrency,
+} from './qdnReadiness';
+import {
+  isThreadQuarantined,
+  quarantineThread,
+} from '../forum/threadLoadQuarantine';
 import {
   requestQortal,
   type QortalResourceToPublish,
@@ -810,22 +818,35 @@ export const forumSearchIndexService = {
   async loadThreadIndex(
     subTopicId: string
   ): Promise<ThreadSearchSnapshot | null> {
+    if (isThreadQuarantined(subTopicId)) {
+      return null;
+    }
+
     const identifier = `${THREAD_INDEX_PREFIX}${subTopicId}`;
     const resources = await searchByPrefix(identifier);
+    let sawMissingResourceError = false;
     const payloads = await mapWithConcurrency(resources, async (item) => {
       try {
         const raw = await fetchResource(item.name, item.identifier);
         return parseThreadIndexPayload(raw);
-      } catch {
+      } catch (error) {
+        if (isMissingResourceError(error)) {
+          sawMissingResourceError = true;
+        }
         return null;
       }
     });
 
-    return (
+    const snapshot =
       pickLatest(
         payloads.filter((item) => item?.snapshot.subTopicId === subTopicId)
-      )?.snapshot ?? null
-    );
+      )?.snapshot ?? null;
+
+    if (!snapshot && sawMissingResourceError) {
+      quarantineThread(subTopicId);
+    }
+
+    return snapshot;
   },
 
   async publishThreadIndex(
