@@ -66,6 +66,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     uploadPostAttachment,
     updatePost,
     voteOnPoll,
+    closePoll,
     deletePost,
     likePost,
     tipPost,
@@ -644,6 +645,21 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     }, 2400);
   };
 
+  const handleClosePoll = async (postId: string) => {
+    const result = await closePoll({ postId });
+    if (!result.ok) {
+      setModerationFeedback(result.error ?? 'Unable to close poll.');
+      return;
+    }
+
+    setModerationFeedback('Poll closed.');
+    window.setTimeout(() => {
+      setModerationFeedback((current) =>
+        current === 'Poll closed.' ? null : current
+      );
+    }, 2400);
+  };
+
   useEffect(() => {
     setVisibleCount(THREAD_BATCH_SIZE);
     setVirtualFocusIndex(null);
@@ -1160,8 +1176,10 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             }
             tipCount={post.tips}
             pollVoterId={pollVoterId}
+            canClosePoll={canModerate}
             onLike={likePost}
             onVoteOnPoll={handleVoteOnPoll}
+            onClosePoll={handleClosePoll}
             onReply={openReplyComposer}
             onShare={handleSharePost}
             onSendTip={handleSendTip}
@@ -1200,7 +1218,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         pollDraft={pollDraft}
         canAddPoll={Boolean(subTopic?.isPoll && !replyTarget)}
         replyTargetAuthorName={
-          replyTarget ? resolveAuthorDisplayName(replyTarget.authorUserId) : null
+          replyTarget
+            ? resolveAuthorDisplayName(replyTarget.authorUserId)
+            : null
         }
         replyTargetContent={replyTarget?.content ?? null}
         onReplyTextChange={setReplyText}

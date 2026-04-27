@@ -25,6 +25,29 @@ type ThreadComposerProps = {
   helperText?: string | null;
 };
 
+const toDateTimeLocalValue = (value: string | null | undefined) => {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const fromDateTimeLocalValue = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
 const ThreadComposer = ({
   replyText,
   replyAttachments,
@@ -56,6 +79,7 @@ const ThreadComposer = ({
       description: '',
       mode: 'single',
       options: ['', ''],
+      closesAt: null,
     });
   };
 
@@ -90,7 +114,9 @@ const ThreadComposer = ({
 
     updatePollDraft({
       ...pollDraft,
-      options: pollDraft.options.filter((_, optionIndex) => optionIndex !== index),
+      options: pollDraft.options.filter(
+        (_, optionIndex) => optionIndex !== index
+      ),
     });
   };
 
@@ -192,6 +218,20 @@ const ThreadComposer = ({
                 placeholder="Optional poll description"
                 className="bg-surface-card text-ui-strong min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               />
+              <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                Poll closing date
+                <input
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(pollDraft.closesAt)}
+                  onChange={(event) =>
+                    updatePollDraft({
+                      ...pollDraft,
+                      closesAt: fromDateTimeLocalValue(event.target.value),
+                    })
+                  }
+                  className="bg-surface-card text-ui-strong w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
               <div className="grid gap-2">
                 {pollDraft.options.map((option, index) => (
                   <div key={index} className="flex gap-2">

@@ -9,6 +9,7 @@ export type ForumPollDraft = {
   description: string;
   mode: import('../../types').PostPollMode;
   options: string[];
+  closesAt: string | null;
 };
 
 export type ForumUploadImageResult = {

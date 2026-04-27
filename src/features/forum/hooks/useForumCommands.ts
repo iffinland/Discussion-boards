@@ -116,12 +116,37 @@ const normalizePollDraft = (draft: ForumPollDraft | null) => {
     throw new Error('Poll requires at least two answer options.');
   }
 
+  let closesAt: string | null = null;
+  if (draft.closesAt) {
+    const closesAtDate = new Date(draft.closesAt);
+    if (Number.isNaN(closesAtDate.getTime())) {
+      throw new Error('Poll closing date is invalid.');
+    }
+
+    if (closesAtDate.getTime() <= Date.now()) {
+      throw new Error('Poll closing date must be in the future.');
+    }
+
+    closesAt = closesAtDate.toISOString();
+  }
+
   return {
     question,
     description,
     mode: draft.mode,
     options,
+    closesAt,
   };
+};
+
+const isPollClosed = (poll: PostPoll) => {
+  if (poll.closedAt) {
+    return true;
+  }
+
+  return Boolean(
+    poll.closesAt && new Date(poll.closesAt).getTime() <= Date.now()
+  );
 };
 
 const sortTopicsByOrder = (items: Topic[]) =>
@@ -1251,7 +1276,9 @@ export const useForumCommands = ({
         return {
           ok: false,
           error:
-            error instanceof Error ? error.message : 'Poll configuration is invalid.',
+            error instanceof Error
+              ? error.message
+              : 'Poll configuration is invalid.',
         };
       }
 
@@ -1326,6 +1353,9 @@ export const useForumCommands = ({
               label,
             })),
             votes: [],
+            closesAt: normalizedPoll.closesAt,
+            closedAt: null,
+            closedByUserId: null,
           }
         : null;
       const newPost: Post = {
@@ -1553,6 +1583,10 @@ export const useForumCommands = ({
         return { ok: false, error: 'This poll allows one answer only.' };
       }
 
+      if (isPollClosed(target.poll)) {
+        return { ok: false, error: 'This poll is closed.' };
+      }
+
       const updatedPost: Post = {
         ...target,
         poll: {
@@ -1599,7 +1633,10 @@ export const useForumCommands = ({
           ...current,
           [updatedPost.subTopicId]: threadIndexResource.snapshot,
         }));
-        writeThreadIndexCache(updatedPost.subTopicId, threadIndexResource.snapshot);
+        writeThreadIndexCache(
+          updatedPost.subTopicId,
+          threadIndexResource.snapshot
+        );
         return { ok: true };
       } catch (error) {
         return {
@@ -1612,6 +1649,94 @@ export const useForumCommands = ({
     [
       authenticatedAddress,
       buildThreadIndexResource,
+      currentUser,
+      isAuthenticated,
+      posts,
+      setPosts,
+      setThreadSearchIndexes,
+      subTopics,
+    ]
+  );
+
+  const closePoll = useCallback(
+    async (input: { postId: string }): Promise<ForumMutationResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      if (!isModeratorRole(currentUser.role)) {
+        return {
+          ok: false,
+          error:
+            'Only moderators, admins, Super Admins and SysOp can close polls.',
+        };
+      }
+
+      const target = posts.find((post) => post.id === input.postId);
+      if (!target?.poll) {
+        return { ok: false, error: 'Poll not found.' };
+      }
+
+      if (target.poll.closedAt) {
+        return { ok: false, error: 'This poll is already closed.' };
+      }
+
+      const closedAt = new Date().toISOString();
+      const updatedPost: Post = {
+        ...target,
+        poll: {
+          ...target.poll,
+          closedAt,
+          closedByUserId: currentUser.id,
+        },
+      };
+
+      try {
+        const nextPosts = posts.map((post) =>
+          post.id === input.postId ? updatedPost : post
+        );
+        const postResource = forumQdnService.buildPostPublishResource(
+          updatedPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          updatedPost.subTopicId,
+          nextPosts
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+        ]);
+
+        setPosts((current) => {
+          const next = current.map((post) =>
+            post.id === input.postId ? updatedPost : post
+          );
+          threadPostCache.write(
+            updatedPost.subTopicId,
+            next.filter((post) => post.subTopicId === updatedPost.subTopicId)
+          );
+          return next;
+        });
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [updatedPost.subTopicId]: threadIndexResource.snapshot,
+        }));
+        writeThreadIndexCache(
+          updatedPost.subTopicId,
+          threadIndexResource.snapshot
+        );
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Failed to close poll.',
+        };
+      }
+    },
+    [
+      buildThreadIndexResource,
       currentUser.id,
       currentUser.role,
       currentUser.username,
@@ -1619,7 +1744,6 @@ export const useForumCommands = ({
       posts,
       setPosts,
       setThreadSearchIndexes,
-      subTopics,
     ]
   );
 
@@ -1898,6 +2022,7 @@ export const useForumCommands = ({
     createPost,
     updatePost,
     voteOnPoll,
+    closePoll,
     deletePost,
     likePost,
     tipPost,

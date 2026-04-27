@@ -25,8 +25,10 @@ type ThreadPostCardProps = {
   hasLiked: boolean;
   tipCount: number;
   pollVoterId: string;
+  canClosePoll: boolean;
   onLike: (postId: string) => void;
   onVoteOnPoll: (postId: string, optionIds: string[]) => void;
+  onClosePoll: (postId: string) => void;
   onReply: (post: Post) => void;
   onShare: (postId: string) => void;
   onSendTip: (post: Post) => void;
@@ -68,8 +70,10 @@ const ThreadPostCard = ({
   hasLiked,
   tipCount,
   pollVoterId,
+  canClosePoll,
   onLike,
   onVoteOnPoll,
+  onClosePoll,
   onReply,
   onShare,
   onSendTip,
@@ -91,6 +95,36 @@ const ThreadPostCard = ({
     (vote) => vote.voterId === pollVoterId
   );
   const totalPollVotes = post.poll?.votes.length ?? 0;
+  const pollClosedByDate = Boolean(
+    post.poll?.closesAt && new Date(post.poll.closesAt).getTime() <= Date.now()
+  );
+  const isPollClosed = Boolean(post.poll?.closedAt || pollClosedByDate);
+  const pollClosedAt = post.poll?.closedAt ?? post.poll?.closesAt ?? null;
+  const canShowPollResults = Boolean(existingPollVote || isPollClosed);
+  const pollOptionStats =
+    post.poll?.options.map((option) => {
+      const voteCount =
+        post.poll?.votes.filter((vote) => vote.optionIds.includes(option.id))
+          .length ?? 0;
+      const percentage =
+        totalPollVotes > 0 ? Math.round((voteCount / totalPollVotes) * 100) : 0;
+
+      return {
+        ...option,
+        voteCount,
+        percentage,
+      };
+    }) ?? [];
+  const winningVoteCount = Math.max(
+    0,
+    ...pollOptionStats.map((option) => option.voteCount)
+  );
+  const winningOptions =
+    winningVoteCount > 0
+      ? pollOptionStats.filter(
+          (option) => option.voteCount === winningVoteCount
+        )
+      : [];
 
   const handleStartEdit = () => {
     setDraftContent(post.content);
@@ -170,7 +204,7 @@ const ThreadPostCard = ({
   };
 
   const togglePollOption = (optionId: string) => {
-    if (!post.poll || existingPollVote) {
+    if (!post.poll || existingPollVote || isPollClosed) {
       return;
     }
 
@@ -186,7 +220,12 @@ const ThreadPostCard = ({
   };
 
   const submitPollVote = () => {
-    if (!post.poll || existingPollVote || selectedPollOptionIds.length === 0) {
+    if (
+      !post.poll ||
+      existingPollVote ||
+      isPollClosed ||
+      selectedPollOptionIds.length === 0
+    ) {
       return;
     }
 
@@ -327,6 +366,27 @@ const ThreadPostCard = ({
                     : 'Single answer only'}
                 </span>
               </div>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {post.poll.closesAt ? (
+                  <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                    Closes {formatDateTime(post.poll.closesAt)}
+                  </span>
+                ) : null}
+                {isPollClosed ? (
+                  <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
+                    Closed {pollClosedAt ? formatDateTime(pollClosedAt) : ''}
+                  </span>
+                ) : null}
+                {canClosePoll && !isPollClosed ? (
+                  <button
+                    type="button"
+                    onClick={() => onClosePoll(post.id)}
+                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 active:translate-y-px"
+                  >
+                    Close Poll
+                  </button>
+                ) : null}
+              </div>
               <p className="text-ui-strong text-base font-semibold">
                 {post.poll.question}
               </p>
@@ -335,17 +395,12 @@ const ThreadPostCard = ({
                   {post.poll.description}
                 </p>
               ) : null}
+              <p className="mt-2 rounded-md border border-cyan-100 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700">
+                Poll results are shown after you vote or once the poll is
+                closed.
+              </p>
               <div className="mt-3 space-y-2">
-                {post.poll.options.map((option) => {
-                  const voteCount = post.poll
-                    ? post.poll.votes.filter((vote) =>
-                        vote.optionIds.includes(option.id)
-                      ).length
-                    : 0;
-                  const percentage =
-                    totalPollVotes > 0
-                      ? Math.round((voteCount / totalPollVotes) * 100)
-                      : 0;
+                {pollOptionStats.map((option) => {
                   const isSelected = existingPollVote
                     ? existingPollVote.optionIds.includes(option.id)
                     : selectedPollOptionIds.includes(option.id);
@@ -355,7 +410,7 @@ const ThreadPostCard = ({
                       key={option.id}
                       type="button"
                       onClick={() => togglePollOption(option.id)}
-                      disabled={Boolean(existingPollVote)}
+                      disabled={Boolean(existingPollVote || isPollClosed)}
                       className={[
                         'w-full rounded-md border px-3 py-2 text-left text-sm transition active:translate-y-px',
                         isSelected
@@ -366,27 +421,54 @@ const ThreadPostCard = ({
                     >
                       <span className="flex items-center justify-between gap-3">
                         <span className="font-semibold">{option.label}</span>
-                        <span className="text-xs text-slate-600">
-                          {voteCount} vote{voteCount === 1 ? '' : 's'} •{' '}
-                          {percentage}%
+                        {canShowPollResults ? (
+                          <span className="text-xs text-slate-600">
+                            {option.voteCount} vote
+                            {option.voteCount === 1 ? '' : 's'} •{' '}
+                            {option.percentage}%
+                          </span>
+                        ) : null}
+                      </span>
+                      {canShowPollResults ? (
+                        <span className="mt-2 block h-2 overflow-hidden rounded-full bg-cyan-100">
+                          <span
+                            className="block h-full rounded-full bg-cyan-500"
+                            style={{ width: `${option.percentage}%` }}
+                          />
                         </span>
-                      </span>
-                      <span className="mt-2 block h-2 overflow-hidden rounded-full bg-cyan-100">
-                        <span
-                          className="block h-full rounded-full bg-cyan-500"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </span>
+                      ) : null}
                     </button>
                   );
                 })}
               </div>
+              {isPollClosed ? (
+                <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                  <p className="text-ui-strong text-sm font-semibold">
+                    Poll statistics
+                  </p>
+                  <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
+                    <span>Total votes: {totalPollVotes}</span>
+                    <span>Options: {post.poll.options.length}</span>
+                    <span>
+                      Result:{' '}
+                      {winningOptions.length > 0
+                        ? winningOptions
+                            .map((option) => option.label)
+                            .join(', ')
+                        : 'No votes'}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-ui-muted text-xs">
-                  {totalPollVotes} total vote{totalPollVotes === 1 ? '' : 's'}
+                  {canShowPollResults
+                    ? `${totalPollVotes} total vote${totalPollVotes === 1 ? '' : 's'}`
+                    : 'Results hidden until you vote or the poll closes'}
                   {existingPollVote ? ' • You have voted' : ''}
+                  {isPollClosed ? ' • Poll closed' : ''}
                 </p>
-                {!existingPollVote ? (
+                {!existingPollVote && !isPollClosed ? (
                   <button
                     type="button"
                     onClick={submitPollVote}
@@ -481,8 +563,10 @@ const areThreadPostCardPropsEqual = (
     prev.hasLiked === next.hasLiked &&
     prev.tipCount === next.tipCount &&
     prev.pollVoterId === next.pollVoterId &&
+    prev.canClosePoll === next.canClosePoll &&
     prev.onLike === next.onLike &&
     prev.onVoteOnPoll === next.onVoteOnPoll &&
+    prev.onClosePoll === next.onClosePoll &&
     prev.onReply === next.onReply &&
     prev.onShare === next.onShare &&
     prev.onSendTip === next.onSendTip &&

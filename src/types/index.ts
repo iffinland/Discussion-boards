@@ -39,6 +39,9 @@ export interface PostPoll {
   mode: PostPollMode;
   options: PostPollOption[];
   votes: PostPollVote[];
+  closesAt: string | null;
+  closedAt: string | null;
+  closedByUserId: string | null;
 }
 
 export interface User {

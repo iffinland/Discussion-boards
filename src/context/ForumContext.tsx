@@ -136,6 +136,7 @@ type ForumActionsContextValue = {
     postId: string;
     optionIds: string[];
   }) => Promise<ForumMutationResult>;
+  closePoll: (input: { postId: string }) => Promise<ForumMutationResult>;
   deletePost: (input: {
     postId: string;
     reason?: string | null;
@@ -222,6 +223,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     uploadPostAttachment,
     updatePost,
     voteOnPoll,
+    closePoll,
     deletePost,
     likePost,
     tipPost,
@@ -395,6 +397,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostAttachment,
       updatePost,
       voteOnPoll,
+      closePoll,
       deletePost,
       likePost,
       tipPost,
@@ -417,6 +420,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostAttachment,
       updatePost,
       voteOnPoll,
+      closePoll,
       deletePost,
       likePost,
       tipPost,

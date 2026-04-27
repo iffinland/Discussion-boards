@@ -243,6 +243,18 @@ const sanitizePostPoll = (value: unknown): Post['poll'] => {
     mode: value.mode === 'multiple' ? 'multiple' : 'single',
     options,
     votes,
+    closesAt:
+      typeof value.closesAt === 'string' && value.closesAt.trim()
+        ? value.closesAt
+        : null,
+    closedAt:
+      typeof value.closedAt === 'string' && value.closedAt.trim()
+        ? value.closedAt
+        : null,
+    closedByUserId:
+      typeof value.closedByUserId === 'string' && value.closedByUserId.trim()
+        ? value.closedByUserId
+        : null,
   };
 };
 
