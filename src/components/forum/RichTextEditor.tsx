@@ -33,6 +33,7 @@ type RichTextEditorProps = {
   placeholder?: string;
   editorLabel?: string;
   submitLabel?: string;
+  canManageAttachments?: boolean;
 };
 
 const RichTextEditor = ({
@@ -46,6 +47,7 @@ const RichTextEditor = ({
   placeholder = 'Write your reply...',
   editorLabel = 'Reply editor',
   submitLabel = 'Publish Post',
+  canManageAttachments = true,
 }: RichTextEditorProps) => {
   const editorId = useId();
   const fileInputId = useId();
@@ -406,29 +408,35 @@ const RichTextEditor = ({
           >
             Add Image
           </button>
-          <input
-            ref={attachmentInputRef}
-            id={attachmentInputId}
-            type="file"
-            accept=".txt,.md,.zip,text/plain,text/markdown,application/zip,application/x-zip-compressed"
-            multiple
-            className="hidden"
-            onChange={handleAttachmentSelected}
-          />
-          <button
-            type="button"
-            onClick={() => attachmentInputRef.current?.click()}
-            className="forum-pill-accent text-brand-accent-strong rounded-md px-2 py-1 text-xs font-semibold"
-          >
-            Add Attachment
-          </button>
+          {canManageAttachments ? (
+            <>
+              <input
+                ref={attachmentInputRef}
+                id={attachmentInputId}
+                type="file"
+                accept=".txt,.md,.zip,text/plain,text/markdown,application/zip,application/x-zip-compressed"
+                multiple
+                className="hidden"
+                onChange={handleAttachmentSelected}
+              />
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                className="forum-pill-accent text-brand-accent-strong rounded-md px-2 py-1 text-xs font-semibold"
+              >
+                Add Attachment
+              </button>
+            </>
+          ) : null}
         </div>
         <p className="text-ui-muted mt-2 text-xs">
           Image limits: max 1920x1080, max 2 MB, types JPG/PNG/WEBP/GIF.
         </p>
-        <p className="text-ui-muted mt-1 text-xs">
-          {getAttachmentHelperText()}
-        </p>
+        {canManageAttachments ? (
+          <p className="text-ui-muted mt-1 text-xs">
+            {getAttachmentHelperText()}
+          </p>
+        ) : null}
       </div>
 
       {editorInfo ? (
@@ -457,7 +465,7 @@ const RichTextEditor = ({
         className="bg-surface-card text-ui-strong min-h-28 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-cyan-300"
       />
 
-      {attachments.length > 0 ? (
+      {canManageAttachments && attachments.length > 0 ? (
         <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <p className="text-ui-strong text-xs font-semibold">Attachments</p>
           <div className="mt-2 space-y-2">

@@ -128,10 +128,11 @@ export const useThreadActions = ({
       const result = await updatePost({ postId, content });
       if (!result.ok) {
         setFeedback(result.error ?? 'Unable to update post.');
-        return;
+        return false;
       }
 
       setFeedback('Post updated.');
+      return true;
     },
     [updatePost]
   );

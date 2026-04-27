@@ -1,14 +1,7 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useState } from 'react';
 
 import UserRoleBadge from '../../../components/common/UserRoleBadge';
 import RichTextContent from '../../../components/forum/RichTextContent';
-import RichTextToolsModal from '../../../components/forum/RichTextToolsModal';
-import {
-  applyListFormat,
-  applyWrapFormat,
-  formatToTags,
-  type RichTextFormatType,
-} from '../../../services/forum/richText';
 import type { Post, User, UserRole } from '../../../types';
 import PostAttachmentList from './PostAttachmentList';
 
@@ -33,7 +26,7 @@ type ThreadPostCardProps = {
   onShare: (postId: string) => void;
   onSendTip: (post: Post) => void;
   onJumpToPost?: (postId: string) => void;
-  onEdit: (postId: string, nextContent: string) => void;
+  onEdit: (post: Post) => void;
   onDelete: (postId: string) => void;
 };
 
@@ -83,14 +76,10 @@ const ThreadPostCard = ({
 }: ThreadPostCardProps) => {
   const displayName = author?.displayName ?? 'Unknown User';
   const avatarColor = author?.avatarColor ?? 'bg-cyan-500';
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftContent, setDraftContent] = useState(post.content);
-  const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
   const [selectedPollOptionIds, setSelectedPollOptionIds] = useState<string[]>(
     []
   );
-  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const existingPollVote = post.poll?.votes.find(
     (vote) => vote.voterId === pollVoterId
   );
@@ -125,83 +114,6 @@ const ThreadPostCard = ({
           (option) => option.voteCount === winningVoteCount
         )
       : [];
-
-  const handleStartEdit = () => {
-    setDraftContent(post.content);
-    setIsEditing(true);
-  };
-
-  const handleSaveEdit = () => {
-    const value = draftContent.trim();
-    if (!value) {
-      return;
-    }
-
-    onEdit(post.id, value);
-    setIsEditing(false);
-  };
-
-  const handleCancelEdit = () => {
-    setDraftContent(post.content);
-    setIsEditing(false);
-  };
-
-  const applyDraftFormatting = (openTag: string, closeTag: string) => {
-    const textarea = editTextareaRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    const result = applyWrapFormat({
-      value: draftContent,
-      selectionStart: textarea.selectionStart,
-      selectionEnd: textarea.selectionEnd,
-      openTag,
-      closeTag,
-    });
-    setDraftContent(result.value);
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(
-        result.nextSelectionStart,
-        result.nextSelectionEnd
-      );
-    });
-  };
-
-  const handleDraftFormat = (format: RichTextFormatType) => {
-    if (format === 'unorderedList' || format === 'orderedList') {
-      const textarea = editTextareaRef.current;
-      if (!textarea) {
-        return;
-      }
-
-      const result = applyListFormat({
-        value: draftContent,
-        selectionStart: textarea.selectionStart,
-        selectionEnd: textarea.selectionEnd,
-        ordered: format === 'orderedList',
-      });
-      setDraftContent(result.value);
-
-      requestAnimationFrame(() => {
-        textarea.focus();
-        textarea.setSelectionRange(
-          result.nextSelectionStart,
-          result.nextSelectionEnd
-        );
-      });
-      return;
-    }
-
-    const [openTag, closeTag] = formatToTags[format];
-    applyDraftFormatting(openTag, closeTag);
-  };
-
-  const handleDraftColor = (color: string) => {
-    applyDraftFormatting(`[color=${color}]`, '[/color]');
-  };
 
   const togglePollOption = (optionId: string) => {
     if (!post.poll || existingPollVote || isPollClosed) {
@@ -283,207 +195,160 @@ const ThreadPostCard = ({
         </div>
       </header>
 
-      {isEditing ? (
-        <div className="mt-3 space-y-2">
-          <div className="border-brand-primary bg-brand-primary-soft flex items-center gap-2 rounded-md border p-2">
-            <button
-              type="button"
-              onClick={() => setIsToolsModalOpen(true)}
-              className="forum-pill-primary text-brand-primary-strong rounded-md px-2 py-1 text-xs font-semibold"
-            >
-              Rich Text
-            </button>
+      {repliedPost ? (
+        <button
+          type="button"
+          onClick={() => onJumpToPost?.(repliedPost.id)}
+          className={[
+            'mt-3 w-full rounded-lg border-l-4 px-3 py-2 text-left transition',
+            replyContextHighlighted
+              ? 'border-cyan-400 bg-cyan-50 ring-1 ring-cyan-200'
+              : 'border-slate-300 bg-slate-50 hover:bg-slate-100',
+          ].join(' ')}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-ui-strong text-xs font-semibold">
+              Replying to {repliedAuthorName ?? 'Member'}
+            </p>
+            <span className="text-xs font-semibold text-cyan-700">
+              Jump to post
+            </span>
           </div>
-          <textarea
-            ref={editTextareaRef}
-            value={draftContent}
-            onChange={(event) => setDraftContent(event.target.value)}
-            className="bg-surface-card text-ui-strong min-h-24 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-cyan-300"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSaveEdit}
-              className="bg-brand-primary-solid rounded-md px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-cyan-600"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="bg-surface-card text-ui-muted rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold"
-            >
-              Cancel
-            </button>
-          </div>
-          <RichTextToolsModal
-            isOpen={isToolsModalOpen}
-            onClose={() => setIsToolsModalOpen(false)}
-            onApplyFormat={handleDraftFormat}
-            onApplyColor={handleDraftColor}
-          />
-        </div>
-      ) : (
-        <>
-          {repliedPost ? (
-            <button
-              type="button"
-              onClick={() => onJumpToPost?.(repliedPost.id)}
-              className={[
-                'mt-3 w-full rounded-lg border-l-4 px-3 py-2 text-left transition',
-                replyContextHighlighted
-                  ? 'border-cyan-400 bg-cyan-50 ring-1 ring-cyan-200'
-                  : 'border-slate-300 bg-slate-50 hover:bg-slate-100',
-              ].join(' ')}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-ui-strong text-xs font-semibold">
-                  Replying to {repliedAuthorName ?? 'Member'}
-                </p>
-                <span className="text-xs font-semibold text-cyan-700">
-                  Jump to post
-                </span>
-              </div>
-              <RichTextContent
-                value={repliedPost.content}
-                className="text-ui-muted mt-1 text-xs leading-relaxed"
-              />
-            </button>
-          ) : null}
           <RichTextContent
-            value={post.content}
-            className="text-ui-strong mt-3 text-sm leading-relaxed"
+            value={repliedPost.content}
+            className="text-ui-muted mt-1 text-xs leading-relaxed"
           />
-          {post.poll ? (
-            <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/60 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="inline-flex rounded-md border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
-                  Poll / Voting
-                </span>
-                <span className="text-ui-muted text-xs">
-                  {post.poll.mode === 'multiple'
-                    ? 'Multiple answers allowed'
-                    : 'Single answer only'}
-                </span>
-              </div>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                {post.poll.closesAt ? (
-                  <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
-                    Closes {formatDateTime(post.poll.closesAt)}
-                  </span>
-                ) : null}
-                {isPollClosed ? (
-                  <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
-                    Closed {pollClosedAt ? formatDateTime(pollClosedAt) : ''}
-                  </span>
-                ) : null}
-                {canClosePoll && !isPollClosed ? (
-                  <button
-                    type="button"
-                    onClick={() => onClosePoll(post.id)}
-                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 active:translate-y-px"
-                  >
-                    Close Poll
-                  </button>
-                ) : null}
-              </div>
-              <p className="text-ui-strong text-base font-semibold">
-                {post.poll.question}
-              </p>
-              {post.poll.description ? (
-                <p className="text-ui-muted mt-1 text-sm">
-                  {post.poll.description}
-                </p>
-              ) : null}
-              <p className="mt-2 rounded-md border border-cyan-100 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700">
-                Poll results are shown after you vote or once the poll is
-                closed.
-              </p>
-              <div className="mt-3 space-y-2">
-                {pollOptionStats.map((option) => {
-                  const isSelected = existingPollVote
-                    ? existingPollVote.optionIds.includes(option.id)
-                    : selectedPollOptionIds.includes(option.id);
+        </button>
+      ) : null}
+      <RichTextContent
+        value={post.content}
+        className="text-ui-strong mt-3 text-sm leading-relaxed"
+      />
+      {post.poll ? (
+        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/60 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="inline-flex rounded-md border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
+              Poll / Voting
+            </span>
+            <span className="text-ui-muted text-xs">
+              {post.poll.mode === 'multiple'
+                ? 'Multiple answers allowed'
+                : 'Single answer only'}
+            </span>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {post.poll.closesAt ? (
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                Closes {formatDateTime(post.poll.closesAt)}
+              </span>
+            ) : null}
+            {isPollClosed ? (
+              <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
+                Closed {pollClosedAt ? formatDateTime(pollClosedAt) : ''}
+              </span>
+            ) : null}
+            {canClosePoll && !isPollClosed ? (
+              <button
+                type="button"
+                onClick={() => onClosePoll(post.id)}
+                className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 active:translate-y-px"
+              >
+                Close Poll
+              </button>
+            ) : null}
+          </div>
+          <p className="text-ui-strong text-base font-semibold">
+            {post.poll.question}
+          </p>
+          {post.poll.description ? (
+            <p className="text-ui-muted mt-1 text-sm">
+              {post.poll.description}
+            </p>
+          ) : null}
+          <p className="mt-2 rounded-md border border-cyan-100 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700">
+            Poll results are shown after you vote or once the poll is closed.
+          </p>
+          <div className="mt-3 space-y-2">
+            {pollOptionStats.map((option) => {
+              const isSelected = existingPollVote
+                ? existingPollVote.optionIds.includes(option.id)
+                : selectedPollOptionIds.includes(option.id);
 
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => togglePollOption(option.id)}
-                      disabled={Boolean(existingPollVote || isPollClosed)}
-                      className={[
-                        'w-full rounded-md border px-3 py-2 text-left text-sm transition active:translate-y-px',
-                        isSelected
-                          ? 'border-cyan-400 bg-white text-slate-900 shadow-sm'
-                          : 'border-cyan-100 bg-white/70 text-slate-700 hover:bg-white',
-                        existingPollVote ? 'cursor-default' : '',
-                      ].join(' ')}
-                    >
-                      <span className="flex items-center justify-between gap-3">
-                        <span className="font-semibold">{option.label}</span>
-                        {canShowPollResults ? (
-                          <span className="text-xs text-slate-600">
-                            {option.voteCount} vote
-                            {option.voteCount === 1 ? '' : 's'} •{' '}
-                            {option.percentage}%
-                          </span>
-                        ) : null}
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => togglePollOption(option.id)}
+                  disabled={Boolean(existingPollVote || isPollClosed)}
+                  className={[
+                    'w-full rounded-md border px-3 py-2 text-left text-sm transition active:translate-y-px',
+                    isSelected
+                      ? 'border-cyan-400 bg-white text-slate-900 shadow-sm'
+                      : 'border-cyan-100 bg-white/70 text-slate-700 hover:bg-white',
+                    existingPollVote ? 'cursor-default' : '',
+                  ].join(' ')}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="font-semibold">{option.label}</span>
+                    {canShowPollResults ? (
+                      <span className="text-xs text-slate-600">
+                        {option.voteCount} vote
+                        {option.voteCount === 1 ? '' : 's'} •{' '}
+                        {option.percentage}%
                       </span>
-                      {canShowPollResults ? (
-                        <span className="mt-2 block h-2 overflow-hidden rounded-full bg-cyan-100">
-                          <span
-                            className="block h-full rounded-full bg-cyan-500"
-                            style={{ width: `${option.percentage}%` }}
-                          />
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              {isPollClosed ? (
-                <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-                  <p className="text-ui-strong text-sm font-semibold">
-                    Poll statistics
-                  </p>
-                  <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
-                    <span>Total votes: {totalPollVotes}</span>
-                    <span>Options: {post.poll.options.length}</span>
-                    <span>
-                      Result:{' '}
-                      {winningOptions.length > 0
-                        ? winningOptions
-                            .map((option) => option.label)
-                            .join(', ')
-                        : 'No votes'}
+                    ) : null}
+                  </span>
+                  {canShowPollResults ? (
+                    <span className="mt-2 block h-2 overflow-hidden rounded-full bg-cyan-100">
+                      <span
+                        className="block h-full rounded-full bg-cyan-500"
+                        style={{ width: `${option.percentage}%` }}
+                      />
                     </span>
-                  </div>
-                </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-ui-muted text-xs">
-                  {canShowPollResults
-                    ? `${totalPollVotes} total vote${totalPollVotes === 1 ? '' : 's'}`
-                    : 'Results hidden until you vote or the poll closes'}
-                  {existingPollVote ? ' • You have voted' : ''}
-                  {isPollClosed ? ' • Poll closed' : ''}
-                </p>
-                {!existingPollVote && !isPollClosed ? (
-                  <button
-                    type="button"
-                    onClick={submitPollVote}
-                    disabled={selectedPollOptionIds.length === 0}
-                    className="rounded-md border border-cyan-300 bg-cyan-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-cyan-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Submit Vote
-                  </button>
-                ) : null}
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          {isPollClosed ? (
+            <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+              <p className="text-ui-strong text-sm font-semibold">
+                Poll statistics
+              </p>
+              <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
+                <span>Total votes: {totalPollVotes}</span>
+                <span>Options: {post.poll.options.length}</span>
+                <span>
+                  Result:{' '}
+                  {winningOptions.length > 0
+                    ? winningOptions.map((option) => option.label).join(', ')
+                    : 'No votes'}
+                </span>
               </div>
             </div>
           ) : null}
-          <PostAttachmentList attachments={post.attachments} />
-        </>
-      )}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-ui-muted text-xs">
+              {canShowPollResults
+                ? `${totalPollVotes} total vote${totalPollVotes === 1 ? '' : 's'}`
+                : 'Results hidden until you vote or the poll closes'}
+              {existingPollVote ? ' • You have voted' : ''}
+              {isPollClosed ? ' • Poll closed' : ''}
+            </p>
+            {!existingPollVote && !isPollClosed ? (
+              <button
+                type="button"
+                onClick={submitPollVote}
+                disabled={selectedPollOptionIds.length === 0}
+                className="rounded-md border border-cyan-300 bg-cyan-100 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-cyan-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Submit Vote
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <PostAttachmentList attachments={post.attachments} />
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-orange-100 pt-3">
         <button
@@ -520,7 +385,7 @@ const ThreadPostCard = ({
             <button
               type="button"
               className={actionButtonClass}
-              onClick={handleStartEdit}
+              onClick={() => onEdit(post)}
             >
               Edit
             </button>

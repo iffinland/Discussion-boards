@@ -1,8 +1,16 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import ShareIcon from '../components/common/ShareIcon';
 import PostComposerModal from '../features/forum/components/PostComposerModal';
+import PostEditModal from '../features/forum/components/PostEditModal';
 import QortTipModal from '../features/forum/components/QortTipModal';
 import ThreadSkeleton from '../features/forum/components/ThreadSkeleton';
 import ThreadPostCard from '../features/forum/components/ThreadPostCard';
@@ -83,6 +91,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     null
   );
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editText, setEditText] = useState('');
   const [postSortMode, setPostSortMode] = useState<PostSortMode>('oldest');
   const [authorRolesByUserId, setAuthorRolesByUserId] = useState<
     Record<string, UserRole>
@@ -629,6 +639,30 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     resetComposer();
     setIsComposerOpen(false);
   };
+
+  const openEditComposer = useCallback((post: Post) => {
+    setEditingPost(post);
+    setEditText(post.content);
+  }, []);
+
+  const closeEditComposer = useCallback(() => {
+    setEditingPost(null);
+    setEditText('');
+  }, []);
+
+  const submitPostEdit = useCallback(async () => {
+    if (!editingPost) {
+      return false;
+    }
+
+    const value = editText.trim();
+    if (!value) {
+      setModerationFeedback('Post content is required.');
+      return false;
+    }
+
+    return handleEditPost(editingPost.id, value);
+  }, [editText, editingPost, handleEditPost]);
 
   const handleVoteOnPoll = async (postId: string, optionIds: string[]) => {
     const result = await voteOnPoll({ postId, optionIds });
@@ -1184,7 +1218,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             onShare={handleSharePost}
             onSendTip={handleSendTip}
             onJumpToPost={jumpToPost}
-            onEdit={handleEditPost}
+            onEdit={openEditComposer}
             onDelete={handleDeletePost}
           />
         ))}
@@ -1233,6 +1267,14 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         onClose={closeComposerModal}
         disabled={isComposerDisabled}
         helperText={composerHelperText}
+      />
+      <PostEditModal
+        isOpen={Boolean(editingPost)}
+        editText={editText}
+        onEditTextChange={setEditText}
+        onSubmit={submitPostEdit}
+        onUploadImage={uploadImageForReply}
+        onClose={closeEditComposer}
       />
     </div>
   );
