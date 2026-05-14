@@ -62,11 +62,15 @@ type ForumDataContextValue = {
   isAuthReady: boolean;
   canSwitchUser: boolean;
   isThreadPostsLoading: boolean;
+  loadError: string | null;
+  isRetrying: boolean;
+  loadingStage: string;
 };
 
 type ForumActionsContextValue = {
   authenticate: () => Promise<void>;
   setCurrentUser: (userId: string) => void;
+  retryLoadData: () => void;
   createTopic: (input: {
     title: string;
     description: string;
@@ -208,6 +212,10 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     authMode,
     isAuthenticated,
     authenticate,
+    loadError,
+    isRetrying,
+    loadingStage,
+    retryLoadData,
   } = useForumDataQuery();
   const {
     createTopic,
@@ -361,6 +369,9 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthReady,
       canSwitchUser: availableAuthNames.length > 1,
       isThreadPostsLoading,
+      loadError,
+      isRetrying,
+      loadingStage,
     }),
     [
       users,
@@ -378,6 +389,9 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       isAuthenticated,
       isAuthReady,
       isThreadPostsLoading,
+      loadError,
+      isRetrying,
+      loadingStage,
     ]
   );
 
@@ -385,6 +399,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       authenticate,
       setCurrentUser,
+      retryLoadData,
       createTopic,
       reorderTopics,
       reorderPinnedSubTopics,
@@ -409,6 +424,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     [
       authenticate,
       setCurrentUser,
+      retryLoadData,
       createTopic,
       reorderTopics,
       reorderPinnedSubTopics,

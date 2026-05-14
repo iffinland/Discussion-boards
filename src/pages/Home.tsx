@@ -153,6 +153,9 @@ const Home = ({ searchQuery }: HomeProps) => {
     posts,
     threadSearchIndexes,
     isAuthReady,
+    loadError,
+    isRetrying,
+    loadingStage,
   } = useForumData();
   const {
     createTopic,
@@ -161,6 +164,7 @@ const Home = ({ searchQuery }: HomeProps) => {
     upsertRoleAssignment,
     removeRoleAssignment,
     rebuildTopicDirectoryIndex,
+    retryLoadData,
   } = useForumActions();
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
   const [topicTitle, setTopicTitle] = useState('');
@@ -1060,7 +1064,144 @@ const Home = ({ searchQuery }: HomeProps) => {
     return (
       <div className="space-y-4">
         <div className="forum-card p-5">
-          <p className="text-ui-muted text-sm">Loading forum structure...</p>
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <svg
+                className="animate-spin h-5 w-5 text-brand-accent"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            </div>
+            <div>
+              <p className="text-ui-strong text-sm font-medium">
+                {loadingStage}
+              </p>
+              <p className="text-ui-muted text-xs mt-1">
+                Please wait while we load the forum...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    isAuthReady &&
+    topics.length === 0 &&
+    subTopics.length === 0 &&
+    loadError
+  ) {
+    return (
+      <div className="space-y-4">
+        <div className="forum-card p-6">
+          <div className="text-center max-w-md mx-auto">
+            <div className="mb-4 inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-900/20">
+              <svg
+                className="w-6 h-6 text-rose-600 dark:text-rose-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-ui-strong text-lg font-semibold mb-2">
+              Unable to Load Forum Content
+            </h3>
+            <p className="text-ui-muted text-sm mb-4">
+              {loadError ||
+                'The forum data could not be loaded. This might be due to QDN sync delays or network issues.'}
+            </p>
+            <button
+              type="button"
+              onClick={retryLoadData}
+              disabled={isRetrying}
+              className="forum-button-primary inline-flex items-center px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRetrying ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="-ml-1 mr-2 h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Retry Loading
+                </>
+              )}
+            </button>
+            <p className="text-ui-muted text-xs mt-4">
+              If this issue persists, the forum administrator may need to
+              rebuild the topic index, or there might be QDN resource
+              availability issues.
+            </p>
+            {isAdmin && (
+              <div className="mt-4 pt-4 border-t border-ui-border">
+                <p className="text-ui-muted text-xs mb-2">
+                  Administrator Action:
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRebuildTopicDirectoryIndex}
+                  className="forum-button-secondary text-xs px-3 py-1.5 rounded"
+                >
+                  Rebuild Topic Index
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

@@ -174,6 +174,9 @@ export const useForumDataQuery = () => {
   const [threadSearchIndexes, setThreadSearchIndexes] = useState<
     Record<string, ThreadSearchSnapshot>
   >({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
+  const [loadingStage, setLoadingStage] = useState<string>('Initializing...');
   const loadedIdentityRef = useRef<string | null>(null);
   const authMode: ForumAuthMode = 'qortal';
 
@@ -320,6 +323,8 @@ export const useForumDataQuery = () => {
 
       try {
         setIsAuthReady(false);
+        setLoadError(null);
+        setLoadingStage('Loading authentication...');
 
         const authenticatedAddressPromise = identity
           ? address?.trim()
@@ -329,6 +334,7 @@ export const useForumDataQuery = () => {
                 .catch(() => '')
           : Promise.resolve('');
 
+        setLoadingStage('Loading forum roles...');
         const [registryResult, addressResult] = await Promise.allSettled([
           forumRolesService.loadRoleRegistry(),
           authenticatedAddressPromise,
@@ -380,6 +386,7 @@ export const useForumDataQuery = () => {
         setCurrentUserId(session.user.id);
         loadedIdentityRef.current = identityKey;
 
+        setLoadingStage('Loading forum structure...');
         const nextTopicDirectoryIndex =
           await forumSearchIndexService.loadTopicDirectoryIndex();
         if (!active) {
@@ -401,8 +408,10 @@ export const useForumDataQuery = () => {
             topicCount: indexedStructure.topics.length,
             subTopicCount: indexedStructure.subTopics.length,
           });
+          setLoadingStage('Ready');
           setIsAuthReady(true);
         } else {
+          setLoadingStage('Loading topics from QDN...');
           const remoteData = await forumQdnService.loadForumStructureCached();
           if (!active) {
             return;
@@ -418,13 +427,22 @@ export const useForumDataQuery = () => {
             topicCount: remoteData.topics.length,
             subTopicCount: remoteData.subTopics.length,
           });
+          setLoadingStage('Ready');
           setIsAuthReady(true);
         }
-      } catch {
+      } catch (error) {
         endTiming({ error: true });
         if (!active) {
           return;
         }
+
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'Failed to load forum data. This might be due to QDN sync delays or network issues.';
+
+        setLoadError(errorMessage);
+        setLoadingStage('Error');
 
         if (session && session.user.id !== GUEST_USER.id) {
           setAuthenticatedAddress(session.authenticatedAddress);
@@ -464,6 +482,17 @@ export const useForumDataQuery = () => {
     await authenticateUser();
   }, [authenticateUser]);
 
+  const retryLoadData = useCallback(() => {
+    setIsRetrying(true);
+    setLoadError(null);
+    loadedIdentityRef.current = null;
+    setIsAuthReady(false);
+
+    setTimeout(() => {
+      setIsRetrying(false);
+    }, 500);
+  }, []);
+
   const isAuthenticated =
     authMode === 'qortal' && currentUser.id !== GUEST_USER.id;
 
@@ -491,5 +520,9 @@ export const useForumDataQuery = () => {
     availableAuthNames,
     activeAuthName,
     setActiveAuthName,
+    loadError,
+    isRetrying,
+    loadingStage,
+    retryLoadData,
   };
 };
