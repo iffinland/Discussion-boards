@@ -181,6 +181,7 @@ const SubTopicList = ({
                     <span className="flex flex-wrap items-center gap-2">
                       <span>
                         {usernameMap.get(subTopic.authorUserId) ??
+                          subTopic.authorUserId ??
                           'Unknown User'}
                       </span>
                       <UserRoleBadge

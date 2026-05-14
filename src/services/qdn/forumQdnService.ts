@@ -482,6 +482,11 @@ const sanitizeSubTopic = (value: unknown): SubTopic | null => {
     authorUserId: value.authorUserId,
     createdAt: value.createdAt,
     lastPostAt: value.lastPostAt,
+    lastPostAuthorUserId:
+      typeof value.lastPostAuthorUserId === 'string' &&
+      value.lastPostAuthorUserId.trim()
+        ? value.lastPostAuthorUserId
+        : value.authorUserId,
     isPinned: value.isPinned === true,
     pinnedAt:
       typeof value.pinnedAt === 'string' && value.pinnedAt.trim()

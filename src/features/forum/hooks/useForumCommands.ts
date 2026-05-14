@@ -655,6 +655,7 @@ export const useForumCommands = ({
         authorUserId: currentUser.id,
         createdAt,
         lastPostAt: createdAt,
+        lastPostAuthorUserId: currentUser.id,
         isPinned: false,
         pinnedAt: null,
         isSolved: false,
@@ -1417,7 +1418,11 @@ export const useForumCommands = ({
         const nextPosts = [...posts, newPost];
         const nextSubTopics = subTopics.map((subTopic) =>
           subTopic.id === input.subTopicId
-            ? { ...subTopic, lastPostAt: createdAt }
+            ? {
+                ...subTopic,
+                lastPostAt: createdAt,
+                lastPostAuthorUserId: currentUser.id,
+              }
             : subTopic
         );
         const postResource = forumQdnService.buildPostPublishResource(

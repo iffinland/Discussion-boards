@@ -74,7 +74,8 @@ const ThreadPostCard = ({
   onEdit,
   onDelete,
 }: ThreadPostCardProps) => {
-  const displayName = author?.displayName ?? 'Unknown User';
+  const displayName =
+    author?.displayName ?? author?.id ?? post.authorUserId ?? 'Unknown User';
   const avatarColor = author?.avatarColor ?? 'bg-cyan-500';
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
   const [selectedPollOptionIds, setSelectedPollOptionIds] = useState<string[]>(

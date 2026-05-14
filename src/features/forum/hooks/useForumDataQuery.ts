@@ -128,6 +128,8 @@ const toForumStructureFromTopicDirectory = (
     authorUserId: subTopic.authorUserId || 'qdn-index',
     createdAt: subTopic.lastPostAt || fallbackCreatedAt,
     lastPostAt: subTopic.lastPostAt || fallbackCreatedAt,
+    lastPostAuthorUserId:
+      subTopic.lastPostAuthorUserId || subTopic.authorUserId || 'qdn-index',
     isPinned: subTopic.isPinned,
     pinnedAt: subTopic.pinnedAt,
     isSolved: subTopic.isSolved,

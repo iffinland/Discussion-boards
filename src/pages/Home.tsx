@@ -696,7 +696,7 @@ const Home = ({ searchQuery }: HomeProps) => {
         const activityAuthorUserId =
           useIndexedLatest && indexedLatest
             ? indexedLatest.authorUserId
-            : subTopic.authorUserId;
+            : subTopic.lastPostAuthorUserId;
 
         return {
           ...subTopic,

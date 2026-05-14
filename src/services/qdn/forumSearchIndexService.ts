@@ -59,6 +59,7 @@ export type TopicDirectorySnapshot = {
     visibility: SubTopic['visibility'];
     authorUserId: string;
     lastPostAt: string;
+    lastPostAuthorUserId: string;
     lastModerationAction?: string | null;
     lastModerationReason?: string | null;
     lastModeratedByUserId?: string | null;
@@ -434,6 +435,13 @@ const parseTopicDirectoryPayload = (
             typeof item.authorUserId === 'string' ? item.authorUserId : '',
           lastPostAt:
             typeof item.lastPostAt === 'string' ? item.lastPostAt : '',
+          lastPostAuthorUserId:
+            typeof item.lastPostAuthorUserId === 'string' &&
+            item.lastPostAuthorUserId.trim()
+              ? item.lastPostAuthorUserId
+              : typeof item.authorUserId === 'string'
+                ? item.authorUserId
+                : '',
           lastModerationAction:
             typeof item.lastModerationAction === 'string' &&
             item.lastModerationAction.trim()
@@ -641,6 +649,7 @@ export const forumSearchIndexService = {
           visibility: subTopic.visibility,
           authorUserId: subTopic.authorUserId,
           lastPostAt: subTopic.lastPostAt,
+          lastPostAuthorUserId: subTopic.lastPostAuthorUserId,
           lastModerationAction: subTopic.lastModerationAction ?? null,
           lastModerationReason: subTopic.lastModerationReason ?? null,
           lastModeratedByUserId: subTopic.lastModeratedByUserId ?? null,

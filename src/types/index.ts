@@ -76,6 +76,7 @@ export interface SubTopic {
   authorUserId: string;
   createdAt: string;
   lastPostAt: string;
+  lastPostAuthorUserId: string;
   isPinned: boolean;
   pinnedAt: string | null;
   isSolved: boolean;
