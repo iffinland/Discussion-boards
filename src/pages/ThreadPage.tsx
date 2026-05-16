@@ -105,6 +105,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const [virtualFocusIndex, setVirtualFocusIndex] = useState<number | null>(
     null
   );
+  const postListRef = useRef<HTMLElement | null>(null);
+  const postListTopRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const resolvedAuthorAddressRef = useRef<Map<string, string | null>>(
     new Map()
@@ -711,8 +713,18 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     }
 
     let frameId = 0;
+    const measurePostListTop = () => {
+      const node = postListRef.current;
+      postListTopRef.current = node
+        ? node.getBoundingClientRect().top +
+          (window.scrollY || window.pageYOffset || 0)
+        : 0;
+    };
+
     const updateViewportState = () => {
-      setVirtualScrollTop(window.scrollY || window.pageYOffset || 0);
+      const scrollTop = window.scrollY || window.pageYOffset || 0;
+      measurePostListTop();
+      setVirtualScrollTop(Math.max(0, scrollTop - postListTopRef.current));
       setViewportHeight(window.innerHeight);
     };
 
@@ -738,7 +750,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', updateViewportState);
     };
-  }, [shouldVirtualize]);
+  }, [displayPosts.length, shouldVirtualize]);
 
   useEffect(() => {
     perfDebugLog('thread-render-window', {
@@ -1179,7 +1191,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
       ) : null}
 
-      <section className="space-y-3">
+      <section ref={postListRef} className="space-y-3">
         {topSpacerHeight > 0 ? (
           <div style={{ height: topSpacerHeight }} aria-hidden="true" />
         ) : null}

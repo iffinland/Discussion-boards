@@ -20,6 +20,7 @@ export type QdnImageTagReference = {
 
 export type ParsedQdnImageTag = {
   rawTag: string;
+  payload: string;
   reference: QdnImageTagReference;
 };
 
@@ -101,6 +102,10 @@ const sanitizeImageSource = (value: string): string | null => {
 };
 
 const QDN_IMAGE_TAG_PATTERN = /\[imgqdn\]([\s\S]*?)\[\/imgqdn\]/gi;
+const QDN_IMAGE_PLACEHOLDER_TAG_PATTERN =
+  /\[imgqdnplaceholder\]([\s\S]*?)\[\/imgqdnplaceholder\]/gi;
+const QDN_IMAGE_MISSING_TAG_PATTERN =
+  /\[imgqdnmissing\]([\s\S]*?)\[\/imgqdnmissing\]/gi;
 const QDN_VIDEO_TAG_PATTERN = /\[videoqdn\]([\s\S]*?)\[\/videoqdn\]/gi;
 const QORTAL_LINK_PATTERN = /qortal:\/\/[^\s<]+/gi;
 const TRAILING_PUNCTUATION_PATTERN = /[.,!?;:)\]}]+$/;
@@ -113,7 +118,7 @@ const decodeQdnTagPart = (value: string) => {
   }
 };
 
-const parseQdnImageTagPayload = (
+export const parseQdnImageTagPayload = (
   payload: string
 ): QdnImageTagReference | null => {
   const [rawName, rawIdentifier, rawFilename] = payload.split('|');
@@ -170,6 +175,15 @@ const linkifyQortalUris = (html: string) => {
     .join('');
 };
 
+const renderQdnImagePlaceholder = (payload: string) => {
+  const safePayload = String(payload ?? '').trim();
+  if (!safePayload) {
+    return '';
+  }
+
+  return `<button type="button" class="my-3 flex w-full max-w-xs items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50" data-qdn-image-placeholder="true" data-qdn-image-payload="${safePayload}"><span class="flex h-12 w-16 flex-shrink-0 items-center justify-center rounded-md bg-slate-200 text-xs font-semibold text-slate-600 shadow-sm">IMG</span><span class="min-w-0"><span class="block truncate text-sm font-semibold text-slate-900">QDN image</span><span class="mt-1 block text-xs text-slate-600">Loading when visible</span></span></button>`;
+};
+
 export const encodeQdnImageTag = (reference: {
   name: string;
   identifier: string;
@@ -193,7 +207,7 @@ export const extractQdnImageTags = (value: string): ParsedQdnImageTag[] => {
     const payload = match[1] ?? '';
     const reference = parseQdnImageTagPayload(payload);
     if (reference) {
-      found.push({ rawTag, reference });
+      found.push({ rawTag, payload, reference });
     }
     match = pattern.exec(value);
   }
@@ -391,7 +405,22 @@ export const toRichTextHtml = (value: string): string => {
       return `<figure class="my-3"><img src="${safeSource}" alt="Post image thumbnail" loading="lazy" class="h-32 w-auto max-w-[min(100%,18rem)] cursor-zoom-in rounded-lg border border-slate-200 bg-slate-100 object-cover shadow-sm transition hover:scale-[1.01] hover:shadow-md" data-preview-image="true" data-full-src="${safeSource}" /><figcaption class="mt-1 text-xs text-slate-500">Click image to enlarge</figcaption></figure>`;
     }
   );
-  html = replacePatternRecursively(html, QDN_IMAGE_TAG_PATTERN, () => '');
+  html = replacePatternRecursively(
+    html,
+    QDN_IMAGE_PLACEHOLDER_TAG_PATTERN,
+    (_full, payload) => renderQdnImagePlaceholder(payload)
+  );
+  html = replacePatternRecursively(
+    html,
+    QDN_IMAGE_MISSING_TAG_PATTERN,
+    () =>
+      `<div class="my-3 max-w-xs rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">QDN image is not available yet.</div>`
+  );
+  html = replacePatternRecursively(
+    html,
+    QDN_IMAGE_TAG_PATTERN,
+    (_full, payload) => renderQdnImagePlaceholder(payload)
+  );
   html = replacePatternRecursively(
     html,
     QDN_VIDEO_TAG_PATTERN,

@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react';
 
 import {
   extractQdnImageTags,
-  stripQdnImageTags,
   toRichTextHtml,
 } from '../../services/forum/richText';
 import {
   parseQdnVideoTagPayload,
   type ForumVideoReference,
 } from '../../services/forum/videoEmbed';
-import { mapWithConcurrency } from '../../services/qdn/qdnReadiness';
 import { forumQdnService } from '../../services/qdn/forumQdnService';
 import { perfDebugLog } from '../../services/perf/perfDebug';
 import ImagePreviewModal from './ImagePreviewModal';
@@ -69,10 +74,18 @@ const resolveImageUrlCached = async (reference: ImageReference) => {
 
 const RichTextContent = ({ value, className }: RichTextContentProps) => {
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const [resolvedValue, setResolvedValue] = useState(value);
+  const resolvingImagePayloadsRef = useRef<Set<string>>(new Set());
+  const [resolvedImageUrlsByPayload, setResolvedImageUrlsByPayload] = useState<
+    Record<string, string | null>
+  >({});
   const [previewImageSrc, setPreviewImageSrc] = useState<string | null>(null);
   const [previewVideoReference, setPreviewVideoReference] =
     useState<ForumVideoReference | null>(null);
+  const imageTags = useMemo(() => extractQdnImageTags(value), [value]);
+  const imageTagsByPayload = useMemo(
+    () => new Map(imageTags.map((tag) => [tag.payload, tag])),
+    [imageTags]
+  );
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -110,81 +123,101 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
   };
 
   useEffect(() => {
-    let active = true;
-    const tags = extractQdnImageTags(value);
-
-    if (tags.length === 0) {
-      setResolvedValue(value);
-      return () => {
-        active = false;
-      };
-    }
-
-    setResolvedValue(stripQdnImageTags(value));
-
-    const resolveImages = async () => {
-      const startedAt = performance.now();
-      let nextValue = value;
-      const uniqueReferencesByKey = new Map<string, ImageReference>();
-
-      tags.forEach((tag) => {
-        uniqueReferencesByKey.set(
-          toImageReferenceKey(tag.reference),
-          tag.reference
-        );
-      });
-
-      const cacheHits = [...uniqueReferencesByKey.values()].reduce(
-        (count, reference) =>
-          imageUrlCache.has(toImageReferenceKey(reference)) ? count + 1 : count,
-        0
-      );
-      const cacheMisses = uniqueReferencesByKey.size - cacheHits;
-
-      const resolvedEntries = await mapWithConcurrency(
-        [...uniqueReferencesByKey.entries()],
-        async ([key, reference]) => {
-          const resourceUrl = await resolveImageUrlCached(reference);
-          return [key, resourceUrl] as const;
-        },
-        4
-      );
-
-      const resolvedByKey = new Map(resolvedEntries);
-
-      tags.forEach((tag) => {
-        const resourceUrl =
-          resolvedByKey.get(toImageReferenceKey(tag.reference)) ?? null;
-        nextValue = nextValue
-          .split(tag.rawTag)
-          .join(resourceUrl ? `[img]${resourceUrl}[/img]` : '');
-      });
-
-      if (active) {
-        setResolvedValue(nextValue);
-      }
-
-      const elapsedMs = performance.now() - startedAt;
-      const resolvedCount = resolvedEntries.filter(([, url]) =>
-        Boolean(url)
-      ).length;
-      perfDebugLog('richtext-image-resolve', {
-        tags: tags.length,
-        uniqueReferences: uniqueReferencesByKey.size,
-        cacheHits,
-        cacheMisses,
-        resolvedCount,
-        elapsedMs: Number(elapsedMs.toFixed(1)),
-      });
-    };
-
-    void resolveImages();
-    return () => {
-      active = false;
-    };
+    resolvingImagePayloadsRef.current.clear();
+    setResolvedImageUrlsByPayload({});
   }, [value]);
 
+  const resolvedValue = useMemo(() => {
+    if (imageTags.length === 0) {
+      return value;
+    }
+
+    return imageTags.reduce((nextValue, tag) => {
+      const resolvedUrl = resolvedImageUrlsByPayload[tag.payload];
+      const replacement =
+        resolvedUrl === undefined
+          ? `[imgqdnplaceholder]${tag.payload}[/imgqdnplaceholder]`
+          : resolvedUrl
+            ? `[img]${resolvedUrl}[/img]`
+            : `[imgqdnmissing]${tag.payload}[/imgqdnmissing]`;
+
+      return nextValue.split(tag.rawTag).join(replacement);
+    }, value);
+  }, [imageTags, resolvedImageUrlsByPayload, value]);
+
   const html = useMemo(() => toRichTextHtml(resolvedValue), [resolvedValue]);
+
+  const resolveImagePayload = useCallback(
+    async (payload: string, reference: ImageReference) => {
+      if (
+        resolvingImagePayloadsRef.current.has(payload) ||
+        Object.prototype.hasOwnProperty.call(
+          resolvedImageUrlsByPayload,
+          payload
+        )
+      ) {
+        return;
+      }
+
+      resolvingImagePayloadsRef.current.add(payload);
+      const startedAt = performance.now();
+      const cacheHit = imageUrlCache.has(toImageReferenceKey(reference));
+      const resourceUrl = await resolveImageUrlCached(reference);
+      const elapsedMs = performance.now() - startedAt;
+
+      setResolvedImageUrlsByPayload((current) => ({
+        ...current,
+        [payload]: resourceUrl,
+      }));
+      resolvingImagePayloadsRef.current.delete(payload);
+
+      perfDebugLog('richtext-image-resolve', {
+        cacheHit,
+        resolved: Boolean(resourceUrl),
+        elapsedMs: Number(elapsedMs.toFixed(1)),
+      });
+    },
+    [resolvedImageUrlsByPayload]
+  );
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+
+    const imagePlaceholders = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-qdn-image-placeholder="true"]')
+    );
+    if (imagePlaceholders.length === 0) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          const element = entry.target as HTMLElement;
+          const payload = element.dataset.qdnImagePayload;
+          const tag = payload ? imageTagsByPayload.get(payload) : null;
+          if (payload && tag) {
+            void resolveImagePayload(payload, tag.reference);
+          }
+          observer.unobserve(element);
+        });
+      },
+      { rootMargin: '180px 0px' }
+    );
+
+    imagePlaceholders.forEach((element) => observer.observe(element));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [html, imageTagsByPayload, resolveImagePayload]);
 
   useEffect(() => {
     const root = contentRef.current;

@@ -31,6 +31,16 @@ const run = () => {
     'Safe image should render preview metadata.'
   );
 
+  const qdnImage = toRichTextHtml('[imgqdn]Forum|image-id[/imgqdn]');
+  expect(
+    qdnImage.includes('data-qdn-image-placeholder="true"'),
+    'QDN image tag should render a lazy placeholder.'
+  );
+  expect(
+    !qdnImage.includes('<img'),
+    'QDN image tag must not render an image before viewport resolution.'
+  );
+
   const color = toRichTextHtml('[color=#2563EB]Blue[/color]');
   expect(
     color.includes('style="color:#2563EB"'),
