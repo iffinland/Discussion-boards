@@ -8,6 +8,11 @@ import {
 
 import UserRoleBadge from '../common/UserRoleBadge';
 import { useForumActions, useForumData } from '../../hooks/useForumData';
+import {
+  followName,
+  FORUM_FOLLOW_NAME,
+  isNameFollowed,
+} from '../../services/qortal/followService';
 
 type ThemeMode = 'light-cyan' | 'dark-cyan';
 
@@ -66,12 +71,33 @@ const initialsFromName = (name: string | null) => {
     .slice(0, 2);
 };
 
+const HelpIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className="h-4 w-4"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.7-2.3 1.9-2.3 3.6" />
+    <path d="M12 17h.01" />
+  </svg>
+);
+
 const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   const { availableAuthNames, activeAuthName, currentUser } = useForumData();
   const { setCurrentUser } = useForumActions();
   const [isNameMenuOpen, setIsNameMenuOpen] = useState(false);
   const [highlightedNameIndex, setHighlightedNameIndex] = useState(0);
   const [isAvatarVisible, setIsAvatarVisible] = useState(true);
+  const [isFollowed, setIsFollowed] = useState(false);
+  const [isFollowChecking, setIsFollowChecking] = useState(true);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followFeedback, setFollowFeedback] = useState<string | null>(null);
   const nameMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const nameMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const nameOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -85,6 +111,38 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
   useEffect(() => {
     setIsAvatarVisible(true);
   }, [currentUser.avatarUrl]);
+
+  useEffect(() => {
+    let active = true;
+    setIsFollowChecking(true);
+    setFollowFeedback(null);
+
+    void isNameFollowed(FORUM_FOLLOW_NAME)
+      .then((followed) => {
+        if (!active) {
+          return;
+        }
+
+        setIsFollowed(followed);
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        setIsFollowed(false);
+        setFollowFeedback('Follow status unavailable.');
+      })
+      .finally(() => {
+        if (active) {
+          setIsFollowChecking(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const closeIfOutside = (event: MouseEvent) => {
@@ -197,6 +255,27 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setIsNameMenuOpen(true);
+    }
+  };
+
+  const handleFollowForum = async () => {
+    setIsFollowing(true);
+    setFollowFeedback(null);
+
+    try {
+      const result = await followName(FORUM_FOLLOW_NAME);
+      setIsFollowed(true);
+      setFollowFeedback(
+        result.alreadyFollowed
+          ? 'Already following forum data.'
+          : 'Following forum data.'
+      );
+    } catch (error) {
+      setFollowFeedback(
+        error instanceof Error ? error.message : 'Unable to follow forum data.'
+      );
+    } finally {
+      setIsFollowing(false);
     }
   };
 
@@ -321,6 +400,42 @@ const Header = ({ themeMode, onToggleTheme }: HeaderProps) => {
                   </button>
                 ))}
               </div>
+            ) : null}
+          </div>
+
+          <div className="relative flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void handleFollowForum()}
+              disabled={isFollowed || isFollowChecking || isFollowing}
+              className="forum-pill-accent text-brand-accent-strong rounded-md px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isFollowChecking
+                ? 'Checking...'
+                : isFollowing
+                  ? 'Following...'
+                  : isFollowed
+                    ? 'Following'
+                    : 'Follow'}
+            </button>
+            <span className="group relative inline-flex">
+              <button
+                type="button"
+                className="text-ui-muted rounded-full border border-slate-200 bg-white p-1 transition hover:text-cyan-700"
+                aria-label="Why follow this forum?"
+              >
+                <HelpIcon />
+              </button>
+              <span className="pointer-events-none absolute right-0 top-[calc(100%+8px)] z-40 hidden w-72 rounded-md border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700 shadow-lg group-hover:block group-focus-within:block">
+                Follow {FORUM_FOLLOW_NAME} to help your Qortal node download and
+                host this forum&apos;s QDN data. This improves availability and
+                helps other peers load the forum.
+              </span>
+            </span>
+            {followFeedback ? (
+              <span className="absolute right-0 top-[calc(100%+8px)] z-30 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg">
+                {followFeedback}
+              </span>
             ) : null}
           </div>
         </div>
