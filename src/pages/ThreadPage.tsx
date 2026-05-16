@@ -34,7 +34,7 @@ import {
 } from '../services/qortal/share';
 import { resolveNameWalletAddress } from '../services/qortal/walletService';
 import { perfDebugLog, perfDebugTimeStart } from '../services/perf/perfDebug';
-import type { Post, UserRole } from '../types';
+import type { Post, PostAttachment, UserRole } from '../types';
 
 const THREAD_BATCH_SIZE = 12;
 const THREAD_VIRTUALIZE_THRESHOLD = 30;
@@ -45,11 +45,10 @@ const AUTHOR_ROLE_BATCH_SIZE = 6;
 type PostSortMode = 'oldest' | 'newest';
 
 type ThreadPageProps = {
-  searchQuery: string;
   onSearchQueryChange: (value: string) => void;
 };
 
-const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
+const ThreadPage = ({ onSearchQueryChange }: ThreadPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,7 +93,9 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editText, setEditText] = useState('');
+  const [editAttachments, setEditAttachments] = useState<PostAttachment[]>([]);
   const [postSortMode, setPostSortMode] = useState<PostSortMode>('oldest');
+  const [threadSearchQuery, setThreadSearchQuery] = useState('');
   const [authorRolesByUserId, setAuthorRolesByUserId] = useState<
     Record<string, UserRole>
   >({});
@@ -113,7 +114,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     new Map()
   );
   const requestedAuthorRolesRef = useRef<Set<string>>(new Set());
-  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const deferredSearchQuery = useDeferredValue(threadSearchQuery);
 
   const { subTopic, threadPosts, userMap, resolveAuthorDisplayName } =
     useThreadDataQuery({
@@ -597,6 +598,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       return;
     }
 
+    setThreadSearchQuery('');
     onSearchQueryChange('');
   }, [id, onSearchQueryChange]);
 
@@ -665,11 +667,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const openEditComposer = useCallback((post: Post) => {
     setEditingPost(post);
     setEditText(post.content);
+    setEditAttachments(post.attachments);
   }, []);
 
   const closeEditComposer = useCallback(() => {
     setEditingPost(null);
     setEditText('');
+    setEditAttachments([]);
   }, []);
 
   const submitPostEdit = useCallback(async () => {
@@ -678,13 +682,13 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     }
 
     const value = editText.trim();
-    if (!value) {
-      setModerationFeedback('Post content is required.');
+    if (!value && editAttachments.length === 0) {
+      setModerationFeedback('Post content or attachment is required.');
       return false;
     }
 
-    return handleEditPost(editingPost.id, value);
-  }, [editText, editingPost, handleEditPost]);
+    return handleEditPost(editingPost.id, value, editAttachments);
+  }, [editAttachments, editText, editingPost, handleEditPost]);
 
   const handleTogglePostPin = useCallback(
     async (post: Post) => {
@@ -1231,6 +1235,26 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
       ) : null}
 
+      <section className="forum-card p-4">
+        <label
+          htmlFor="thread-local-search"
+          className="text-ui-strong text-sm font-semibold"
+        >
+          Search This Thread
+        </label>
+        <p className="text-ui-muted mt-1 text-xs">
+          Filters posts in this thread only. Matching words are highlighted.
+        </p>
+        <input
+          id="thread-local-search"
+          type="search"
+          value={threadSearchQuery}
+          onChange={(event) => setThreadSearchQuery(event.target.value)}
+          placeholder="Search posts in this thread"
+          className="bg-surface-card text-ui-strong placeholder:text-ui-muted mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+        />
+      </section>
+
       {pinnedThreadPosts.length > 0 ? (
         <section className="space-y-3">
           <div>
@@ -1245,6 +1269,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             <ThreadPostCard
               key={`pinned-${post.id}`}
               post={post}
+              searchQuery={deferredSearchQuery}
               author={userMap.get(post.authorUserId)}
               authorRole={authorRolesByUserId[post.authorUserId] ?? 'Member'}
               repliedPost={
@@ -1294,6 +1319,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
           <ThreadPostCard
             key={post.id}
             post={post}
+            searchQuery={deferredSearchQuery}
             author={userMap.get(post.authorUserId)}
             authorRole={authorRolesByUserId[post.authorUserId] ?? 'Member'}
             repliedPost={
@@ -1379,9 +1405,12 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
       <PostEditModal
         isOpen={Boolean(editingPost)}
         editText={editText}
+        editAttachments={editAttachments}
         onEditTextChange={setEditText}
+        onEditAttachmentsChange={setEditAttachments}
         onSubmit={submitPostEdit}
         onUploadImage={uploadImageForReply}
+        onUploadAttachment={uploadAttachmentForReply}
         onClose={closeEditComposer}
       />
     </div>

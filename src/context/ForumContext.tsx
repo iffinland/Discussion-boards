@@ -143,6 +143,7 @@ type ForumActionsContextValue = {
   updatePost: (input: {
     postId: string;
     content: string;
+    attachments?: PostAttachment[];
   }) => Promise<ForumMutationResult>;
   togglePostPin: (postId: string) => Promise<ForumMutationResult>;
   voteOnPoll: (input: {

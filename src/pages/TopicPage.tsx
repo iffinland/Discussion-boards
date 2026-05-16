@@ -32,7 +32,6 @@ import { perfDebugTimeStart } from '../services/perf/perfDebug';
 import type { SubTopic, TopicAccess } from '../types';
 
 type TopicPageProps = {
-  searchQuery: string;
   onSearchQueryChange: (value: string) => void;
 };
 
@@ -95,7 +94,7 @@ const canCreateSubTopicForTopic = (
   }
 };
 
-const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
+const TopicPage = ({ onSearchQueryChange }: TopicPageProps) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -138,6 +137,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
   const [managedSubTopicIsPoll, setManagedSubTopicIsPoll] = useState(false);
   const [managedSubTopicAllowedAddresses, setManagedSubTopicAllowedAddresses] =
     useState('');
+  const [topicSearchQuery, setTopicSearchQuery] = useState('');
   const [draggedPinnedSubTopicId, setDraggedPinnedSubTopicId] = useState<
     string | null
   >(null);
@@ -163,7 +163,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
     (currentUser.role === 'SysOp' ||
       currentUser.role === 'SuperAdmin' ||
       currentUser.role === 'Admin') &&
-    searchQuery.trim().length === 0;
+    topicSearchQuery.trim().length === 0;
   const canCreateHere = topic
     ? canCreateSubTopicForTopic(
         topic.subTopicAccess,
@@ -179,7 +179,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       return [];
     }
 
-    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const normalizedSearch = topicSearchQuery.trim().toLowerCase();
     const byTopic = subTopics.filter(
       (subTopic) => subTopic.topicId === topic.id
     );
@@ -199,19 +199,43 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
         const authorName =
           users.find((user) => user.id === subTopic.authorUserId)
             ?.displayName ?? '';
+        const indexedPostText =
+          threadSearchIndexes[subTopic.id]?.posts
+            .map((post) =>
+              [
+                post.content,
+                post.poll?.question ?? '',
+                post.poll?.description ?? '',
+                ...(post.poll?.options.map((option) => option.label) ?? []),
+              ].join(' ')
+            )
+            .join(' ') ?? '';
+        const localPostText = posts
+          .filter((post) => post.subTopicId === subTopic.id)
+          .map((post) =>
+            [
+              post.content,
+              post.poll?.question ?? '',
+              post.poll?.description ?? '',
+              ...(post.poll?.options.map((option) => option.label) ?? []),
+            ].join(' ')
+          )
+          .join(' ');
         const haystack =
-          `${subTopic.title} ${subTopic.description} ${authorName}`.toLowerCase();
+          `${subTopic.title} ${subTopic.description} ${authorName} ${indexedPostText} ${localPostText}`.toLowerCase();
         return haystack.includes(normalizedSearch);
       })
     );
   }, [
     topic,
-    searchQuery,
+    topicSearchQuery,
     subTopics,
     canModerate,
     currentUser,
     authenticatedAddress,
     users,
+    posts,
+    threadSearchIndexes,
   ]);
   const pinnedSubTopicIds = useMemo(
     () =>
@@ -521,6 +545,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       return;
     }
 
+    setTopicSearchQuery('');
     onSearchQueryChange('');
   }, [onSearchQueryChange, topicId]);
 
@@ -931,9 +956,22 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
       ) : null}
 
       <section className="space-y-3">
-        <h3 className="text-brand-primary text-base font-semibold">
-          Sub-Topics
-        </h3>
+        <div>
+          <h3 className="text-brand-primary text-base font-semibold">
+            Sub-Topics
+          </h3>
+          <p className="text-ui-muted mt-1 text-xs">
+            Search within this main topic only. Use the header search for the
+            whole forum.
+          </p>
+          <input
+            type="search"
+            value={topicSearchQuery}
+            onChange={(event) => setTopicSearchQuery(event.target.value)}
+            placeholder="Search sub-topics and loaded/indexed posts"
+            className="bg-surface-card text-ui-strong placeholder:text-ui-muted mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
         {canReorderPinnedSubTopics && pinnedSubTopicIds.length > 1 ? (
           <p className="text-ui-muted text-xs">
             Drag pinned sub-topics to reorder how they appear at the top.
@@ -962,6 +1000,7 @@ const TopicPage = ({ searchQuery, onSearchQueryChange }: TopicPageProps) => {
             onPinnedDragOver={handlePinnedDragOver}
             onPinnedDrop={handlePinnedDrop}
             onPinnedDragEnd={handlePinnedDragEnd}
+            highlightQuery={topicSearchQuery}
           />
         ) : (
           <div className="forum-card p-5">

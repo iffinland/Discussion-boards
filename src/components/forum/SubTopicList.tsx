@@ -1,6 +1,7 @@
 import { memo, useMemo, type DragEvent } from 'react';
 
 import UserRoleBadge from '../common/UserRoleBadge';
+import HighlightedText from '../common/HighlightedText';
 import type { SubTopic, User } from '../../types';
 import { resolveAccessLabel } from '../../services/forum/forumAccess';
 
@@ -27,6 +28,7 @@ type SubTopicListProps = {
   ) => void;
   onPinnedDrop?: (subTopicId: string) => void;
   onPinnedDragEnd?: () => void;
+  highlightQuery?: string;
 };
 
 const formatDate = (date: string) =>
@@ -68,6 +70,7 @@ const SubTopicList = ({
   onPinnedDragOver,
   onPinnedDrop,
   onPinnedDragEnd,
+  highlightQuery = '',
 }: SubTopicListProps) => {
   const usernameMap = useMemo(
     () => new Map(users.map((user) => [user.id, user.displayName])),
@@ -168,13 +171,19 @@ const SubTopicList = ({
                           Quarantined
                         </span>
                       ) : null}
-                      {subTopic.title}
+                      <HighlightedText
+                        text={subTopic.title}
+                        query={highlightQuery}
+                      />
                     </span>
                     <span className="text-ui-muted mt-1 block text-xs">
                       {metadata}
                     </span>
                     <span className="text-ui-muted mt-1 block text-xs leading-relaxed">
-                      {truncateDescription(subTopic.description)}
+                      <HighlightedText
+                        text={truncateDescription(subTopic.description)}
+                        query={highlightQuery}
+                      />
                     </span>
                   </div>
                   <span className="text-brand-primary-strong text-sm">

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import HighlightedText from '../components/common/HighlightedText';
 import { useForumActions, useForumData } from '../hooks/useForumData';
 import { canAccessSubTopic } from '../services/forum/forumAccess';
 import { isThreadQuarantined } from '../services/forum/threadLoadQuarantine';
@@ -1264,7 +1265,10 @@ const Home = ({ searchQuery }: HomeProps) => {
                         Solved
                       </span>
                     ) : null}
-                    {subTopic.title}
+                    <HighlightedText
+                      text={subTopic.title}
+                      query={searchQuery}
+                    />
                   </p>
                   <p className="text-ui-muted text-xs">
                     Last post by {subTopic.lastPostAuthorName} •{' '}
@@ -1336,10 +1340,13 @@ const Home = ({ searchQuery }: HomeProps) => {
                   className="forum-row-button min-w-0 flex-1 text-left"
                 >
                   <h3 className="text-ui-strong text-lg font-semibold">
-                    {topic.title}
+                    <HighlightedText text={topic.title} query={searchQuery} />
                   </h3>
                   <p className="text-ui-muted mt-1 text-sm">
-                    {topic.description}
+                    <HighlightedText
+                      text={topic.description}
+                      query={searchQuery}
+                    />
                   </p>
                   <p className="text-ui-muted mt-2 text-xs">
                     {topic.subTopicCount} sub-topics
@@ -1393,10 +1400,16 @@ const Home = ({ searchQuery }: HomeProps) => {
                           className="forum-pill-accent w-full rounded-lg px-3 py-2 text-left transition hover:border-cyan-200 hover:bg-cyan-50/80"
                         >
                           <p className="text-ui-strong text-sm font-semibold">
-                            {subTopic.title}
+                            <HighlightedText
+                              text={subTopic.title}
+                              query={searchQuery}
+                            />
                           </p>
                           <p className="text-ui-muted text-xs">
-                            {subTopic.description}
+                            <HighlightedText
+                              text={subTopic.description}
+                              query={searchQuery}
+                            />
                           </p>
                           {(postMatchCountBySubTopicId[subTopic.id] ?? 0) >
                           0 ? (

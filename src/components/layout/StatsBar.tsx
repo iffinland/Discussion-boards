@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useForumData } from '../../hooks/useForumData';
 
@@ -11,19 +11,19 @@ type StatsBarProps = {
 const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
   const { topics, subTopics, posts } = useForumData();
   const location = useLocation();
+  const navigate = useNavigate();
   const totalPosters = useMemo(() => {
     return new Set(posts.map((post) => post.authorUserId)).size;
   }, [posts]);
   const totalSubTopicStarters = useMemo(() => {
     return new Set(subTopics.map((subTopic) => subTopic.authorUserId)).size;
   }, [subTopics]);
-  const placeholder = useMemo(() => {
-    return location.pathname.startsWith('/thread/')
-      ? 'Search posts in this thread'
-      : location.pathname.startsWith('/topic/')
-        ? 'Search sub-topics in this topic'
-        : 'Search topics, sub-topics and posts';
-  }, [location.pathname]);
+  const handleSearchChange = (value: string) => {
+    onSearchQueryChange(value);
+    if (location.pathname !== '/') {
+      navigate('/');
+    }
+  };
 
   return (
     <div className="bg-forum-stats border-brand-primary border-b">
@@ -66,10 +66,13 @@ const StatsBar = ({ searchQuery, onSearchQueryChange }: StatsBarProps) => {
             id="forum-search"
             type="search"
             value={searchQuery}
-            onChange={(event) => onSearchQueryChange(event.target.value)}
-            placeholder={placeholder}
+            onChange={(event) => handleSearchChange(event.target.value)}
+            placeholder="Search the whole forum"
             className="bg-surface-card text-ui-strong placeholder:text-ui-muted w-full rounded-md border border-slate-200 px-3 py-2 text-xs"
           />
+          <p className="text-ui-muted mt-1 text-[11px]">
+            Global search across topics, sub-topics and indexed posts.
+          </p>
         </div>
       </div>
     </div>

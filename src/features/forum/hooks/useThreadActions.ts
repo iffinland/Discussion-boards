@@ -31,6 +31,7 @@ type UseThreadActionsParams = {
   updatePost: (input: {
     postId: string;
     content: string;
+    attachments?: PostAttachment[];
   }) => Promise<ForumMutationResult>;
   deletePost: (input: {
     postId: string;
@@ -124,8 +125,8 @@ export const useThreadActions = ({
   }, []);
 
   const handleEditPost = useCallback(
-    async (postId: string, content: string) => {
-      const result = await updatePost({ postId, content });
+    async (postId: string, content: string, attachments?: PostAttachment[]) => {
+      const result = await updatePost({ postId, content, attachments });
       if (!result.ok) {
         setFeedback(result.error ?? 'Unable to update post.');
         return false;

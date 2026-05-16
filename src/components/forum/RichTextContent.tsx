@@ -17,12 +17,14 @@ import {
 } from '../../services/forum/videoEmbed';
 import { forumQdnService } from '../../services/qdn/forumQdnService';
 import { perfDebugLog } from '../../services/perf/perfDebug';
+import { highlightHtmlText } from '../../services/forum/searchHighlight';
 import ImagePreviewModal from './ImagePreviewModal';
 import VideoPreviewModal from './VideoPreviewModal';
 
 type RichTextContentProps = {
   value: string;
   className?: string;
+  highlightQuery?: string;
 };
 
 type ImageReference = {
@@ -72,7 +74,11 @@ const resolveImageUrlCached = async (reference: ImageReference) => {
   return requestPromise;
 };
 
-const RichTextContent = ({ value, className }: RichTextContentProps) => {
+const RichTextContent = ({
+  value,
+  className,
+  highlightQuery = '',
+}: RichTextContentProps) => {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const resolvingImagePayloadsRef = useRef<Set<string>>(new Set());
   const [resolvedImageUrlsByPayload, setResolvedImageUrlsByPayload] = useState<
@@ -145,7 +151,10 @@ const RichTextContent = ({ value, className }: RichTextContentProps) => {
     }, value);
   }, [imageTags, resolvedImageUrlsByPayload, value]);
 
-  const html = useMemo(() => toRichTextHtml(resolvedValue), [resolvedValue]);
+  const html = useMemo(
+    () => highlightHtmlText(toRichTextHtml(resolvedValue), highlightQuery),
+    [highlightQuery, resolvedValue]
+  );
 
   const resolveImagePayload = useCallback(
     async (payload: string, reference: ImageReference) => {

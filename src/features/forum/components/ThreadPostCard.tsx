@@ -12,6 +12,7 @@ type ThreadPostCardProps = {
   repliedPost?: Post | null;
   repliedAuthorName?: string | null;
   highlighted?: boolean;
+  searchQuery?: string;
   replyContextHighlighted?: boolean;
   isOwner: boolean;
   canModerate: boolean;
@@ -58,6 +59,7 @@ const ThreadPostCard = ({
   repliedPost = null,
   repliedAuthorName = null,
   highlighted = false,
+  searchQuery = '',
   replyContextHighlighted = false,
   isOwner,
   canModerate,
@@ -224,12 +226,14 @@ const ThreadPostCard = ({
           </div>
           <RichTextContent
             value={repliedPost.content}
+            highlightQuery={searchQuery}
             className="text-ui-muted mt-1 text-xs leading-relaxed"
           />
         </button>
       ) : null}
       <RichTextContent
         value={post.content}
+        highlightQuery={searchQuery}
         className="text-ui-strong mt-3 text-sm leading-relaxed"
       />
       {post.poll ? (
@@ -440,6 +444,7 @@ const areThreadPostCardPropsEqual = (
     prev.repliedPost === next.repliedPost &&
     prev.repliedAuthorName === next.repliedAuthorName &&
     prev.highlighted === next.highlighted &&
+    prev.searchQuery === next.searchQuery &&
     prev.replyContextHighlighted === next.replyContextHighlighted &&
     prev.isOwner === next.isOwner &&
     prev.canModerate === next.canModerate &&

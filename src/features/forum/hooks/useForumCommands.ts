@@ -1462,10 +1462,12 @@ export const useForumCommands = ({
     async (input: {
       postId: string;
       content: string;
+      attachments?: PostAttachment[];
     }): Promise<ForumMutationResult> => {
       const content = input.content.trim();
-      if (!content) {
-        return { ok: false, error: 'Post content is required.' };
+      const attachments = input.attachments ?? [];
+      if (!content && attachments.length === 0) {
+        return { ok: false, error: 'Post content or attachment is required.' };
       }
 
       if (!isAuthenticated) {
@@ -1485,6 +1487,7 @@ export const useForumCommands = ({
       const updatedPost: Post = {
         ...target,
         content,
+        attachments,
         updatedAt,
         editedAt: updatedAt,
       };
