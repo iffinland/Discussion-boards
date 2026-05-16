@@ -293,26 +293,40 @@ const mapLatestPayloads = <TPayload extends { updatedAt: number }, TKey>(
 
 const fetchTopicPayloads = async () => {
   const topicResults = await searchByPrefix(TOPIC_PREFIX);
-  return mapWithConcurrency(topicResults, async (item) => {
+  let failedCount = 0;
+  const payloads = await mapWithConcurrency(topicResults, async (item) => {
     try {
       const raw = await fetchResource(item.name, item.identifier);
       return parseTopicPayload(raw);
     } catch {
+      failedCount += 1;
       return null;
     }
   });
+  return {
+    payloads,
+    resourceCount: topicResults.length,
+    failedCount,
+  };
 };
 
 const fetchSubTopicPayloads = async () => {
   const subTopicResults = await searchByPrefix(SUBTOPIC_PREFIX);
-  return mapWithConcurrency(subTopicResults, async (item) => {
+  let failedCount = 0;
+  const payloads = await mapWithConcurrency(subTopicResults, async (item) => {
     try {
       const raw = await fetchResource(item.name, item.identifier);
       return parseSubTopicPayload(raw);
     } catch {
+      failedCount += 1;
       return null;
     }
   });
+  return {
+    payloads,
+    resourceCount: subTopicResults.length,
+    failedCount,
+  };
 };
 
 const fetchPostPayloadsByPrefix = async (prefix: string) => {
@@ -670,10 +684,25 @@ const toPublishResource = (
 export const forumQdnService = {
   async loadForumStructure() {
     const endTiming = perfDebugTimeStart('forum-structure-load');
-    const [topicPayloads, subTopicPayloads] = await Promise.all([
+    const [topicResult, subTopicResult] = await Promise.all([
       fetchTopicPayloads(),
       fetchSubTopicPayloads(),
     ]);
+    const topicPayloads = topicResult.payloads;
+    const subTopicPayloads = subTopicResult.payloads;
+    const discoveredResourceCount =
+      topicResult.resourceCount + subTopicResult.resourceCount;
+    const failedResourceCount =
+      topicResult.failedCount + subTopicResult.failedCount;
+
+    if (
+      discoveredResourceCount > 0 &&
+      failedResourceCount === discoveredResourceCount
+    ) {
+      throw new Error(
+        'Forum QDN resources were found but are not readable yet. This node may still be syncing or building QDN data.'
+      );
+    }
 
     const topicMap = mapLatestPayloads(
       topicPayloads,
@@ -715,7 +744,9 @@ export const forumQdnService = {
     if (
       !force &&
       forumStructureCache.value &&
-      now - forumStructureCache.updatedAt <= maxAgeMs
+      now - forumStructureCache.updatedAt <= maxAgeMs &&
+      (forumStructureCache.value.topics.length > 0 ||
+        forumStructureCache.value.subTopics.length > 0)
     ) {
       return forumStructureCache.value;
     }

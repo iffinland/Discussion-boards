@@ -5,6 +5,23 @@ const isObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const REQUEST_TIMEOUT_MS = 120_000;
+const QORTAL_REQUEST_WAIT_MS = 4000;
+const QORTAL_REQUEST_POLL_MS = 200;
+const READ_RETRY_COUNT = 2;
+const READ_RETRY_DELAY_MS = 500;
+const READ_ACTIONS = new Set([
+  'FETCH_QDN_RESOURCE',
+  'SEARCH_QDN_RESOURCES',
+  'GET_QDN_RESOURCE_STATUS',
+  'GET_QDN_RESOURCE_PROPERTIES',
+  'GET_QDN_RESOURCE_METADATA',
+  'GET_QDN_RESOURCE_URL',
+  'GET_USER_ACCOUNT',
+  'GET_ACCOUNT_NAMES',
+  'GET_NAME_DATA',
+  'GET_WALLET_BALANCE',
+  'GET_BALANCE',
+]);
 
 interface QortalRequestOptions {
   timeoutMs?: number;
@@ -133,18 +150,34 @@ export const isQortalRequestAvailable = () => {
   return typeof getQortalRequest() === 'function';
 };
 
+const sleep = async (durationMs: number) => {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+};
+
+const waitForQortalRequest = async () => {
+  const immediate = getQortalRequest();
+  if (immediate) {
+    return immediate;
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < QORTAL_REQUEST_WAIT_MS) {
+    await sleep(QORTAL_REQUEST_POLL_MS);
+    const request = getQortalRequest();
+    if (request) {
+      return request;
+    }
+  }
+
+  return null;
+};
+
 export const requestQortal = async <TResponse>(
   payload: Record<string, unknown>,
   options?: QortalRequestOptions
 ): Promise<TResponse> => {
-  const qortalRequest = getQortalRequest();
-
-  if (!qortalRequest) {
-    throw new Error(
-      'Qortal request interface is not available in this environment.'
-    );
-  }
-
   const action =
     typeof payload.action === 'string' ? payload.action : 'UNKNOWN_ACTION';
   const service =
@@ -153,45 +186,63 @@ export const requestQortal = async <TResponse>(
     typeof payload.identifier === 'string' ? payload.identifier : undefined;
   const label = [action, service, identifier].filter(Boolean).join(':');
   const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const maxAttempts = READ_ACTIONS.has(action) ? READ_RETRY_COUNT + 1 : 1;
 
-  let didTimeout = false;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const qortalRequest = await waitForQortalRequest();
 
-  const baseRequestPromise = Promise.resolve(qortalRequest(payload as never));
-  baseRequestPromise.catch(() => {
-    if (!didTimeout) {
-      return;
-    }
-  });
-
-  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      didTimeout = true;
-      reject(
-        new Error(
-          `Qortal request timed out after ${timeoutMs / 1000} seconds (${label}).`
-        )
+    if (!qortalRequest) {
+      throw new Error(
+        'Qortal request interface is not available in this environment.'
       );
-    }, timeoutMs);
-  });
-
-  try {
-    const response = (await Promise.race([
-      baseRequestPromise,
-      timeoutPromise,
-    ])) as unknown;
-
-    const requestError = parseRequestError(response);
-    if (requestError) {
-      throw new Error(requestError);
     }
 
-    return response as TResponse;
-  } finally {
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
+    let didTimeout = false;
+    const baseRequestPromise = Promise.resolve(qortalRequest(payload as never));
+    baseRequestPromise.catch(() => {
+      if (!didTimeout) {
+        return;
+      }
+    });
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        didTimeout = true;
+        reject(
+          new Error(
+            `Qortal request timed out after ${timeoutMs / 1000} seconds (${label}).`
+          )
+        );
+      }, timeoutMs);
+    });
+
+    try {
+      const response = (await Promise.race([
+        baseRequestPromise,
+        timeoutPromise,
+      ])) as unknown;
+
+      const requestError = parseRequestError(response);
+      if (requestError) {
+        throw new Error(requestError);
+      }
+
+      return response as TResponse;
+    } catch (error) {
+      if (attempt >= maxAttempts) {
+        throw error;
+      }
+
+      await sleep(READ_RETRY_DELAY_MS * attempt);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
     }
   }
+
+  throw new Error(`Qortal request failed (${label}).`);
 };
 
 export const publishMultipleQortalResources = async (

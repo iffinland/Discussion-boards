@@ -28,6 +28,17 @@ import type {
 } from '../../../types';
 
 type ForumAuthMode = 'qortal';
+export type ForumLoadStatus =
+  | 'initializing'
+  | 'waiting-qortal'
+  | 'loading-auth'
+  | 'loading-roles'
+  | 'loading-index'
+  | 'loading-qdn'
+  | 'ready'
+  | 'empty-confirmed'
+  | 'error';
+
 type BootstrapSession = {
   user: User;
   authenticatedAddress: string | null;
@@ -43,6 +54,20 @@ const GUEST_USER: User = {
   role: 'Member',
   avatarColor: 'bg-slate-400',
   joinedAt: new Date(0).toISOString(),
+};
+
+const QORTAL_BRIDGE_MAX_PROBES = 16;
+const QORTAL_BRIDGE_PROBE_DELAY_MS = 250;
+
+const hasForumStructure = (input: {
+  topics: unknown[];
+  subTopics: unknown[];
+}) => input.topics.length > 0 || input.subTopics.length > 0;
+
+const sleep = async (durationMs: number) => {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 };
 
 const toUniqueNames = (input: Array<string | null | undefined>) => {
@@ -177,6 +202,8 @@ export const useForumDataQuery = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
   const [loadingStage, setLoadingStage] = useState<string>('Initializing...');
+  const [loadStatus, setLoadStatus] = useState<ForumLoadStatus>('initializing');
+  const [qortalBridgeProbe, setQortalBridgeProbe] = useState(0);
   const loadedIdentityRef = useRef<string | null>(null);
   const authMode: ForumAuthMode = 'qortal';
 
@@ -273,6 +300,20 @@ export const useForumDataQuery = () => {
     const isQortal = isQortalRequestAvailable() || hasAuthSignal;
 
     if (!isQortal) {
+      if (qortalBridgeProbe < QORTAL_BRIDGE_MAX_PROBES) {
+        setIsAuthReady(false);
+        setLoadStatus('waiting-qortal');
+        setLoadingStage('Waiting for Qortal bridge...');
+        const timeoutId = window.setTimeout(() => {
+          setQortalBridgeProbe((current) => current + 1);
+        }, QORTAL_BRIDGE_PROBE_DELAY_MS);
+
+        return () => {
+          active = false;
+          window.clearTimeout(timeoutId);
+        };
+      }
+
       loadedIdentityRef.current = null;
       setUsers([GUEST_USER]);
       setTopics([]);
@@ -285,6 +326,9 @@ export const useForumDataQuery = () => {
       setRoleRegistry(createDefaultRoleRegistry());
       setTopicDirectoryIndex(null);
       setThreadSearchIndexes({});
+      setLoadError(null);
+      setLoadingStage('No Qortal environment detected.');
+      setLoadStatus('empty-confirmed');
       setIsAuthReady(true);
       return () => {
         active = false;
@@ -300,6 +344,8 @@ export const useForumDataQuery = () => {
 
     if (isLoadingUser) {
       setIsAuthReady(false);
+      setLoadStatus('loading-auth');
+      setLoadingStage('Loading authentication...');
       return () => {
         active = false;
       };
@@ -324,6 +370,7 @@ export const useForumDataQuery = () => {
       try {
         setIsAuthReady(false);
         setLoadError(null);
+        setLoadStatus('loading-auth');
         setLoadingStage('Loading authentication...');
 
         const authenticatedAddressPromise = identity
@@ -335,6 +382,7 @@ export const useForumDataQuery = () => {
           : Promise.resolve('');
 
         setLoadingStage('Loading forum roles...');
+        setLoadStatus('loading-roles');
         const [registryResult, addressResult] = await Promise.allSettled([
           forumRolesService.loadRoleRegistry(),
           authenticatedAddressPromise,
@@ -387,6 +435,7 @@ export const useForumDataQuery = () => {
         loadedIdentityRef.current = identityKey;
 
         setLoadingStage('Loading forum structure...');
+        setLoadStatus('loading-index');
         const nextTopicDirectoryIndex =
           await forumSearchIndexService.loadTopicDirectoryIndex();
         if (!active) {
@@ -394,7 +443,10 @@ export const useForumDataQuery = () => {
         }
         setTopicDirectoryIndex(nextTopicDirectoryIndex);
 
-        if (nextTopicDirectoryIndex) {
+        if (
+          nextTopicDirectoryIndex &&
+          hasForumStructure(nextTopicDirectoryIndex)
+        ) {
           const indexedStructure = toForumStructureFromTopicDirectory(
             nextTopicDirectoryIndex
           );
@@ -409,12 +461,37 @@ export const useForumDataQuery = () => {
             subTopicCount: indexedStructure.subTopics.length,
           });
           setLoadingStage('Ready');
+          setLoadStatus('ready');
           setIsAuthReady(true);
         } else {
-          setLoadingStage('Loading topics from QDN...');
-          const remoteData = await forumQdnService.loadForumStructureCached();
+          setLoadingStage(
+            nextTopicDirectoryIndex
+              ? 'Topic index is empty, checking QDN resources...'
+              : 'Loading topics from QDN...'
+          );
+          setLoadStatus('loading-qdn');
+          let remoteData = await forumQdnService.loadForumStructureCached({
+            force: Boolean(nextTopicDirectoryIndex),
+          });
           if (!active) {
             return;
+          }
+
+          if (!hasForumStructure(remoteData)) {
+            setLoadingStage('No topics found yet, rechecking QDN resources...');
+            await sleep(2000);
+            remoteData = await forumQdnService.loadForumStructureCached({
+              force: true,
+            });
+            if (!active) {
+              return;
+            }
+          }
+
+          if (nextTopicDirectoryIndex && !hasForumStructure(remoteData)) {
+            throw new Error(
+              'The topic index is empty and direct QDN fallback did not return forum topics yet. This node may still be syncing QDN resources.'
+            );
           }
 
           applyForumStructure(
@@ -427,7 +504,14 @@ export const useForumDataQuery = () => {
             topicCount: remoteData.topics.length,
             subTopicCount: remoteData.subTopics.length,
           });
-          setLoadingStage('Ready');
+          setLoadingStage(
+            hasForumStructure(remoteData)
+              ? 'Ready'
+              : 'No forum topics were found after QDN sync checks.'
+          );
+          setLoadStatus(
+            hasForumStructure(remoteData) ? 'ready' : 'empty-confirmed'
+          );
           setIsAuthReady(true);
         }
       } catch (error) {
@@ -443,6 +527,7 @@ export const useForumDataQuery = () => {
 
         setLoadError(errorMessage);
         setLoadingStage('Error');
+        setLoadStatus('error');
 
         if (session && session.user.id !== GUEST_USER.id) {
           setAuthenticatedAddress(session.authenticatedAddress);
@@ -476,6 +561,7 @@ export const useForumDataQuery = () => {
     isLoadingUser,
     name,
     primaryName,
+    qortalBridgeProbe,
   ]);
 
   const authenticate = useCallback(async () => {
@@ -485,7 +571,9 @@ export const useForumDataQuery = () => {
   const retryLoadData = useCallback(() => {
     setIsRetrying(true);
     setLoadError(null);
+    setLoadStatus('initializing');
     loadedIdentityRef.current = null;
+    setQortalBridgeProbe(0);
     setIsAuthReady(false);
 
     setTimeout(() => {
@@ -523,6 +611,7 @@ export const useForumDataQuery = () => {
     loadError,
     isRetrying,
     loadingStage,
+    loadStatus,
     retryLoadData,
   };
 };

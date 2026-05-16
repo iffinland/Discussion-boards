@@ -7,6 +7,13 @@ const BUILDABLE_STATUSES = new Set([
   'DOWNLOADED',
   'BUILDING',
 ]);
+const MISSING_STATUSES = new Set([
+  'MISSING',
+  'NOT_FOUND',
+  'NOT PUBLISHED',
+  'NOT_PUBLISHED',
+  'DOES_NOT_EXIST',
+]);
 const STATUS_POLL_RETRIES = 8;
 const STATUS_POLL_DELAY_MS = 1200;
 const RESOURCE_FETCH_CONCURRENCY = 6;
@@ -107,6 +114,21 @@ export const isMissingResourceError = (error: unknown) => {
   );
 };
 
+const isMissingResourceResponse = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === 'resource does not exist' ||
+    normalized.includes('404') ||
+    normalized.includes('not found') ||
+    normalized.includes('resource does not exist') ||
+    normalized.includes('unknown resource')
+  );
+};
+
 const quarantineMissingResource = (
   service: string,
   name: string,
@@ -172,6 +194,12 @@ export const ensureQdnResourceReady = async (
     return;
   }
 
+  if (MISSING_STATUSES.has(status)) {
+    throw new Error(
+      `QDN resource does not exist: ${service}/${name}/${identifier}`
+    );
+  }
+
   if (BUILDABLE_STATUSES.has(status)) {
     // Trigger build once when resource is known but not yet ready.
     await getQdnResourceStatus(service, name, identifier, true);
@@ -186,10 +214,20 @@ export const ensureQdnResourceReady = async (
       return;
     }
 
+    if (MISSING_STATUSES.has(status)) {
+      throw new Error(
+        `QDN resource does not exist: ${service}/${name}/${identifier}`
+      );
+    }
+
     if (attempt < STATUS_POLL_RETRIES - 1) {
       await sleep(STATUS_POLL_DELAY_MS);
     }
   }
+
+  throw new Error(
+    `QDN resource is not ready yet: ${service}/${name}/${identifier}`
+  );
 };
 
 export const fetchWithQdnReadyFallback = async <T>(
@@ -205,11 +243,26 @@ export const fetchWithQdnReadyFallback = async <T>(
   }
 
   try {
-    return await fetcher();
+    const result = await fetcher();
+    if (isMissingResourceResponse(result)) {
+      throw new Error(String(result));
+    }
+    return result;
   } catch (initialError) {
     if (isMissingResourceError(initialError)) {
-      quarantineMissingResource(service, name, identifier);
-      throw initialError;
+      try {
+        await ensureQdnResourceReady(service, name, identifier);
+        const result = await fetcher();
+        if (isMissingResourceResponse(result)) {
+          throw new Error(String(result));
+        }
+        return result;
+      } catch (readinessError) {
+        if (isMissingResourceError(readinessError)) {
+          quarantineMissingResource(service, name, identifier);
+        }
+        throw initialError;
+      }
     }
 
     try {

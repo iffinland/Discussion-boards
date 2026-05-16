@@ -10,7 +10,10 @@ import {
 } from 'react';
 
 import { useForumCommands } from '../features/forum/hooks/useForumCommands';
-import { useForumDataQuery } from '../features/forum/hooks/useForumDataQuery';
+import {
+  useForumDataQuery,
+  type ForumLoadStatus,
+} from '../features/forum/hooks/useForumDataQuery';
 import type {
   ForumMutationResult,
   ForumPollDraft,
@@ -65,6 +68,7 @@ type ForumDataContextValue = {
   loadError: string | null;
   isRetrying: boolean;
   loadingStage: string;
+  loadStatus: ForumLoadStatus;
 };
 
 type ForumActionsContextValue = {
@@ -147,7 +151,6 @@ type ForumActionsContextValue = {
   }) => Promise<ForumMutationResult>;
   likePost: (postId: string) => void;
   tipPost: (postId: string) => Promise<ForumMutationResult>;
-  rebuildTopicDirectoryIndex: () => Promise<ForumMutationResult>;
   loadThreadPosts: (subTopicId: string) => Promise<ForumMutationResult>;
 };
 
@@ -215,6 +218,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     loadError,
     isRetrying,
     loadingStage,
+    loadStatus,
     retryLoadData,
   } = useForumDataQuery();
   const {
@@ -236,7 +240,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     deletePost,
     likePost,
     tipPost,
-    rebuildTopicDirectoryIndex,
   } = useForumCommands({
     currentUser,
     isAuthenticated,
@@ -372,6 +375,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       loadError,
       isRetrying,
       loadingStage,
+      loadStatus,
     }),
     [
       users,
@@ -392,6 +396,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       loadError,
       isRetrying,
       loadingStage,
+      loadStatus,
     ]
   );
 
@@ -418,7 +423,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       deletePost,
       likePost,
       tipPost,
-      rebuildTopicDirectoryIndex,
       loadThreadPosts,
     }),
     [
@@ -443,7 +447,6 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       deletePost,
       likePost,
       tipPost,
-      rebuildTopicDirectoryIndex,
       loadThreadPosts,
     ]
   );
