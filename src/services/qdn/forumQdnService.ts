@@ -560,9 +560,19 @@ const isPost = (value: unknown): value is Post => {
     typeof value.content === 'string' &&
     (Array.isArray(value.attachments) || value.attachments === undefined) &&
     typeof value.createdAt === 'string' &&
+    (typeof value.updatedAt === 'string' ||
+      value.updatedAt === null ||
+      value.updatedAt === undefined) &&
     (typeof value.editedAt === 'string' ||
       value.editedAt === null ||
       value.editedAt === undefined) &&
+    (typeof value.isPinned === 'boolean' || value.isPinned === undefined) &&
+    (typeof value.pinnedAt === 'string' ||
+      value.pinnedAt === null ||
+      value.pinnedAt === undefined) &&
+    (typeof value.pinnedByUserId === 'string' ||
+      value.pinnedByUserId === null ||
+      value.pinnedByUserId === undefined) &&
     (typeof value.likes === 'number' || value.likes === undefined) &&
     (typeof value.tips === 'number' || value.tips === undefined) &&
     (Array.isArray(value.likedByAddresses) ||
@@ -625,6 +635,17 @@ const parsePostPayload = (raw: unknown): PostPayload | null => {
       ...raw.post,
       attachments: sanitizePostAttachments(raw.post.attachments),
       poll: sanitizePostPoll(raw.post.poll),
+      updatedAt:
+        typeof raw.post.updatedAt === 'string'
+          ? raw.post.updatedAt
+          : (raw.post.editedAt ?? raw.post.createdAt),
+      isPinned: raw.post.isPinned === true,
+      pinnedAt:
+        typeof raw.post.pinnedAt === 'string' ? raw.post.pinnedAt : null,
+      pinnedByUserId:
+        typeof raw.post.pinnedByUserId === 'string'
+          ? raw.post.pinnedByUserId
+          : null,
       likes:
         typeof raw.post.likes === 'number' && Number.isFinite(raw.post.likes)
           ? raw.post.likes

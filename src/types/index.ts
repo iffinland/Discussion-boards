@@ -102,7 +102,11 @@ export interface Post {
   attachments: PostAttachment[];
   poll?: PostPoll | null;
   createdAt: string;
+  updatedAt?: string | null;
   editedAt?: string | null;
+  isPinned?: boolean;
+  pinnedAt?: string | null;
+  pinnedByUserId?: string | null;
   likes: number;
   tips: number;
   likedByAddresses: string[];

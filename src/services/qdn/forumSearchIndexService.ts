@@ -78,7 +78,11 @@ export type ThreadSearchSnapshot = {
     attachments: PostAttachment[];
     poll?: Post['poll'];
     createdAt: string;
+    updatedAt?: string | null;
     editedAt?: string | null;
+    isPinned?: boolean;
+    pinnedAt?: string | null;
+    pinnedByUserId?: string | null;
     likes: number;
     tips: number;
     likedByAddresses: string[];
@@ -508,9 +512,23 @@ const parseThreadIndexPayload = (raw: unknown): ThreadIndexPayload | null => {
           attachments: sanitizePostAttachments(item.attachments),
           poll: sanitizePostPoll(item.poll),
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+          updatedAt:
+            typeof item.updatedAt === 'string'
+              ? item.updatedAt
+              : typeof item.editedAt === 'string'
+                ? item.editedAt
+                : typeof item.createdAt === 'string'
+                  ? item.createdAt
+                  : '',
           editedAt:
             typeof item.editedAt === 'string' || item.editedAt === null
               ? item.editedAt
+              : null,
+          isPinned: item.isPinned === true,
+          pinnedAt: typeof item.pinnedAt === 'string' ? item.pinnedAt : null,
+          pinnedByUserId:
+            typeof item.pinnedByUserId === 'string'
+              ? item.pinnedByUserId
               : null,
           likes:
             typeof item.likes === 'number' && Number.isFinite(item.likes)
@@ -802,7 +820,11 @@ export const forumSearchIndexService = {
             attachments: post.attachments,
             poll: post.poll ?? null,
             createdAt: post.createdAt,
+            updatedAt: post.updatedAt ?? post.editedAt ?? post.createdAt,
             editedAt: post.editedAt ?? null,
+            isPinned: post.isPinned === true,
+            pinnedAt: post.pinnedAt ?? null,
+            pinnedByUserId: post.pinnedByUserId ?? null,
             likes: post.likes,
             tips: post.tips,
             likedByAddresses: post.likedByAddresses,

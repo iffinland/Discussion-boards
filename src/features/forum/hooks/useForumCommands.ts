@@ -1369,6 +1369,10 @@ export const useForumCommands = ({
         attachments,
         poll,
         createdAt,
+        updatedAt: createdAt,
+        isPinned: false,
+        pinnedAt: null,
+        pinnedByUserId: null,
         likes: 0,
         tips: 0,
         likedByAddresses: [],
@@ -1477,10 +1481,12 @@ export const useForumCommands = ({
         return { ok: false, error: 'Only owner can edit this post.' };
       }
 
+      const updatedAt = new Date().toISOString();
       const updatedPost: Post = {
         ...target,
         content,
-        editedAt: new Date().toISOString(),
+        updatedAt,
+        editedAt: updatedAt,
       };
 
       try {
@@ -1531,6 +1537,86 @@ export const useForumCommands = ({
     [
       currentUser,
       buildThreadIndexResource,
+      isAuthenticated,
+      posts,
+      setPosts,
+      setThreadSearchIndexes,
+    ]
+  );
+
+  const togglePostPin = useCallback(
+    async (postId: string): Promise<ForumMutationResult> => {
+      if (!isAuthenticated) {
+        return { ok: false, error: 'Authenticate with Qortal first.' };
+      }
+
+      if (!isModeratorRole(currentUser.role)) {
+        return { ok: false, error: 'Only moderators can pin posts.' };
+      }
+
+      const target = posts.find((post) => post.id === postId);
+      if (!target) {
+        return { ok: false, error: 'Post not found.' };
+      }
+
+      const isPinned = target.isPinned === true;
+      const updatedAt = new Date().toISOString();
+      const updatedPost: Post = {
+        ...target,
+        updatedAt,
+        isPinned: !isPinned,
+        pinnedAt: isPinned ? null : updatedAt,
+        pinnedByUserId: isPinned ? null : currentUser.id,
+      };
+
+      try {
+        const nextPosts = posts.map((post) =>
+          post.id === postId ? updatedPost : post
+        );
+        const postResource = forumQdnService.buildPostPublishResource(
+          updatedPost,
+          currentUser.username
+        );
+        const threadIndexResource = buildThreadIndexResource(
+          updatedPost.subTopicId,
+          nextPosts
+        );
+        await publishMultipleQortalResources([
+          postResource.resource,
+          threadIndexResource.resource,
+        ]);
+
+        recordRecentPostMutation(updatedPost);
+        writeThreadIndexCache(
+          updatedPost.subTopicId,
+          threadIndexResource.snapshot
+        );
+        setPosts((current) => {
+          const next = current.map((post) =>
+            post.id === postId ? updatedPost : post
+          );
+          threadPostCache.write(
+            updatedPost.subTopicId,
+            next.filter((post) => post.subTopicId === updatedPost.subTopicId)
+          );
+          return next;
+        });
+        setThreadSearchIndexes((current) => ({
+          ...current,
+          [updatedPost.subTopicId]: threadIndexResource.snapshot,
+        }));
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Failed to update pin.',
+        };
+      }
+    },
+    [
+      buildThreadIndexResource,
+      currentUser,
       isAuthenticated,
       posts,
       setPosts,
@@ -1599,8 +1685,10 @@ export const useForumCommands = ({
         return { ok: false, error: 'This poll is closed.' };
       }
 
+      const votedAt = new Date().toISOString();
       const updatedPost: Post = {
         ...target,
+        updatedAt: votedAt,
         poll: {
           ...target.poll,
           votes: [
@@ -1608,7 +1696,7 @@ export const useForumCommands = ({
             {
               voterId,
               optionIds: selectedOptionIds,
-              votedAt: new Date().toISOString(),
+              votedAt,
             },
           ],
         },
@@ -1631,6 +1719,7 @@ export const useForumCommands = ({
           threadIndexResource.resource,
         ]);
 
+        recordRecentPostMutation(updatedPost);
         setPosts((current) => {
           const next = current.map((post) =>
             post.id === input.postId ? updatedPost : post
@@ -1696,6 +1785,7 @@ export const useForumCommands = ({
       const closedAt = new Date().toISOString();
       const updatedPost: Post = {
         ...target,
+        updatedAt: closedAt,
         poll: {
           ...target.poll,
           closedAt,
@@ -1720,6 +1810,7 @@ export const useForumCommands = ({
           threadIndexResource.resource,
         ]);
 
+        recordRecentPostMutation(updatedPost);
         setPosts((current) => {
           const next = current.map((post) =>
             post.id === input.postId ? updatedPost : post
@@ -1833,6 +1924,7 @@ export const useForumCommands = ({
 
           return {
             ...post,
+            updatedAt: new Date().toISOString(),
             likes: post.likes + 1,
             likedByAddresses: [...post.likedByAddresses, actorId],
           };
@@ -1850,6 +1942,7 @@ export const useForumCommands = ({
             target.subTopicId,
             next.filter((post) => post.subTopicId === target.subTopicId)
           );
+          recordRecentPostMutation(target);
           void forumQdnService.publishPost(target, currentUser.username);
           void syncThreadSearchIndex(target.subTopicId, next);
         }
@@ -1880,6 +1973,7 @@ export const useForumCommands = ({
 
       const updatedPost: Post = {
         ...target,
+        updatedAt: new Date().toISOString(),
         tips: target.tips + 1,
       };
 
@@ -1900,6 +1994,7 @@ export const useForumCommands = ({
           threadIndexResource.resource,
         ]);
 
+        recordRecentPostMutation(updatedPost);
         setPosts((current) => {
           const next = current.map((post) =>
             post.id === postId ? updatedPost : post
@@ -2033,6 +2128,7 @@ export const useForumCommands = ({
     removeRoleAssignment,
     createPost,
     updatePost,
+    togglePostPin,
     voteOnPoll,
     closePoll,
     deletePost,

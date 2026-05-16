@@ -70,7 +70,9 @@ const writeMutations = (mutations: RecentPostMutation[]) => {
 };
 
 export const getPostRevisionTime = (post: Post) => {
-  const timestamp = Date.parse(post.editedAt ?? post.createdAt);
+  const timestamp = Date.parse(
+    post.updatedAt ?? post.pinnedAt ?? post.editedAt ?? post.createdAt
+  );
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 

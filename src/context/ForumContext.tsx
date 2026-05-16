@@ -144,6 +144,7 @@ type ForumActionsContextValue = {
     postId: string;
     content: string;
   }) => Promise<ForumMutationResult>;
+  togglePostPin: (postId: string) => Promise<ForumMutationResult>;
   voteOnPoll: (input: {
     postId: string;
     optionIds: string[];
@@ -173,7 +174,11 @@ const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
     attachments: post.attachments,
     poll: post.poll ?? null,
     createdAt: post.createdAt,
+    updatedAt: post.updatedAt ?? post.editedAt ?? post.createdAt,
     editedAt: post.editedAt ?? null,
+    isPinned: post.isPinned === true,
+    pinnedAt: post.pinnedAt ?? null,
+    pinnedByUserId: post.pinnedByUserId ?? null,
     likes: post.likes,
     tips: post.tips,
     likedByAddresses: post.likedByAddresses,
@@ -225,6 +230,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
     uploadPostImage,
     uploadPostAttachment,
     updatePost,
+    togglePostPin,
     voteOnPoll,
     closePoll,
     deletePost,
@@ -426,6 +432,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostImage,
       uploadPostAttachment,
       updatePost,
+      togglePostPin,
       voteOnPoll,
       closePoll,
       deletePost,
@@ -450,6 +457,7 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       uploadPostImage,
       uploadPostAttachment,
       updatePost,
+      togglePostPin,
       voteOnPoll,
       closePoll,
       deletePost,

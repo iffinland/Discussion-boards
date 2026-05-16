@@ -73,6 +73,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     uploadPostImage,
     uploadPostAttachment,
     updatePost,
+    togglePostPin,
     voteOnPoll,
     closePoll,
     deletePost,
@@ -198,6 +199,21 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     );
     return postSortMode === 'newest' ? sorted.reverse() : sorted;
   }, [filteredThreadPosts, postSortMode]);
+  const pinnedThreadPosts = useMemo(
+    () =>
+      orderedThreadPosts
+        .filter((post) => post.isPinned === true)
+        .sort(
+          (a, b) =>
+            new Date(b.pinnedAt ?? b.updatedAt ?? b.createdAt).getTime() -
+            new Date(a.pinnedAt ?? a.updatedAt ?? a.createdAt).getTime()
+        ),
+    [orderedThreadPosts]
+  );
+  const regularThreadPosts = useMemo(
+    () => orderedThreadPosts.filter((post) => post.isPinned !== true),
+    [orderedThreadPosts]
+  );
   const sharedPostId = useMemo(
     () => new URLSearchParams(location.search).get('post'),
     [location.search]
@@ -211,8 +227,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     [threadPosts]
   );
   const visiblePosts = useMemo(
-    () => orderedThreadPosts.slice(0, visibleCount),
-    [orderedThreadPosts, visibleCount]
+    () => regularThreadPosts.slice(0, visibleCount),
+    [regularThreadPosts, visibleCount]
   );
   const displayPosts = useMemo(() => {
     if (!sharedPostId) {
@@ -224,7 +240,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     }
 
     const sharedPost = threadPostMap.get(sharedPostId);
-    if (!sharedPost) {
+    if (!sharedPost || sharedPost.isPinned === true) {
       return visiblePosts;
     }
 
@@ -285,13 +301,16 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
   const visibleAuthorIds = useMemo(
     () => [
       ...new Set(
-        renderedPosts.map((post) => post.authorUserId).filter(Boolean)
+        renderedPosts
+          .map((post) => post.authorUserId)
+          .filter(Boolean)
+          .concat(pinnedThreadPosts.map((post) => post.authorUserId))
       ),
     ],
-    [renderedPosts]
+    [pinnedThreadPosts, renderedPosts]
   );
 
-  const canLoadMore = visibleCount < orderedThreadPosts.length;
+  const canLoadMore = visibleCount < regularThreadPosts.length;
   const canModerate = currentUser.role !== 'Member';
   const canLockSubTopic = canModerate;
   const canManageSubTopicAdvanced =
@@ -610,7 +629,8 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     hasInitialThreadLoadCompleted &&
     !isThreadPostsLoading &&
     !threadLoadError &&
-    displayPosts.length === 0;
+    displayPosts.length === 0 &&
+    pinnedThreadPosts.length === 0;
   const isCreatingFirstPost =
     threadPosts.length === 0 && !replyTarget && isComposerOpen;
   const composerTitle = replyTarget
@@ -665,6 +685,26 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
 
     return handleEditPost(editingPost.id, value);
   }, [editText, editingPost, handleEditPost]);
+
+  const handleTogglePostPin = useCallback(
+    async (post: Post) => {
+      const result = await togglePostPin(post.id);
+      if (!result.ok) {
+        setModerationFeedback(result.error ?? 'Unable to update pinned post.');
+        return;
+      }
+
+      setModerationFeedback(post.isPinned ? 'Post unpinned.' : 'Post pinned.');
+      window.setTimeout(() => {
+        setModerationFeedback((current) =>
+          current === 'Post pinned.' || current === 'Post unpinned.'
+            ? null
+            : current
+        );
+      }, 2400);
+    },
+    [togglePostPin]
+  );
 
   const handleVoteOnPoll = async (postId: string, optionIds: string[]) => {
     const result = await voteOnPoll({ postId, optionIds });
@@ -929,7 +969,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         }
 
         setVisibleCount((current) =>
-          Math.min(current + THREAD_BATCH_SIZE, orderedThreadPosts.length)
+          Math.min(current + THREAD_BATCH_SIZE, regularThreadPosts.length)
         );
       },
       {
@@ -943,7 +983,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
     return () => {
       observer.disconnect();
     };
-  }, [canLoadMore, orderedThreadPosts.length]);
+  }, [canLoadMore, regularThreadPosts.length]);
 
   if (!isAuthReady && !subTopic && subTopics.length === 0) {
     return <ThreadSkeleton />;
@@ -1191,6 +1231,61 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
         <p className="text-ui-muted text-xs">Loading thread data from QDN...</p>
       ) : null}
 
+      {pinnedThreadPosts.length > 0 ? (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-ui-strong text-sm font-semibold">
+              Pinned Posts
+            </h3>
+            <p className="text-ui-muted mt-1 text-xs">
+              Highlighted posts from this thread.
+            </p>
+          </div>
+          {pinnedThreadPosts.map((post) => (
+            <ThreadPostCard
+              key={`pinned-${post.id}`}
+              post={post}
+              author={userMap.get(post.authorUserId)}
+              authorRole={authorRolesByUserId[post.authorUserId] ?? 'Member'}
+              repliedPost={
+                post.parentPostId
+                  ? (threadPostMap.get(post.parentPostId) ?? null)
+                  : null
+              }
+              repliedAuthorName={
+                post.parentPostId
+                  ? resolveAuthorDisplayName(
+                      threadPostMap.get(post.parentPostId)?.authorUserId ?? ''
+                    )
+                  : null
+              }
+              highlighted={highlightedPostId === post.id}
+              replyContextHighlighted={replyContextPostId === post.parentPostId}
+              isOwner={post.authorUserId === currentUser.id}
+              canModerate={canDeletePosts}
+              hasLiked={
+                likeActorId
+                  ? post.likedByAddresses.includes(likeActorId)
+                  : false
+              }
+              tipCount={post.tips}
+              pollVoterId={pollVoterId}
+              canClosePoll={canModerate}
+              onLike={likePost}
+              onVoteOnPoll={handleVoteOnPoll}
+              onClosePoll={handleClosePoll}
+              onReply={openReplyComposer}
+              onShare={handleSharePost}
+              onSendTip={handleSendTip}
+              onJumpToPost={jumpToPost}
+              onEdit={openEditComposer}
+              onDelete={handleDeletePost}
+              onTogglePin={handleTogglePostPin}
+            />
+          ))}
+        </section>
+      ) : null}
+
       <section ref={postListRef} className="space-y-3">
         {topSpacerHeight > 0 ? (
           <div style={{ height: topSpacerHeight }} aria-hidden="true" />
@@ -1232,6 +1327,7 @@ const ThreadPage = ({ searchQuery, onSearchQueryChange }: ThreadPageProps) => {
             onJumpToPost={jumpToPost}
             onEdit={openEditComposer}
             onDelete={handleDeletePost}
+            onTogglePin={handleTogglePostPin}
           />
         ))}
         {bottomSpacerHeight > 0 ? (

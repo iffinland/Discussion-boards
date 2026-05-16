@@ -28,6 +28,7 @@ type ThreadPostCardProps = {
   onJumpToPost?: (postId: string) => void;
   onEdit: (post: Post) => void;
   onDelete: (postId: string) => void;
+  onTogglePin: (post: Post) => void;
 };
 
 const formatDateTime = (value: string) =>
@@ -73,6 +74,7 @@ const ThreadPostCard = ({
   onJumpToPost,
   onEdit,
   onDelete,
+  onTogglePin,
 }: ThreadPostCardProps) => {
   const displayName =
     author?.displayName ?? author?.id ?? post.authorUserId ?? 'Unknown User';
@@ -183,6 +185,11 @@ const ThreadPostCard = ({
                 {displayName}
               </p>
               <UserRoleBadge role={authorRole} />
+              {post.isPinned ? (
+                <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-700">
+                  Pinned
+                </span>
+              ) : null}
             </div>
             <p className="text-ui-muted text-xs">
               {formatDateTime(post.createdAt)}
@@ -398,7 +405,17 @@ const ThreadPostCard = ({
               Delete
             </button>
           </>
-        ) : canModerate ? (
+        ) : null}
+        {canModerate ? (
+          <button
+            type="button"
+            className={actionButtonClass}
+            onClick={() => onTogglePin(post)}
+          >
+            {post.isPinned ? 'Unpin Post' : 'Pin Post'}
+          </button>
+        ) : null}
+        {!isOwner && canModerate ? (
           <button
             type="button"
             className={dangerButtonClass}
@@ -438,7 +455,8 @@ const areThreadPostCardPropsEqual = (
     prev.onSendTip === next.onSendTip &&
     prev.onJumpToPost === next.onJumpToPost &&
     prev.onEdit === next.onEdit &&
-    prev.onDelete === next.onDelete
+    prev.onDelete === next.onDelete &&
+    prev.onTogglePin === next.onTogglePin
   );
 };
 
