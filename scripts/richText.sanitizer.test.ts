@@ -36,6 +36,18 @@ const run = () => {
     color.includes('style="color:#2563EB"'),
     'Color tag should render safe inline color.'
   );
+
+  const videoHtml = toRichTextHtml(
+    '[videoqdn]qdn|Qortal-Video-Bridge|qvb-example|Bridge%20video[/videoqdn]'
+  );
+  expect(
+    videoHtml.includes('data-video-embed="true"'),
+    'Video tag should render lightweight placeholder.'
+  );
+  expect(
+    !videoHtml.includes('<video'),
+    'Video tag must not render a video element during post rendering.'
+  );
 };
 
 run();

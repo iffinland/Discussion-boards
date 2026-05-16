@@ -101,6 +101,7 @@ const sanitizeImageSource = (value: string): string | null => {
 };
 
 const QDN_IMAGE_TAG_PATTERN = /\[imgqdn\]([\s\S]*?)\[\/imgqdn\]/gi;
+const QDN_VIDEO_TAG_PATTERN = /\[videoqdn\]([\s\S]*?)\[\/videoqdn\]/gi;
 const QORTAL_LINK_PATTERN = /qortal:\/\/[^\s<]+/gi;
 const TRAILING_PUNCTUATION_PATTERN = /[.,!?;:)\]}]+$/;
 
@@ -202,6 +203,10 @@ export const extractQdnImageTags = (value: string): ParsedQdnImageTag[] => {
 
 export const stripQdnImageTags = (value: string) => {
   return value.replace(QDN_IMAGE_TAG_PATTERN, '');
+};
+
+export const stripQdnVideoTags = (value: string) => {
+  return value.replace(QDN_VIDEO_TAG_PATTERN, '');
 };
 
 export const applyWrapFormat = ({
@@ -387,6 +392,22 @@ export const toRichTextHtml = (value: string): string => {
     }
   );
   html = replacePatternRecursively(html, QDN_IMAGE_TAG_PATTERN, () => '');
+  html = replacePatternRecursively(
+    html,
+    QDN_VIDEO_TAG_PATTERN,
+    (_full, payload) => {
+      const safePayload = String(payload ?? '').trim();
+      if (!safePayload) {
+        return '';
+      }
+
+      const titlePart = safePayload.split('|')[3];
+      const title = titlePart ? decodeQdnTagPart(titlePart) : 'QDN video';
+      const safeTitle = escapeHtml(title || 'QDN video');
+
+      return `<button type="button" class="my-3 flex w-full max-w-sm items-center gap-3 rounded-lg border border-cyan-200 bg-cyan-50/80 p-3 text-left shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50" data-video-embed="true" data-video-payload="${safePayload}" data-video-visible="false"><span class="flex h-12 w-16 flex-shrink-0 items-center justify-center rounded-md bg-slate-950 text-white shadow-sm">▶</span><span class="min-w-0"><span class="block truncate text-sm font-semibold text-slate-900">${safeTitle}</span><span class="mt-1 block text-xs text-slate-600">Click to load video from QDN</span></span></button>`;
+    }
+  );
   html = linkifyQortalUris(html);
 
   return html.replace(/\n/g, '<br/>');

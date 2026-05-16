@@ -20,6 +20,11 @@ import {
   getAttachmentHelperText,
 } from '../../services/forum/attachments';
 import type { PostAttachment } from '../../types';
+import {
+  encodeQdnVideoTag,
+  parseForumVideoInput,
+} from '../../services/forum/videoEmbed';
+import AppModal from '../common/AppModal';
 import RichTextToolsModal from './RichTextToolsModal';
 
 type RichTextEditorProps = {
@@ -56,6 +61,9 @@ const RichTextEditor = ({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [videoInput, setVideoInput] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
   const [editorInfo, setEditorInfo] = useState<string | null>(null);
   const isUploadingImage = editorInfo === 'Uploading image to QDN...';
 
@@ -297,6 +305,24 @@ const RichTextEditor = ({
     );
   };
 
+  const handleInsertVideo = () => {
+    const reference = parseForumVideoInput(videoInput, videoTitle);
+    if (!reference) {
+      setEditorInfo(
+        'Paste a valid qortal://VIDEO, /arbitrary/VIDEO, qortal://use-embed/VIDEO, or Q-Tube video link.'
+      );
+      return;
+    }
+
+    insertRawAtCursor(encodeQdnVideoTag(reference));
+    setVideoInput('');
+    setVideoTitle('');
+    setIsVideoModalOpen(false);
+    setEditorInfo(
+      'Video placeholder inserted. The video will load only when opened.'
+    );
+  };
+
   return (
     <form onSubmit={handleSubmit} className="forum-card-primary p-4">
       <div className="border-brand-primary bg-brand-primary-soft mb-3 rounded-md border p-2">
@@ -408,6 +434,13 @@ const RichTextEditor = ({
           >
             Add Image
           </button>
+          <button
+            type="button"
+            onClick={() => setIsVideoModalOpen(true)}
+            className="forum-pill-accent text-brand-accent-strong rounded-md px-2 py-1 text-xs font-semibold"
+          >
+            Add Video
+          </button>
           {canManageAttachments ? (
             <>
               <input
@@ -499,7 +532,7 @@ const RichTextEditor = ({
       <div className="mt-3 flex items-center justify-between">
         <p className="text-ui-muted text-xs">
           Supported tags: [h2], [h3], [icode], [b], [i], [u], [s], [quote],
-          [code], [ul], [ol], [color], [img]
+          [code], [ul], [ol], [color], [img], [videoqdn]
         </p>
         <button
           type="submit"
@@ -515,6 +548,58 @@ const RichTextEditor = ({
         onApplyFormat={handleFormat}
         onApplyColor={handleColor}
       />
+      <AppModal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        ariaLabel="Add QDN video"
+        title="Add Video"
+        maxWidthClassName="max-w-lg"
+      >
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-ui-strong text-xs font-semibold">
+              QVB URI or Q-Tube link
+            </span>
+            <input
+              value={videoInput}
+              onChange={(event) => setVideoInput(event.target.value)}
+              placeholder="qortal://VIDEO/Name/Identifier"
+              className="bg-surface-card text-ui-strong mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-ui-strong text-xs font-semibold">
+              Display title
+            </span>
+            <input
+              value={videoTitle}
+              onChange={(event) => setVideoTitle(event.target.value)}
+              placeholder="Optional title shown in the post"
+              className="bg-surface-card text-ui-strong mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+            />
+          </label>
+          <p className="text-ui-muted text-xs">
+            The post will show a lightweight video placeholder. QDN video data
+            loads only after the placeholder is opened.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsVideoModalOpen(false)}
+              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleInsertVideo}
+              className="bg-brand-primary-solid rounded-md px-3 py-2 text-xs font-semibold text-slate-900"
+            >
+              Insert Video
+            </button>
+          </div>
+        </div>
+      </AppModal>
     </form>
   );
 };
