@@ -26,6 +26,10 @@ import type {
 } from '../services/qdn/forumSearchIndexService';
 import { threadPostCache } from '../services/forum/threadPostCache';
 import {
+  reconcilePostCollections,
+  readRecentPostMutations,
+} from '../services/forum/postReconciliation';
+import {
   clearThreadQuarantine,
   isThreadQuarantined,
   quarantineThread,
@@ -159,20 +163,6 @@ const ForumActionsContext = createContext<ForumActionsContextValue | null>(
   null
 );
 
-const mergePostsByLatestCreatedAt = (
-  currentPosts: Post[],
-  nextPosts: Post[]
-) => {
-  const merged = new Map(currentPosts.map((post) => [post.id, post]));
-  nextPosts.forEach((post) => {
-    const existing = merged.get(post.id);
-    if (!existing || post.createdAt >= existing.createdAt) {
-      merged.set(post.id, post);
-    }
-  });
-  return [...merged.values()];
-};
-
 const postsFromThreadIndex = (snapshot: ThreadSearchSnapshot): Post[] => {
   return snapshot.posts.map((post) => ({
     id: post.postId,
@@ -291,10 +281,20 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const cached = threadPostCache.read(normalizedId);
+      const recentMutations = readRecentPostMutations(normalizedId);
       if (cached?.posts.length) {
-        setPosts((current) =>
-          mergePostsByLatestCreatedAt(current, cached.posts)
-        );
+        setPosts((current) => {
+          const merged = reconcilePostCollections(
+            current,
+            cached.posts,
+            recentMutations
+          );
+          threadPostCache.write(
+            normalizedId,
+            merged.filter((post) => post.subTopicId === normalizedId)
+          );
+          return merged;
+        });
         if (!cached.isStale) {
           loadedThreadsRef.current.add(normalizedId);
           return { ok: true };
@@ -325,10 +325,18 @@ export const ForumProvider = ({ children }: { children: ReactNode }) => {
           loadedPosts = await forumQdnService.loadPostsBySubTopic(normalizedId);
         }
 
-        setPosts((current) =>
-          mergePostsByLatestCreatedAt(current, loadedPosts)
-        );
-        threadPostCache.write(normalizedId, loadedPosts);
+        setPosts((current) => {
+          const merged = reconcilePostCollections(
+            current,
+            loadedPosts,
+            recentMutations
+          );
+          threadPostCache.write(
+            normalizedId,
+            merged.filter((post) => post.subTopicId === normalizedId)
+          );
+          return merged;
+        });
         clearThreadQuarantine(normalizedId);
         loadedThreadsRef.current.add(normalizedId);
         return { ok: true };

@@ -10,6 +10,7 @@ import {
 import { canAccessSubTopic } from '../../../services/forum/forumAccess';
 import { encodeQdnImageTag } from '../../../services/forum/richText';
 import { threadPostCache } from '../../../services/forum/threadPostCache';
+import { recordRecentPostMutation } from '../../../services/forum/postReconciliation';
 import { publishMultipleQortalResources } from '../../../services/qortal/qortalClient';
 import { forumQdnService } from '../../../services/qdn/forumQdnService';
 import type {
@@ -1405,6 +1406,7 @@ export const useForumCommands = ({
           topicDirectoryResource.resource,
         ]);
 
+        recordRecentPostMutation(newPost);
         threadPostCache.write(input.subTopicId, threadPostsForSubTopic);
         writeThreadIndexCache(input.subTopicId, threadIndexResource.snapshot);
 
@@ -1498,6 +1500,11 @@ export const useForumCommands = ({
           threadIndexResource.resource,
         ]);
 
+        recordRecentPostMutation(updatedPost);
+        writeThreadIndexCache(
+          updatedPost.subTopicId,
+          threadIndexResource.snapshot
+        );
         setPosts((current) => {
           const next = current.map((post) =>
             post.id === input.postId ? updatedPost : post
